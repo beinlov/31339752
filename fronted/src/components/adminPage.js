@@ -1,0 +1,652 @@
+import React, { useState, useEffect } from 'react';
+import styled from 'styled-components';
+import { withRouter } from 'dva/router';
+import NodeManagement from './NodeManagement';
+import LogContent from './LogContent';
+import UserContent from './UserContent';
+import ReportContent from './ReportContent';
+import ExtensionContent from './ExtensionContent';
+import AsruexLogViewer from './AsruexLogViewer';
+import BotnetRegistration from './BotnetRegistration';
+import NodeDistribution from './NodeDistribution';
+import axios from 'axios';
+
+// 样式定义
+const AdminContainer = styled.div`
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+`;
+
+const Header = styled.div`
+  width: 100%;
+  height: 64px;
+  background: #1a237e;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0 2%;
+  flex-shrink: 0;
+`;
+
+const HeaderTitle = styled.div`
+  font-size: 2em;
+  font-weight: bold;
+  flex: 1;
+`;
+
+const NetworkSelect = styled.select`
+  padding: 8px 12px;
+  margin-right: 20px;
+  border-radius: 4px;
+  border: 1px solid #ffffff;
+  width: 200px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  option {
+    background: #1a237e;
+    color: white;
+    padding: 10px;
+  }
+`;
+
+const HeaderButton = styled.button`
+  padding: 8px 16px;
+  margin-left: 10px;
+  background: transparent;
+  border: 1px solid white;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+`;
+
+const LogoutButton = styled(HeaderButton)`
+  background: rgba(244, 67, 54, 0.1);
+  border-color: #f44336;
+
+  &:hover {
+    background: rgba(244, 67, 54, 0.2);
+  }
+`;
+
+const MainContent = styled.div`
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 64px);
+`;
+
+const Sidebar = styled.div`
+  width: 240px;
+  background: #ffffff;
+  padding: 20px 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  overflow-y: auto;
+`;
+
+const SidebarItem = styled.div`
+  padding: 14px 24px;
+  margin: 0 12px;
+  cursor: pointer;
+  background: ${props => props.active ? 'linear-gradient(90deg, #1a237e, rgba(26, 35, 126, 0.9))' : 'transparent'};
+  color: ${props => props.active ? '#ffffff' : '#666'};
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+
+  &:hover {
+    background: ${props => props.active ? 'linear-gradient(90deg, #1a237e, rgba(26, 35, 126, 0.9))' : 'rgba(26, 35, 126, 0.05)'};
+    color: ${props => props.active ? '#ffffff' : '#1a237e'};
+    transform: translateX(4px);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 0;
+    background: #1a237e;
+    border-radius: 0 2px 2px 0;
+    transition: height 0.2s ease;
+  }
+
+  &:hover::before {
+    height: ${props => props.active ? '0' : '70%'};
+  }
+
+  .icon {
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: ${props => props.active ? '#ffffff' : '#1a237e'};
+    transition: all 0.3s ease;
+  }
+
+  &:hover .icon {
+    transform: scale(1.1);
+  }
+`;
+
+const SidebarDivider = styled.div`
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.03));
+  margin: 8px 24px;
+`;
+
+const Content = styled.div`
+  flex: 1;
+  padding: 20px;
+  background: white;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+`;
+
+// 教学引导样式
+const TutorialOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: ${props => props.show ? 'block' : 'none'};
+  pointer-events: none;
+`;
+
+const TutorialHighlight = styled.div`
+  position: absolute;
+  border: 2px solid #1a237e;
+  border-radius: 4px;
+  z-index: 1001;
+  transition: all 0.3s ease;
+  pointer-events: none;
+`;
+
+const TutorialTooltip = styled.div`
+  position: absolute;
+  background: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 1002;
+  max-width: 300px;
+  transition: all 0.3s ease;
+  pointer-events: all;
+
+  &:after {
+    content: '';
+    position: absolute;
+    border: 8px solid transparent;
+    ${props => {
+      switch(props.position) {
+        case 'bottom':
+          return `
+            top: -16px;
+            left: 20px;
+            border-bottom-color: white;
+          `;
+        case 'top':
+          return `
+            bottom: -16px;
+            left: 20px;
+            border-top-color: white;
+          `;
+        case 'left':
+          return `
+            right: -16px;
+            top: 20px;
+            border-left-color: white;
+          `;
+        case 'right':
+          return `
+            left: -16px;
+            top: 20px;
+            border-right-color: white;
+          `;
+        default:
+          return '';
+      }
+    }}
+  }
+`;
+
+const TutorialButton = styled.button`
+  background: #1a237e;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  margin-top: 10px;
+  cursor: pointer;
+
+  &:hover {
+    background: #0d1642;
+  }
+`;
+
+const AdminPage = ({ history }) => {
+  const [activeMenu, setActiveMenu] = useState('clear');
+  const [currentContent, setCurrentContent] = useState(<NodeManagement />);
+  const [selectedNetwork, setSelectedNetwork] = useState('ramnit');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [networkTypes, setNetworkTypes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchNetworkTypes();
+  }, []);
+
+  const fetchNetworkTypes = async () => {
+    try {
+      const response = await axios.get('/api/botnet-types');
+      if (response.data.status === 'success') {
+        setNetworkTypes(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching network types:', error);
+    } finally {
+      setLoading(false);
+    }
+    handleNetChange("ramnit")
+  };
+
+  // 根据不同网络定义菜单项
+  const getMenuItems = (networkId) => {
+    const baseMenuItems = [
+      {
+        id: 'node_distribution',
+        name: '节点分布',
+        component: NodeDistribution,
+        icon: '📍'  // 使用地图标记图标
+      },
+      {
+        id: 'register_botnet',
+        name: '添加新僵尸网络',
+        component: BotnetRegistration,
+        icon: '✚'  // 十字加号，表示添加/新建
+      },
+      {
+        id: 'log',
+        name: '操作日志',
+        component: LogContent,
+        icon: '&#xe777;' // supervise icon
+      },
+      {
+        id: 'report',
+        name: '异常报告',
+        component: ReportContent,
+        icon: '&#xe86e;' // early-warning icon
+      },
+      {
+        id: 'user',
+        name: '用户管理',
+        component: UserContent,
+        icon: '&#xe7fb;' // lock icon
+      },
+      {
+        id: 'extension',
+        name: '扩展与应用',
+        component: ExtensionContent,
+        icon: '&#xe89e;' // application icon
+      },
+    ];
+
+    // 根据网络类型添加特定的菜单项
+    if (networkId === 'leethozer') {
+      return [
+        {
+          id: 'clear',
+          name: '抑制阻断',
+          component: NodeManagement,
+          icon: '&#xe88e;' // monitoring icon
+        },
+        ...baseMenuItems
+      ];
+    }
+    else if (networkId === 'asruex') {
+      return [
+        {
+          id: 'clear',
+          name: '清除',
+          component: NodeManagement,
+          icon: '&#xe88f;' // clear icon
+        },
+        {
+          id: 'monitor',
+          name: '交互监控',
+          component: AsruexLogViewer,
+          icon: '&#xe88e;' // monitoring icon
+        },
+        ...baseMenuItems
+      ];
+    }
+    else {
+      return [
+        {
+          id: 'clear',
+          name: '清除',
+          component: NodeManagement,
+          icon: '&#xe88f;' // diagnose icon
+        },
+        ...baseMenuItems
+      ];
+    }
+  };
+
+  const handleMenuClick = (menuId) => {
+    setActiveMenu(menuId);
+    const menuItems = getMenuItems(selectedNetwork);
+    const selectedItem = menuItems.find(item => item.id === menuId);
+    if (selectedItem) {
+      if (menuId === 'clear') {
+        setCurrentContent(
+          <selectedItem.component
+            networkType={selectedNetwork}
+          />
+        );
+      } else if (menuId === 'node_distribution') {
+        setCurrentContent(
+          <selectedItem.component
+            networkType={selectedNetwork}
+          />
+        );
+      } else if (menuId === 'register_botnet') {
+        setCurrentContent(<selectedItem.component />);
+      } else {
+        setCurrentContent(<selectedItem.component />);
+      }
+    }
+  };
+
+
+  const handleNetChange = (value) => {
+    const newNetwork = value;
+    setSelectedNetwork(newNetwork);
+    // 保存选择的网络到localStorage
+    localStorage.setItem('selectedNetwork', newNetwork);
+
+    // 无论当前在哪个菜单，都重新渲染当前内容组件
+    const menuItems = getMenuItems(newNetwork);
+    const selectedItem = menuItems.find(item => item.id === activeMenu);
+    if (selectedItem) {
+      setCurrentContent(
+        <selectedItem.component
+          networkType={newNetwork}
+          key={newNetwork} // 添加 key 属性，强制组件重新渲染
+        />
+      );
+    }
+  };
+
+  const handleNetworkChange = (e) => {
+    const newNetwork = e.target.value;
+    setSelectedNetwork(newNetwork);
+    // 保存选择的网络到localStorage
+    localStorage.setItem('selectedNetwork', newNetwork);
+
+    // 无论当前在哪个菜单，都重新渲染当前内容组件
+    const menuItems = getMenuItems(newNetwork);
+    const selectedItem = menuItems.find(item => item.id === activeMenu);
+    if (selectedItem) {
+      setCurrentContent(
+        <selectedItem.component
+          networkType={newNetwork}
+          key={newNetwork} // 添加 key 属性，强制组件重新渲染
+        />
+      );
+    }
+  };
+
+  const handleCommandCenterClick = () => {
+    // 跳转到指挥中心页面
+    history.push('/index');
+  };
+
+  const handleLogout = () => {
+    // 这里可以添加登出相关逻辑，比如清除本地存储的token等
+    history.push('/login');
+  };
+
+  // 教学步骤定义
+  const tutorialSteps = [
+    {
+      target: 'select.network-select',
+      title: '第一步：选择僵尸网络',
+      content: '在这里选择要管理的僵尸网络类型。不同的僵尸网络可能有不同的功能选项。',
+      position: 'bottom',
+      offset: { x: 0, y: 10 }
+    },
+    {
+      target: 'div.sidebar',
+      title: '第二步：功能菜单',
+      content: '这里是主要功能区，包括清除/抑制阻断、操作日志、异常报告等功能。点击可以切换不同的功能页面。',
+      position: 'right',
+      offset: { x: 10, y: 0 }
+    },
+    {
+      target: 'div.content',
+      title: '第三步：操作区域',
+      content: '这里是主要的操作区域，会根据左侧选择的功能显示对应的内容和操作界面。',
+      position: 'left',
+      offset: { x: -10, y: 0 }
+    },
+    {
+      target: 'button.command-center',
+      title: '第四步：僵尸网络展示处置平台',
+      content: '点击这里可以切换到僵尸网络展示处置平台视图，查看更多可视化数据和整体状况。',
+      position: 'bottom',
+      offset: { x: 0, y: 10 }
+    }
+  ];
+
+  const startTutorial = () => {
+    setShowTutorial(true);
+    setTutorialStep(0);
+  };
+
+  const nextTutorialStep = () => {
+    if (tutorialStep < tutorialSteps.length - 1) {
+      setTutorialStep(tutorialStep + 1);
+    } else {
+      setShowTutorial(false);
+    }
+  };
+
+  return (
+    <AdminContainer>
+      <Header>
+        <HeaderTitle>僵尸网络接管与清除后台管理系统</HeaderTitle>
+        <NetworkSelect
+          className="network-select"
+          value={selectedNetwork}
+          onChange={handleNetworkChange}
+          disabled={loading}
+        >
+          <option value="">请选择僵尸网络</option>
+          {networkTypes.map(network => (
+            <option key={network.name} value={network.name}>
+              {network.display_name}
+            </option>
+          ))}
+        </NetworkSelect>
+        <HeaderButton onClick={startTutorial}>帮助</HeaderButton>
+        <HeaderButton className="command-center" onClick={handleCommandCenterClick}>
+          僵尸网络展示处置平台
+        </HeaderButton>
+        <LogoutButton onClick={handleLogout}>退出登录</LogoutButton>
+      </Header>
+      <MainContent>
+        <Sidebar className="sidebar">
+          {getMenuItems(selectedNetwork).map((item, index) => (
+            <React.Fragment key={item.id}>
+              <SidebarItem
+                active={activeMenu === item.id}
+                onClick={() => handleMenuClick(item.id)}
+              >
+                <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                <span>{item.name}</span>
+              </SidebarItem>
+              {index === 0 && <SidebarDivider />}
+            </React.Fragment>
+          ))}
+        </Sidebar>
+        <Content className="content">
+          {currentContent}
+        </Content>
+      </MainContent>
+
+      {showTutorial && (
+        <>
+          <TutorialOverlay show={showTutorial}>
+            <svg
+              width="100%"
+              height="100%"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+              }}
+            >
+              <defs>
+                <mask id="spotlight">
+                  <rect width="100%" height="100%" fill="white" />
+                  {(() => {
+                    if (tutorialSteps[tutorialStep].target) {
+                      const pos = getTutorialHighlightPosition(tutorialSteps[tutorialStep].target);
+                      return (
+                        <rect
+                          x={pos.left}
+                          y={pos.top}
+                          width={pos.width}
+                          height={pos.height}
+                          fill="black"
+                        />
+                      );
+                    }
+                    return null;
+                  })()}
+                </mask>
+              </defs>
+              <rect
+                width="100%"
+                height="100%"
+                fill="rgba(0, 0, 0, 0.7)"
+                mask="url(#spotlight)"
+              />
+            </svg>
+          </TutorialOverlay>
+          <TutorialHighlight
+            style={{
+              ...getTutorialHighlightPosition(tutorialSteps[tutorialStep].target)
+            }}
+          />
+          <TutorialTooltip
+            style={{
+              ...getTutorialTooltipPosition(
+                tutorialSteps[tutorialStep].target,
+                tutorialSteps[tutorialStep].position,
+                tutorialSteps[tutorialStep].offset
+              )
+            }}
+            position={tutorialSteps[tutorialStep].position}
+          >
+            <h3 style={{ margin: '0 0 10px 0', color: '#1a237e' }}>
+              {tutorialSteps[tutorialStep].title}
+            </h3>
+            <p style={{ margin: '0 0 15px 0', lineHeight: '1.5' }}>
+              {tutorialSteps[tutorialStep].content}
+            </p>
+            <TutorialButton onClick={nextTutorialStep}>
+              {tutorialStep === tutorialSteps.length - 1 ? '完成教学' : '下一步'}
+            </TutorialButton>
+          </TutorialTooltip>
+        </>
+      )}
+    </AdminContainer>
+  );
+};
+
+// 获取目标元素位置
+const getTutorialHighlightPosition = (selector) => {
+  const element = document.querySelector(selector);
+  if (!element) {
+    console.error(`Tutorial target element not found: ${selector}`);
+    return { top: 0, left: 0, width: 0, height: 0 };
+  }
+  const rect = element.getBoundingClientRect();
+  console.log(`Tutorial highlight position for ${selector}:`, rect);
+  return {
+    top: rect.top - 2,
+    left: rect.left - 2,
+    width: rect.width + 4,
+    height: rect.height + 4
+  };
+};
+
+// 获取提示框位置
+const getTutorialTooltipPosition = (selector, position, offset = { x: 0, y: 0 }) => {
+  const element = document.querySelector(selector);
+  if (!element) return {};
+  const rect = element.getBoundingClientRect();
+
+  switch(position) {
+    case 'bottom':
+      return {
+        top: rect.bottom + offset.y,
+        left: rect.left + offset.x
+      };
+    case 'top':
+      return {
+        bottom: window.innerHeight - rect.top + offset.y,
+        left: rect.left + offset.x
+      };
+    case 'left':
+      return {
+        top: rect.top + offset.y,
+        right: window.innerWidth - rect.left + offset.x
+      };
+    case 'right':
+      return {
+        top: rect.top + offset.y,
+        left: rect.right + offset.x
+      };
+    default:
+      return {
+        top: rect.bottom + offset.y,
+        left: rect.left + offset.x
+      };
+  }
+};
+
+export default withRouter(AdminPage);
