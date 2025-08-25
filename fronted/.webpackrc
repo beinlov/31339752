@@ -1,0 +1,21 @@
+{
+  "entry": "src/index.js",
+  "extraBabelPlugins": [
+    ["import", { "libraryName": "antd", "libraryDirectory": "es", "style": "css" }]
+  ],
+  "env": {
+    "development": {
+      "extraBabelPlugins": [
+        "dva-hmr"
+      ]
+    }
+  },
+  "proxy": {
+    "/api": {
+      "target": "http://localhost:8000",
+      "changeOrigin": true
+    }
+  },
+  "publicPath": "/",
+  "hash": true
+}
