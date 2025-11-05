@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException, Request
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ip_location'))
+from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pymysql
@@ -9,14 +11,16 @@ import random
 from datetime import datetime, timedelta
 import asyncio
 from router.user import router as user_router
+from router.user_integration_apis import router as user_integration_router  # 集成接口（SSO和用户同步）
 from router.node import router as node_router
-from router.asruex import router as asruex_router
+# from router.asruex import router as asruex_router  # 已废弃，功能由log_processor替代
 from router.botnet import router as botnet_router
 from router.amount import router as amount_router
 
 import logging
 import re
 from ip_location.ip_query import ip_query  # 导入IP查询模块
+from config import API_KEY, ALLOWED_UPLOAD_IPS, MAX_LOGS_PER_UPLOAD, ALLOWED_BOTNET_TYPES, DB_CONFIG
 
 # 设置日志
 logging.basicConfig(
@@ -40,13 +44,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 数据库配置
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",  # 替换为你的数据库用户名
-    "password": "root",  # 替换为你的数据库密码
-    "database": "botnet"
-}
 
 
 # 全局异常处理
@@ -71,11 +68,14 @@ async def general_exception_handler(request: Request, exc: Exception):
 # 包含用户路由
 app.include_router(user_router, prefix="/api/user", tags=["users"])
 
+# 包含用户集成接口路由（SSO免登录接口和用户数据同步接口）
+app.include_router(user_integration_router, prefix="/api/user", tags=["user-integration"])
+
 # 包含节点路由
 app.include_router(node_router, prefix="/api", tags=["nodes"])
 
-# 包含asruex路由
-app.include_router(asruex_router, prefix="/api/asruex", tags=["asruex"])
+# 包含asruex路由 - 已废弃，功能由log_processor模块替代
+# app.include_router(asruex_router, prefix="/api/asruex", tags=["asruex"])
 
 # 包含botnet路由
 app.include_router(botnet_router, prefix="/api", tags=["botnet"])
@@ -106,8 +106,182 @@ class BotnetType(BaseModel):
     created_at: Optional[datetime] = None
 
 
+# ============================================================
+# 日志上传接口（用于接收远端传输的日志）
+# ============================================================
+
+class LogUploadRequest(BaseModel):
+    """日志上传请求模型"""
+    botnet_type: str = Field(..., description="僵尸网络类型，如：asruex, mozi, moobot等")
+    logs: List[str] = Field(..., description="日志行列表，每行格式：timestamp,ip,event_type,extras...")
+    source_ip: Optional[str] = Field(None, description="远端IP（可选）")
+    
+    @validator('botnet_type')
+    def validate_botnet_type(cls, v):
+        if v not in ALLOWED_BOTNET_TYPES:
+            raise ValueError(f'僵尸网络类型必须是以下之一: {", ".join(ALLOWED_BOTNET_TYPES)}')
+        return v
+    
+    @validator('logs')
+    def validate_logs(cls, v):
+        if not v:
+            raise ValueError('日志列表不能为空')
+        if len(v) > MAX_LOGS_PER_UPLOAD:
+            raise ValueError(f'单次上传日志行数不能超过{MAX_LOGS_PER_UPLOAD}条')
+        return v
+
+
+class LogUploadResponse(BaseModel):
+    """日志上传响应模型"""
+    status: str
+    message: str
+    received_count: int
+    saved_to: str
+    timestamp: str
+
+
+@app.post("/api/upload-logs", response_model=LogUploadResponse)
+async def upload_logs(
+    request: LogUploadRequest, 
+    client_request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    接收远端上传的日志数据
+    
+    安全特性：
+    - API密钥认证（Header: X-API-Key）
+    - IP白名单验证
+    - 日志行数限制
+    - 僵尸网络类型验证
+    
+    示例请求:
+    curl -X POST "http://localhost:8000/api/upload-logs" \\
+         -H "Content-Type: application/json" \\
+         -H "X-API-Key: your-api-key" \\
+         -d '{
+           "botnet_type": "mozi",
+           "logs": [
+             "2025-10-30 12:00:00,1.2.3.4,infection,bot_v1.0",
+             "2025-10-30 12:01:00,1.2.3.5,beacon"
+           ]
+         }'
+    """
+    try:
+        client_ip = client_request.client.host
+        
+        # 安全检查1：验证API密钥
+        if x_api_key != API_KEY:
+            logger.warning(f"无效的API密钥尝试，来自IP: {client_ip}")
+            raise HTTPException(status_code=401, detail="无效的API密钥")
+        
+        # 安全检查2：IP白名单验证（如果配置了白名单）
+        if ALLOWED_UPLOAD_IPS and client_ip not in ALLOWED_UPLOAD_IPS:
+            logger.warning(f"未授权的IP尝试上传: {client_ip}")
+            raise HTTPException(status_code=403, detail="IP未授权")
+        
+        logger.info(f"收到来自 {client_ip} 的日志上传请求，类型: {request.botnet_type}, 行数: {len(request.logs)}")
+        
+        # 确定保存路径
+        logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        botnet_dir = os.path.join(logs_base_dir, request.botnet_type)
+        
+        # 创建目录（如果不存在）
+        os.makedirs(botnet_dir, exist_ok=True)
+        
+        # 生成文件名：YYYY-MM-DD.txt
+        today = datetime.now().strftime('%Y-%m-%d')
+        log_file = os.path.join(botnet_dir, f'{today}.txt')
+        
+        # 追加写入日志文件
+        with open(log_file, 'a', encoding='utf-8') as f:
+            for log_line in request.logs:
+                # 确保每行以换行符结尾
+                if not log_line.endswith('\n'):
+                    log_line += '\n'
+                f.write(log_line)
+        
+        logger.info(f"✅ 成功保存 {len(request.logs)} 条日志到 {log_file}")
+        
+        return LogUploadResponse(
+            status="success",
+            message=f"成功接收并保存 {len(request.logs)} 条日志",
+            received_count=len(request.logs),
+            saved_to=log_file,
+            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 日志上传处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"日志上传失败: {str(e)}")
+
+
+@app.get("/api/upload-status")
+async def get_upload_status():
+    """
+    查询上传接口状态和统计信息
+    
+    返回各个僵尸网络的日志文件数量和总行数
+    """
+    try:
+        logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        
+        status = {
+            "api_status": "running",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "security": {
+                "api_key_required": True,
+                "ip_whitelist_enabled": bool(ALLOWED_UPLOAD_IPS),
+                "max_logs_per_upload": MAX_LOGS_PER_UPLOAD
+            },
+            "botnet_types": []
+        }
+        
+        # 遍历各个僵尸网络目录
+        if os.path.exists(logs_base_dir):
+            for botnet_type in ALLOWED_BOTNET_TYPES:
+                botnet_dir = os.path.join(logs_base_dir, botnet_type)
+                if os.path.isdir(botnet_dir):
+                    files = [f for f in os.listdir(botnet_dir) if f.endswith('.txt')]
+                    total_lines = 0
+                    latest_file = None
+                    latest_mtime = 0
+                    
+                    for file in files:
+                        file_path = os.path.join(botnet_dir, file)
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                total_lines += sum(1 for _ in f)
+                            
+                            # 获取最新修改的文件
+                            mtime = os.path.getmtime(file_path)
+                            if mtime > latest_mtime:
+                                latest_mtime = mtime
+                                latest_file = file
+                        except:
+                            pass
+                    
+                    status["botnet_types"].append({
+                        "type": botnet_type,
+                        "log_files": len(files),
+                        "total_lines": total_lines,
+                        "latest_file": latest_file,
+                        "last_modified": datetime.fromtimestamp(latest_mtime).strftime('%Y-%m-%d %H:%M:%S') if latest_mtime > 0 else None
+                    })
+        
+        return JSONResponse(content=status)
+        
+    except Exception as e:
+        logger.error(f"获取上传状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/province-amounts")
 async def get_province_amounts(botnet_type: Optional[str] = None):
+    connection = None
+    cursor = None
     try:
         # 获取所有注册的僵尸网络类型
         botnet_tables = await get_botnet_tables()
@@ -171,14 +345,16 @@ async def get_province_amounts(botnet_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'connection' in locals():
+        if connection:
             connection.close()
 
 
 @app.get("/api/world-amounts")
 async def get_world_amounts(botnet_type: Optional[str] = None):
+    connection = None
+    cursor = None
     try:
         # 建立数据库连接
         connection = pymysql.connect(**DB_CONFIG)
@@ -232,9 +408,9 @@ async def get_world_amounts(botnet_type: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'connection' in locals():
+        if connection:
             connection.close()
 
 
@@ -256,6 +432,8 @@ async def get_industry_distribution():
 
 @app.get("/api/user-events")
 async def get_user_events():
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor(DictCursor)
@@ -278,6 +456,11 @@ async def get_user_events():
     except Exception as e:
         logger.error(f"Error fetching user events: {e}")
         return []  # 返回空数组而不是抛出异常
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # 添加异常报告模型
@@ -292,6 +475,8 @@ class AnomalyReport(BaseModel):
 
 @app.get("/api/anomaly-reports")
 async def get_anomaly_reports():
+    conn = None
+    cursor = None
     try:
         # 查询数据库中的异常报告
         conn = pymysql.connect(**DB_CONFIG)
@@ -320,9 +505,9 @@ async def get_anomaly_reports():
         # 发生错误时返回空数组
         return []
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 
@@ -427,19 +612,25 @@ async def get_ip_location_fallback(request: Request):
 
 # 修改现有的获取数据的函数
 async def get_botnet_tables():
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor(DictCursor)
         cursor.execute("SELECT name, table_name FROM botnet_types")
         return {row['name']: row['table_name'] for row in cursor.fetchall()}
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # 更新全球僵尸网络数据
 @app.post("/api/update-global-botnet")
 async def update_global_botnet(country: str, botnet_type: str, infected_num: int):
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -470,15 +661,17 @@ async def update_global_botnet(country: str, botnet_type: str, infected_num: int
         logger.error(f"Error updating global botnet data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 
 # 获取特定国家的僵尸网络数据
 @app.get("/api/country-botnet/{country}")
 async def get_country_botnet(country: str):
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -517,9 +710,9 @@ async def get_country_botnet(country: str):
         logger.error(f"Error getting country botnet data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 

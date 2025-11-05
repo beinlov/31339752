@@ -1,0 +1,25 @@
+# 统计聚合器配置文件
+
+# 聚合间隔（分钟）
+interval_minutes: 30
+
+# 支持的僵尸网络类型
+botnet_types:
+  - asruex
+  - mozi
+  - andromeda
+  - moobot
+  - ramnit
+  - leethozer
+
+# 日志配置
+logging:
+  level: INFO
+  file: stats_aggregator.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# 启动时是否立即执行一次聚合
+run_on_startup: true
+
+
+
