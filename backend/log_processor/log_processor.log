@@ -12840,3 +12840,323 @@ task: <Task pending name='Task-2' coro=<BotnetLogProcessor._periodic_flush() don
 2025-11-04 16:31:59,528 - __main__ - INFO - [ramnit] Written: 1997, Duplicates: 0 (0.00%), Buffer: 0
 2025-11-04 16:31:59,528 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
 2025-11-04 16:31:59,528 - __main__ - INFO - ============================================================
+2025-11-10 10:40:44,692 - __main__ - INFO - Initialized processors for 6 botnet types
+2025-11-10 10:40:44,708 - __main__ - INFO - ============================================================
+2025-11-10 10:40:44,709 - __main__ - INFO - Starting Botnet Log Processor
+2025-11-10 10:40:44,709 - __main__ - INFO - ============================================================
+2025-11-10 10:40:44,720 - log_processor.watcher - INFO - [asruex] Started monitoring: E:\zombie2.0\botnet\backend\logs\asruex
+2025-11-10 10:40:44,723 - log_processor.watcher - INFO - [mozi] Started monitoring: E:\zombie2.0\botnet\backend\logs\mozi
+2025-11-10 10:40:44,729 - log_processor.watcher - INFO - [andromeda] Started monitoring: E:\zombie2.0\botnet\backend\logs\andromeda
+2025-11-10 10:40:44,741 - log_processor.watcher - INFO - [moobot] Started monitoring: E:\zombie2.0\botnet\backend\logs\moobot
+2025-11-10 10:40:44,745 - log_processor.watcher - INFO - [ramnit] Started monitoring: E:\zombie2.0\botnet\backend\logs\ramnit
+2025-11-10 10:40:44,757 - log_processor.watcher - INFO - [leethozer] Started monitoring: E:\zombie2.0\botnet\backend\logs\leethozer
+2025-11-10 10:40:44,757 - log_processor.watcher - INFO - Started monitoring 6 botnet log directories
+2025-11-10 10:40:44,758 - log_processor.watcher - INFO - Scanning existing log files...
+2025-11-10 10:40:44,760 - log_processor.watcher - INFO - Existing log files scanned
+2025-11-10 10:40:44,762 - __main__ - INFO - Botnet Log Processor is running. Press Ctrl+C to stop.
+2025-11-10 10:41:44,775 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:41:44,776 - __main__ - INFO - ============================================================
+2025-11-10 10:41:44,776 - __main__ - INFO - STATISTICS
+2025-11-10 10:41:44,776 - __main__ - INFO - ============================================================
+2025-11-10 10:41:44,776 - __main__ - INFO - Uptime: 0:01:00.084042
+2025-11-10 10:41:44,776 - __main__ - INFO - Total lines: 0
+2025-11-10 10:41:44,776 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:41:44,776 - __main__ - INFO - Errors: 0
+2025-11-10 10:41:44,777 - __main__ - INFO - IP queries: 0
+2025-11-10 10:41:44,777 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:41:44,777 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,777 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,777 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,778 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,778 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,778 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:41:44,779 - __main__ - INFO - ============================================================
+2025-11-10 10:42:44,787 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:42:44,787 - __main__ - INFO - ============================================================
+2025-11-10 10:42:44,788 - __main__ - INFO - STATISTICS
+2025-11-10 10:42:44,788 - __main__ - INFO - ============================================================
+2025-11-10 10:42:44,789 - __main__ - INFO - Uptime: 0:02:00.095620
+2025-11-10 10:42:44,789 - __main__ - INFO - Total lines: 0
+2025-11-10 10:42:44,789 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:42:44,789 - __main__ - INFO - Errors: 0
+2025-11-10 10:42:44,790 - __main__ - INFO - IP queries: 0
+2025-11-10 10:42:44,790 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:42:44,790 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,790 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,791 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,791 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,791 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,792 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:42:44,792 - __main__ - INFO - ============================================================
+2025-11-10 10:43:44,800 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:43:44,800 - __main__ - INFO - ============================================================
+2025-11-10 10:43:44,802 - __main__ - INFO - STATISTICS
+2025-11-10 10:43:44,802 - __main__ - INFO - ============================================================
+2025-11-10 10:43:44,802 - __main__ - INFO - Uptime: 0:03:00.108639
+2025-11-10 10:43:44,802 - __main__ - INFO - Total lines: 0
+2025-11-10 10:43:44,803 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:43:44,803 - __main__ - INFO - Errors: 0
+2025-11-10 10:43:44,804 - __main__ - INFO - IP queries: 0
+2025-11-10 10:43:44,804 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:43:44,805 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,805 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,805 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,806 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,806 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,807 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:43:44,807 - __main__ - INFO - ============================================================
+2025-11-10 10:44:44,811 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:44:44,812 - __main__ - INFO - ============================================================
+2025-11-10 10:44:44,813 - __main__ - INFO - STATISTICS
+2025-11-10 10:44:44,813 - __main__ - INFO - ============================================================
+2025-11-10 10:44:44,813 - __main__ - INFO - Uptime: 0:04:00.120210
+2025-11-10 10:44:44,814 - __main__ - INFO - Total lines: 0
+2025-11-10 10:44:44,814 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:44:44,814 - __main__ - INFO - Errors: 0
+2025-11-10 10:44:44,815 - __main__ - INFO - IP queries: 0
+2025-11-10 10:44:44,815 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:44:44,815 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,815 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,816 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,816 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,817 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,817 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:44:44,817 - __main__ - INFO - ============================================================
+2025-11-10 10:45:44,824 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:45:44,824 - __main__ - INFO - ============================================================
+2025-11-10 10:45:44,825 - __main__ - INFO - STATISTICS
+2025-11-10 10:45:44,825 - __main__ - INFO - ============================================================
+2025-11-10 10:45:44,826 - __main__ - INFO - Uptime: 0:05:00.132430
+2025-11-10 10:45:44,826 - __main__ - INFO - Total lines: 0
+2025-11-10 10:45:44,826 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:45:44,826 - __main__ - INFO - Errors: 0
+2025-11-10 10:45:44,827 - __main__ - INFO - IP queries: 0
+2025-11-10 10:45:44,827 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:45:44,827 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,827 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,828 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,828 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,828 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,828 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:45:44,829 - __main__ - INFO - ============================================================
+2025-11-10 10:46:44,835 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:46:44,836 - __main__ - INFO - ============================================================
+2025-11-10 10:46:44,837 - __main__ - INFO - STATISTICS
+2025-11-10 10:46:44,837 - __main__ - INFO - ============================================================
+2025-11-10 10:46:44,837 - __main__ - INFO - Uptime: 0:06:00.144401
+2025-11-10 10:46:44,838 - __main__ - INFO - Total lines: 0
+2025-11-10 10:46:44,838 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:46:44,838 - __main__ - INFO - Errors: 0
+2025-11-10 10:46:44,839 - __main__ - INFO - IP queries: 0
+2025-11-10 10:46:44,839 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:46:44,839 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,839 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,840 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,840 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,840 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,840 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:46:44,841 - __main__ - INFO - ============================================================
+2025-11-10 10:47:44,848 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:47:44,849 - __main__ - INFO - ============================================================
+2025-11-10 10:47:44,850 - __main__ - INFO - STATISTICS
+2025-11-10 10:47:44,850 - __main__ - INFO - ============================================================
+2025-11-10 10:47:44,850 - __main__ - INFO - Uptime: 0:07:00.157102
+2025-11-10 10:47:44,851 - __main__ - INFO - Total lines: 0
+2025-11-10 10:47:44,851 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:47:44,851 - __main__ - INFO - Errors: 0
+2025-11-10 10:47:44,852 - __main__ - INFO - IP queries: 0
+2025-11-10 10:47:44,852 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:47:44,852 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,852 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,853 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,853 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,853 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,854 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:47:44,854 - __main__ - INFO - ============================================================
+2025-11-10 10:48:44,855 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:48:44,855 - __main__ - INFO - ============================================================
+2025-11-10 10:48:44,856 - __main__ - INFO - STATISTICS
+2025-11-10 10:48:44,857 - __main__ - INFO - ============================================================
+2025-11-10 10:48:44,857 - __main__ - INFO - Uptime: 0:08:00.163844
+2025-11-10 10:48:44,857 - __main__ - INFO - Total lines: 0
+2025-11-10 10:48:44,858 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:48:44,858 - __main__ - INFO - Errors: 0
+2025-11-10 10:48:44,858 - __main__ - INFO - IP queries: 0
+2025-11-10 10:48:44,858 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:48:44,859 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,859 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,859 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,859 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,860 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,860 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:48:44,860 - __main__ - INFO - ============================================================
+2025-11-10 10:49:44,867 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:49:44,867 - __main__ - INFO - ============================================================
+2025-11-10 10:49:44,869 - __main__ - INFO - STATISTICS
+2025-11-10 10:49:44,869 - __main__ - INFO - ============================================================
+2025-11-10 10:49:44,869 - __main__ - INFO - Uptime: 0:09:00.175970
+2025-11-10 10:49:44,869 - __main__ - INFO - Total lines: 0
+2025-11-10 10:49:44,870 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:49:44,870 - __main__ - INFO - Errors: 0
+2025-11-10 10:49:44,870 - __main__ - INFO - IP queries: 0
+2025-11-10 10:49:44,870 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:49:44,871 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,871 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,871 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,871 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,871 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,872 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:49:44,872 - __main__ - INFO - ============================================================
+2025-11-10 10:50:44,880 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:50:44,881 - __main__ - INFO - ============================================================
+2025-11-10 10:50:44,881 - __main__ - INFO - STATISTICS
+2025-11-10 10:50:44,882 - __main__ - INFO - ============================================================
+2025-11-10 10:50:44,882 - __main__ - INFO - Uptime: 0:10:00.189139
+2025-11-10 10:50:44,882 - __main__ - INFO - Total lines: 0
+2025-11-10 10:50:44,883 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:50:44,883 - __main__ - INFO - Errors: 0
+2025-11-10 10:50:44,883 - __main__ - INFO - IP queries: 0
+2025-11-10 10:50:44,883 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:50:44,884 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,884 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,884 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,884 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,885 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,885 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:50:44,885 - __main__ - INFO - ============================================================
+2025-11-10 10:51:44,899 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:51:44,900 - __main__ - INFO - ============================================================
+2025-11-10 10:51:44,901 - __main__ - INFO - STATISTICS
+2025-11-10 10:51:44,901 - __main__ - INFO - ============================================================
+2025-11-10 10:51:44,901 - __main__ - INFO - Uptime: 0:11:00.208392
+2025-11-10 10:51:44,902 - __main__ - INFO - Total lines: 0
+2025-11-10 10:51:44,902 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:51:44,903 - __main__ - INFO - Errors: 0
+2025-11-10 10:51:44,903 - __main__ - INFO - IP queries: 0
+2025-11-10 10:51:44,903 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:51:44,904 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,904 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,904 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,905 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,905 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,905 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:51:44,906 - __main__ - INFO - ============================================================
+2025-11-10 10:52:44,919 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:52:44,919 - __main__ - INFO - ============================================================
+2025-11-10 10:52:44,920 - __main__ - INFO - STATISTICS
+2025-11-10 10:52:44,921 - __main__ - INFO - ============================================================
+2025-11-10 10:52:44,921 - __main__ - INFO - Uptime: 0:12:00.227522
+2025-11-10 10:52:44,922 - __main__ - INFO - Total lines: 0
+2025-11-10 10:52:44,922 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:52:44,922 - __main__ - INFO - Errors: 0
+2025-11-10 10:52:44,923 - __main__ - INFO - IP queries: 0
+2025-11-10 10:52:44,923 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:52:44,924 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,924 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,924 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,925 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,925 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,926 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:52:44,926 - __main__ - INFO - ============================================================
+2025-11-10 10:53:44,935 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:53:44,936 - __main__ - INFO - ============================================================
+2025-11-10 10:53:44,938 - __main__ - INFO - STATISTICS
+2025-11-10 10:53:44,943 - __main__ - INFO - ============================================================
+2025-11-10 10:53:44,943 - __main__ - INFO - Uptime: 0:13:00.244076
+2025-11-10 10:53:44,944 - __main__ - INFO - Total lines: 0
+2025-11-10 10:53:44,944 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:53:44,944 - __main__ - INFO - Errors: 0
+2025-11-10 10:53:44,946 - __main__ - INFO - IP queries: 0
+2025-11-10 10:53:44,946 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:53:44,947 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,947 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,948 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,948 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,948 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,948 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:53:44,948 - __main__ - INFO - ============================================================
+2025-11-10 10:54:44,954 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:54:44,955 - __main__ - INFO - ============================================================
+2025-11-10 10:54:44,956 - __main__ - INFO - STATISTICS
+2025-11-10 10:54:44,956 - __main__ - INFO - ============================================================
+2025-11-10 10:54:44,957 - __main__ - INFO - Uptime: 0:14:00.263472
+2025-11-10 10:54:44,957 - __main__ - INFO - Total lines: 0
+2025-11-10 10:54:44,958 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:54:44,958 - __main__ - INFO - Errors: 0
+2025-11-10 10:54:44,959 - __main__ - INFO - IP queries: 0
+2025-11-10 10:54:44,959 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:54:44,959 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,959 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,960 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,960 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,960 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,960 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:54:44,961 - __main__ - INFO - ============================================================
+2025-11-10 10:55:44,974 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:55:44,975 - __main__ - INFO - ============================================================
+2025-11-10 10:55:44,977 - __main__ - INFO - STATISTICS
+2025-11-10 10:55:44,978 - __main__ - INFO - ============================================================
+2025-11-10 10:55:44,979 - __main__ - INFO - Uptime: 0:15:00.283468
+2025-11-10 10:55:44,980 - __main__ - INFO - Total lines: 0
+2025-11-10 10:55:44,980 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:55:44,980 - __main__ - INFO - Errors: 0
+2025-11-10 10:55:44,981 - __main__ - INFO - IP queries: 0
+2025-11-10 10:55:44,981 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:55:44,982 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,982 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,982 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,983 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,984 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,984 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:55:44,984 - __main__ - INFO - ============================================================
+2025-11-10 10:56:44,989 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:56:44,989 - __main__ - INFO - ============================================================
+2025-11-10 10:56:44,991 - __main__ - INFO - STATISTICS
+2025-11-10 10:56:44,993 - __main__ - INFO - ============================================================
+2025-11-10 10:56:44,993 - __main__ - INFO - Uptime: 0:16:00.297962
+2025-11-10 10:56:44,993 - __main__ - INFO - Total lines: 0
+2025-11-10 10:56:44,994 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:56:44,995 - __main__ - INFO - Errors: 0
+2025-11-10 10:56:44,996 - __main__ - INFO - IP queries: 0
+2025-11-10 10:56:44,999 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:56:45,001 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,002 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,002 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,002 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,003 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,003 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:56:45,011 - __main__ - INFO - ============================================================
+2025-11-10 10:57:45,020 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:57:45,020 - __main__ - INFO - ============================================================
+2025-11-10 10:57:45,022 - __main__ - INFO - STATISTICS
+2025-11-10 10:57:45,023 - __main__ - INFO - ============================================================
+2025-11-10 10:57:45,023 - __main__ - INFO - Uptime: 0:17:00.328928
+2025-11-10 10:57:45,023 - __main__ - INFO - Total lines: 0
+2025-11-10 10:57:45,024 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:57:45,024 - __main__ - INFO - Errors: 0
+2025-11-10 10:57:45,024 - __main__ - INFO - IP queries: 0
+2025-11-10 10:57:45,025 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:57:45,025 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,025 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,025 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,025 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,026 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,026 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:57:45,026 - __main__ - INFO - ============================================================
+2025-11-10 10:58:45,033 - __main__ - INFO - Periodic flush triggered
+2025-11-10 10:58:45,033 - __main__ - INFO - ============================================================
+2025-11-10 10:58:45,036 - __main__ - INFO - STATISTICS
+2025-11-10 10:58:45,036 - __main__ - INFO - ============================================================
+2025-11-10 10:58:45,036 - __main__ - INFO - Uptime: 0:18:00.341949
+2025-11-10 10:58:45,037 - __main__ - INFO - Total lines: 0
+2025-11-10 10:58:45,037 - __main__ - INFO - Processed lines: 0
+2025-11-10 10:58:45,037 - __main__ - INFO - Errors: 0
+2025-11-10 10:58:45,038 - __main__ - INFO - IP queries: 0
+2025-11-10 10:58:45,038 - __main__ - INFO - Cache hit rate: 0.00%
+2025-11-10 10:58:45,038 - __main__ - INFO - [asruex] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,039 - __main__ - INFO - [mozi] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,039 - __main__ - INFO - [andromeda] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,040 - __main__ - INFO - [moobot] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,040 - __main__ - INFO - [ramnit] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,041 - __main__ - INFO - [leethozer] Written: 0, Duplicates: 0 (0.00%), Buffer: 0
+2025-11-10 10:58:45,041 - __main__ - INFO - ============================================================

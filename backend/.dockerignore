@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# 测试和调试
+test/
+debugging/
+old/
+*.log
+
+# 文档
+*.md
+*.txt
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# 临时文件
+*.tmp
+.state/
+
+

@@ -1,0 +1,76 @@
+# ============================================================
+# Docker 忽略文件
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+
+# 环境变量
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+logs/*.txt
+
+# 数据库
+*.sql
+*.db
+*.sqlite
+
+# Git
+.git/
+.gitignore
+
+# 文档
+*.md
+*.docx
+*.txt
+教程/
+another/
+old/
+debugging/
+
+# 测试
+test/
+tests/
+
+# Node模块（前端会单独处理）
+node_modules/
+
+# 前端构建产物
+fronted/dist/
+fronted/node_modules/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+
