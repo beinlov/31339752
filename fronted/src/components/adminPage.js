@@ -256,8 +256,8 @@ const TutorialButton = styled.button`
 
 const AdminPage = ({ history }) => {
   const [activeMenu, setActiveMenu] = useState('clear');
-  const [currentContent, setCurrentContent] = useState(<NodeManagement />);
   const [selectedNetwork, setSelectedNetwork] = useState('ramnit');
+  const [currentContent, setCurrentContent] = useState(<NodeManagement networkType="ramnit" />);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [networkTypes, setNetworkTypes] = useState([]);

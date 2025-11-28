@@ -1,3 +1,5 @@
 # 忽略大文件
 *.sql
 *.awdb
+*.log
+__pycache__/

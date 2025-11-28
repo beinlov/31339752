@@ -20,7 +20,9 @@ from log_processor.config import (
 from log_processor.parser import LogParser
 from log_processor.enricher import IPEnricher
 from log_processor.db_writer import BotnetDBWriter
+from log_processor.performance_monitor import create_monitored_writer
 from log_processor.watcher import BotnetLogWatcher
+from typing import List, Dict
 
 # 配置日志
 logging.basicConfig(
@@ -42,6 +44,7 @@ class BotnetLogProcessor:
         self.parsers = {}
         self.enricher = IPEnricher()
         self.writers = {}
+        self.monitors = {}  # 性能监控器
         self.watcher = None
         self.running = False
         
@@ -54,6 +57,10 @@ class BotnetLogProcessor:
         }
         
         # 初始化各个僵尸网络的处理器
+        # 性能优化选项
+        USE_PERFORMANCE_MONITORING = True  # 设置为True启用性能监控
+        USE_CONNECTION_POOL = True  # 设置为True使用连接池
+        
         for botnet_type, config in BOTNET_CONFIG.items():
             if config.get('enabled', True):
                 # 创建解析器
@@ -62,15 +69,103 @@ class BotnetLogProcessor:
                     config.get('important_events', [])
                 )
                 
-                # 创建数据库写入器
-                self.writers[botnet_type] = BotnetDBWriter(
-                    botnet_type,
-                    DB_CONFIG,
-                    DB_BATCH_SIZE
-                )
+                # 创建写入器
+                if USE_PERFORMANCE_MONITORING:
+                    # 使用带性能监控的写入器
+                    self.writers[botnet_type], self.monitors[botnet_type] = create_monitored_writer(
+                        botnet_type, DB_CONFIG, DB_BATCH_SIZE
+                    )
+                else:
+                    # 使用标准写入器（包含所有优化功能）
+                    self.writers[botnet_type] = BotnetDBWriter(
+                        botnet_type, DB_CONFIG, DB_BATCH_SIZE, 
+                        use_connection_pool=USE_CONNECTION_POOL,
+                        enable_monitoring=True
+                    )
                 
         logger.info(f"Initialized processors for {len(self.parsers)} botnet types")
         
+    async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
+        """
+        处理来自API的结构化IP数据（异步非阻塞）
+        
+        Args:
+            botnet_type: 僵尸网络类型
+            ip_data: 结构化IP数据列表
+        """
+        if botnet_type not in self.writers:
+            logger.warning(f"Unknown botnet type: {botnet_type}")
+            return
+            
+        writer = self.writers[botnet_type]
+        
+        logger.info(f"[{botnet_type}] 收到 {len(ip_data)} 个IP，开始处理...")
+        
+        # 批量处理IP查询和数据库写入
+        processed_count = 0
+        error_count = 0
+        start_time = datetime.now()
+        
+        # 使用gather并发查询IP信息（提高效率）
+        ip_query_tasks = []
+        for ip_item in ip_data:
+            ip_query_tasks.append(self.enricher.enrich(ip_item['ip']))
+        
+        # 并发查询所有IP的地理位置信息
+        ip_infos = await asyncio.gather(*ip_query_tasks, return_exceptions=True)
+        
+        # 将查询结果与IP数据配对并写入
+        for ip_item, ip_info in zip(ip_data, ip_infos):
+            try:
+                # 如果查询出错，使用默认值
+                if isinstance(ip_info, Exception):
+                    logger.warning(f"IP查询失败 {ip_item['ip']}: {ip_info}")
+                    ip_info = {
+                        'country': '未知',
+                        'province': '',
+                        'city': '',
+                        'longitude': 0,
+                        'latitude': 0,
+                        'continent': '',
+                        'isp': '',
+                        'asn': '',
+                        'is_china': False
+                    }
+                
+                # 构造parsed_data格式
+                parsed_data = {
+                    'ip': ip_item['ip'],
+                    'timestamp': datetime.fromisoformat(ip_item['timestamp']) if isinstance(ip_item['timestamp'], str) else ip_item['timestamp'],
+                    'event_type': 'remote_upload',
+                    'source': 'remote_uploader',
+                    'date': ip_item.get('date', datetime.now().strftime('%Y-%m-%d')),
+                    'botnet_type': ip_item.get('botnet_type', botnet_type)
+                }
+                
+                # 写入数据库缓冲区（不立即刷新）
+                writer.add_node(parsed_data, ip_info)
+                
+                processed_count += 1
+                self.stats['processed_lines'] += 1
+                
+            except Exception as e:
+                logger.error(f"处理API数据失败 [{botnet_type}] {ip_item.get('ip', 'unknown')}: {e}")
+                error_count += 1
+                self.stats['errors'] += 1
+        
+        # 批量刷新到数据库（提高效率）
+        try:
+            await writer.flush(force=True)
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            
+            logger.info(
+                f"✅ [{botnet_type}] API数据处理完成: "
+                f"成功 {processed_count}, 失败 {error_count}, "
+                f"用时 {elapsed_time:.2f}秒 ({processed_count/elapsed_time:.0f} IP/秒)"
+            )
+        except Exception as e:
+            logger.error(f"❌ [{botnet_type}] 数据库刷新失败: {e}")
+
     async def process_log_line(self, botnet_type: str, line: str):
         """
         处理单行日志
@@ -134,29 +229,43 @@ class BotnetLogProcessor:
             
     def _print_stats(self):
         """打印统计信息"""
-        uptime = datetime.now() - self.stats['start_time']
+        logger.info("=== 统计信息 ===")
+        logger.info(f"总行数: {self.stats['total_lines']}")
+        logger.info(f"处理行数: {self.stats['processed_lines']}")
+        logger.info(f"错误数: {self.stats['errors']}")
+        logger.info(f"运行时间: {datetime.now() - self.stats['start_time']}")
         
-        logger.info("=" * 60)
-        logger.info("STATISTICS")
-        logger.info("=" * 60)
-        logger.info(f"Uptime: {uptime}")
-        logger.info(f"Total lines: {self.stats['total_lines']}")
-        logger.info(f"Processed lines: {self.stats['processed_lines']}")
-        logger.info(f"Errors: {self.stats['errors']}")
-        
-        # IP enricher统计
-        enricher_stats = self.enricher.get_stats()
-        logger.info(f"IP queries: {enricher_stats['total_queries']}")
-        logger.info(f"Cache hit rate: {enricher_stats['cache_hit_rate']}")
-        
-        # 各僵尸网络统计（包含去重信息）
+        # 打印各个写入器的统计
         for botnet_type, writer in self.writers.items():
-            writer_stats = writer.get_stats()
-            logger.info(f"[{botnet_type}] Written: {writer_stats['total_written']}, "
-                       f"Duplicates: {writer_stats['duplicate_count']} ({writer_stats['duplicate_rate']}), "
-                       f"Buffer: {writer_stats['buffer_size']}")
+            stats = writer.get_stats()
+            logger.info(f"[{botnet_type}] 写入: {stats['total_written']}, 重复: {stats['duplicate_count']}, 缓冲: {stats['buffer_size']}")
             
-        logger.info("=" * 60)
+        # 打印IP增强器统计
+        enricher_stats = self.enricher.get_stats()
+        logger.info(f"IP查询: {enricher_stats['total_queries']}, 缓存命中率: {enricher_stats['cache_hit_rate']}")
+    
+    def generate_performance_reports(self):
+        """生成所有写入器的性能报告"""
+        reports = []
+        for botnet_type, writer in self.writers.items():
+            if hasattr(writer, 'generate_performance_report'):
+                report = writer.generate_performance_report()
+                reports.append(report)
+                logger.info(report)
+        return reports
+    
+    def get_performance_summary(self):
+        """获取性能摘要"""
+        summary = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'writers': {}
+        }
+        
+        for botnet_type, writer in self.writers.items():
+            if hasattr(writer, 'get_performance_stats'):
+                summary['writers'][botnet_type] = writer.get_performance_stats()
+        
+        return summary
         
     def start(self):
         """启动日志处理服务"""
@@ -219,9 +328,22 @@ class BotnetLogProcessor:
         logger.info("Botnet Log Processor stopped")
 
 
+# 全局处理器实例（用于API调用）
+_global_processor = None
+
+def get_processor():
+    """获取全局处理器实例"""
+    global _global_processor
+    if _global_processor is None:
+        _global_processor = BotnetLogProcessor()
+    return _global_processor
+
 def signal_handler(sig, frame):
     """信号处理器"""
     logger.info("Signal received, stopping...")
+    global _global_processor
+    if _global_processor:
+        _global_processor.stop()
     sys.exit(0)
 
 
@@ -232,8 +354,9 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     # 创建并启动处理器
-    processor = BotnetLogProcessor()
-    processor.start()
+    global _global_processor
+    _global_processor = BotnetLogProcessor()
+    _global_processor.start()
 
 
 if __name__ == "__main__":

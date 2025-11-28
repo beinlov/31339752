@@ -61,7 +61,7 @@ IP_CACHE_SIZE = 10000  # 缓存最多10000个IP信息
 IP_CACHE_TTL = 86400   # 缓存24小时
 
 # 数据库批量写入配置
-DB_BATCH_SIZE = 100           # 批量写入大小
+DB_BATCH_SIZE = 500           # 批量写入大小（增加到500以提高性能）
 DB_COMMIT_INTERVAL = 60       # 提交间隔（秒）
 DB_STATISTICS_INTERVAL = 300  # 统计更新间隔（秒）
 
@@ -74,3 +74,15 @@ LOG_DATE_FORMAT = "%Y-%m-%d"  # 日期格式
 MONITOR_INTERVAL = 0.5  # 文件监控间隔（秒）
 POSITION_STATE_FILE = os.path.join(BASE_DIR, 'log_processor', '.file_positions.json')  # 文件位置记录
 
+
+
+# 性能优化配置
+PERFORMANCE_MONITORING = True  # 启用性能监控
+CONNECTION_POOL_SIZE = 3       # 数据库连接池大小
+MONITOR_INTERVAL = 30          # 性能监控间隔（秒）
+
+# 性能阈值配置
+SLOW_FLUSH_THRESHOLD = 2.0     # 慢flush阈值（秒）
+SLOW_CONNECTION_THRESHOLD = 0.5  # 慢连接阈值（秒）
+HIGH_CPU_THRESHOLD = 80        # 高CPU使用率阈值（%）
+HIGH_MEMORY_THRESHOLD = 85     # 高内存使用率阈值（%）

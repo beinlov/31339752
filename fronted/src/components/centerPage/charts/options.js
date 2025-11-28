@@ -43,7 +43,7 @@ export const provinceMap = {
   '澳门': '820000'
 };
 
-// 导出省份名称映射
+// 导出省份名称映射（地图全称 -> 简称）
 export const provinceNameMap = {
   '北京市': '北京',
   '天津市': '天津',
@@ -64,7 +64,7 @@ export const provinceNameMap = {
   '湖北省': '湖北',
   '湖南省': '湖南',
   '广东省': '广东',
-  '广西省': '广西',
+  '广西壮族自治区': '广西',  // 修正：广西壮族自治区
   '海南省': '海南',
   '重庆市': '重庆',
   '四川省': '四川',
@@ -75,10 +75,11 @@ export const provinceNameMap = {
   '甘肃省': '甘肃',
   '青海省': '青海',
   '宁夏回族自治区': '宁夏',
-  '新疆': '新疆',
+  '新疆维吾尔自治区': '新疆',  // 修正：新疆维吾尔自治区
   '台湾省': '台湾',
   '香港特别行政区': '香港',
-  '澳门特别行政区': '澳门'
+  '澳门特别行政区': '澳门',
+  '未知': '未知'  // 添加：处理未知地区
 };
 
 // 添加省会城市坐标
@@ -167,7 +168,33 @@ const getProvinceColorByRatio = (value, maxValue) => {
   return '#6495ED';  // 其他非零值使用浅蓝色
 };
 
-// 将数据转换为地图所需格式
+// 规范化后端传来的省份字段（解决"新疆维吾尔自治区乌鲁木齐市"这类问题）
+const normalizeProvince = (rawName) => {
+  if (!rawName) return '';
+
+  let name = rawName.trim();
+  // 去掉"中国"前缀
+  name = name.replace(/^中国/, '');
+
+  // 在第一个行政区关键字处截断后面全部内容
+  // 例如："新疆维吾尔自治区乌鲁木齐市" → "新疆"
+  //       "广西壮族自治区南宁市" → "广西"
+  //       "河北省石家庄市" → "河北"
+  const match = name.match(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区|省|市)/);
+  if (match) {
+    const index = match.index;
+    if (index > 0) {
+      name = name.slice(0, index);   // 只保留前面的省名部分
+    } else if (index === 0) {
+      // 如果开头就是关键字（比如"市"），说明可能是直辖市等特殊情况
+      return rawName;
+    }
+  }
+
+  return name;
+};
+
+// 将省份数据转换为地图所需格式，并进行省份名称映射
 const convertData = (data) => {
   if (!Array.isArray(data)) return [];
 
@@ -177,10 +204,11 @@ const convertData = (data) => {
   // 创建一个包含所有省份的映射，初始值为0
   const provinceDataMap = {};
 
-  // 创建反向映射，从简称到全称
+  // 创建反向映射，从简称到全称，同时支持多种变体
   const reverseProvinceMap = {};
   Object.entries(provinceNameMap).forEach(([fullName, shortName]) => {
-    reverseProvinceMap[shortName] = fullName;
+    reverseProvinceMap[shortName] = fullName;  // 简称 -> 全称
+    reverseProvinceMap[fullName] = fullName;   // 全称 -> 全称（支持直接匹配）
   });
 
   // 初始化所有省份数据为0
@@ -190,10 +218,39 @@ const convertData = (data) => {
 
   // 更新有数据的省份
   data.forEach(item => {
-    // 获取省份全称
-    const fullName = reverseProvinceMap[item.province];
+    let provinceName = item.province;
+    
+    // 跳过"未知"省份（地图上没有这个区域）
+    if (!provinceName || provinceName === '未知' || provinceName === '') {
+      console.log(`跳过未知省份，节点数: ${item.amount}`);
+      return;
+    }
+    
+    // 先尝试直接匹配（支持"新疆""新疆维吾尔自治区"这类）
+    let fullName = reverseProvinceMap[provinceName];
+    
+    if (!fullName) {
+      // 使用新的标准化函数，把 "新疆维吾尔自治区乌鲁木齐市" → "新疆"
+      const normalized = normalizeProvince(provinceName);
+      
+      // 1）先用 normalized 去反向映射
+      fullName = reverseProvinceMap[normalized];
+      
+      // 2）还不行的话，再做一轮更激进的模糊匹配
+      if (!fullName) {
+        Object.entries(provinceNameMap).forEach(([full, short]) => {
+          if (short === normalized || full.includes(normalized)) {
+            fullName = full;
+          }
+        });
+      }
+    }
+    
     if (fullName) {
       provinceDataMap[fullName] = item.amount;
+    } else {
+      // 调试：输出未匹配的省份名
+      console.warn(`未能匹配省份: "${provinceName}" (标准化后: "${normalizeProvince(provinceName)}")，节点数: ${item.amount}`);
     }
   });
 

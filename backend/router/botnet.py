@@ -116,6 +116,7 @@ async def ensure_botnet_table_exists(bot_name: str):
             
 
             # Create botnet_nodes table with proper schema
+            # 使用新的三字段时间架构：active_time, created_time, updated_at
             cursor.execute(f"""
                 CREATE TABLE {node_table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -129,16 +130,20 @@ async def ensure_botnet_table_exists(bot_name: str):
                     isp VARCHAR(255),
                     asn VARCHAR(50),
                     status ENUM('active', 'inactive') DEFAULT 'active',
-                    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    active_time TIMESTAMP NULL DEFAULT NULL COMMENT '节点激活时间（日志中的时间）',
+                    created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '节点首次写入数据库的时间',
+                    updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '节点最新一次响应时间（日志中的时间）',
                     is_china BOOLEAN DEFAULT FALSE,
                     INDEX idx_ip (ip),
                     INDEX idx_location (country, province, city),
                     INDEX idx_status (status),
-                    INDEX idx_last_active (last_active),
-                    INDEX idx_is_china (is_china)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    INDEX idx_active_time (active_time),
+                    INDEX idx_created_time (created_time),
+                    INDEX idx_updated_at (updated_at),
+                    INDEX idx_is_china (is_china),
+                    UNIQUE KEY idx_unique_ip (ip)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点原始数据表'
             """)
             
             conn.commit()

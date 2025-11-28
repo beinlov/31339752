@@ -34,7 +34,7 @@ echo.
 echo ============================================================
 echo [3/3] 启动统计数据聚合器...
 echo ============================================================
-start "统计聚合器" cmd /k "cd /d %ROOT_DIR%backend && python stats_aggregator\aggregator.py daemon 30"
+start "统计聚合器" cmd /k "cd /d d:\workspace\botnet\backend\stats_aggregator && python aggregator.py daemon 5"
 timeout /t 2 /nobreak >nul
 
 echo.

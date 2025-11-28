@@ -1,16 +1,12 @@
 # 统计聚合器配置文件
 
 # 聚合间隔（分钟）
-interval_minutes: 30
+interval_minutes: 5
 
 # 支持的僵尸网络类型
 botnet_types:
-  - asruex
-  - mozi
-  - andromeda
-  - moobot
   - ramnit
-  - leethozer
+
 
 # 日志配置
 logging:

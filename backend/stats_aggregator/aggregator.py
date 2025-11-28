@@ -32,7 +32,7 @@ class StatsAggregator:
     """统计数据聚合器"""
     
     # 支持的僵尸网络类型
-    BOTNET_TYPES = ['asruex', 'mozi', 'andromeda', 'moobot', 'ramnit', 'leethozer']
+    BOTNET_TYPES = ['ramnit']
     
     def __init__(self, db_config):
         """
@@ -91,53 +91,99 @@ class StatsAggregator:
             # 确保统计表存在
             self._ensure_stats_tables_exist(cursor, botnet_type)
             
-            # 1. 清空旧的统计数据（全量聚合）
-            cursor.execute(f"DELETE FROM {china_table}")
-            cursor.execute(f"DELETE FROM {global_table}")
-            
-            # 2. 聚合中国地区统计（按省市分组）
-            # 注意: created_at 和 updated_at 使用每个分组中最早和最晚的时间
+            # 1. 使用 INSERT ... ON DUPLICATE KEY UPDATE 避免ID增长
+            # 聚合中国地区统计（按省市分组）
+            # 注意：节点表使用 created_time，但统计表使用 created_at
             cursor.execute(f"""
                 INSERT INTO {china_table} (province, municipality, infected_num, created_at, updated_at)
                 SELECT 
-                    COALESCE(TRIM(TRAILING '省' FROM province), '未知') as province,
+                    CASE
+                        -- 统一地名：去除各种后缀（注意顺序：先匹配特殊的，再匹配通用的）
+                        WHEN province LIKE '%壮族自治区' THEN REPLACE(province, '壮族自治区', '')
+                        WHEN province LIKE '%回族自治区' THEN REPLACE(province, '回族自治区', '')
+                        WHEN province LIKE '%维吾尔自治区' THEN REPLACE(province, '维吾尔自治区', '')
+                        WHEN province LIKE '%自治区' THEN REPLACE(province, '自治区', '')
+                        WHEN province LIKE '%省' THEN REPLACE(province, '省', '')
+                        -- 只处理直辖市的"市"后缀
+                        WHEN province IN ('北京市', '天津市', '上海市', '重庆市') THEN REPLACE(province, '市', '')
+                        WHEN province IS NOT NULL THEN province
+                        ELSE '未知'
+                    END as province,
                     CASE 
                         WHEN city IN ('北京', '天津', '上海', '重庆') THEN city
                         WHEN city IS NOT NULL THEN TRIM(TRAILING '市' FROM city)
                         ELSE '未知'
                     END as municipality,
                     COUNT(*) as infected_num,
-                    MIN(created_at) as created_at,
+                    MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
                 WHERE country = '中国'
                 GROUP BY 
-                    COALESCE(TRIM(TRAILING '省' FROM province), '未知'),
+                    CASE
+                        WHEN province LIKE '%壮族自治区' THEN REPLACE(province, '壮族自治区', '')
+                        WHEN province LIKE '%回族自治区' THEN REPLACE(province, '回族自治区', '')
+                        WHEN province LIKE '%维吾尔自治区' THEN REPLACE(province, '维吾尔自治区', '')
+                        WHEN province LIKE '%自治区' THEN REPLACE(province, '自治区', '')
+                        WHEN province LIKE '%省' THEN REPLACE(province, '省', '')
+                        WHEN province IN ('北京市', '天津市', '上海市', '重庆市') THEN REPLACE(province, '市', '')
+                        WHEN province IS NOT NULL THEN province
+                        ELSE '未知'
+                    END,
                     CASE 
                         WHEN city IN ('北京', '天津', '上海', '重庆') THEN city
                         WHEN city IS NOT NULL THEN TRIM(TRAILING '市' FROM city)
                         ELSE '未知'
                     END
+                ON DUPLICATE KEY UPDATE
+                    infected_num = VALUES(infected_num),
+                    created_at = VALUES(created_at),
+                    updated_at = VALUES(updated_at)
             """)
-            china_rows = cursor.rowcount
+            # 注意: cursor.rowcount 在 ON DUPLICATE KEY UPDATE 时不可靠
+            # 当 UPDATE 但数据不变时会返回 0，因此改为查询实际记录数
             
-            # 3. 聚合全球统计（按国家分组）
-            # 注意: created_at 和 updated_at 使用每个分组中最早和最晚的时间
+            # 2. 聚合全球统计（按国家分组）
+            # 注意：节点表使用 created_time，但统计表使用 created_at
             cursor.execute(f"""
                 INSERT INTO {global_table} (country, infected_num, created_at, updated_at)
                 SELECT 
-                    COALESCE(country, '未知') as country,
+                    CASE
+                        -- 统一国家名称
+                        WHEN country = '中国台湾' THEN '台湾'
+                        WHEN country = '中国香港' THEN '香港'
+                        WHEN country = '中国澳门' THEN '澳门'
+                        WHEN country IS NOT NULL THEN country
+                        ELSE '未知'
+                    END as country,
                     COUNT(*) as infected_num,
-                    MIN(created_at) as created_at,
+                    MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
-                GROUP BY country
+                GROUP BY 
+                    CASE
+                        WHEN country = '中国台湾' THEN '台湾'
+                        WHEN country = '中国香港' THEN '香港'
+                        WHEN country = '中国澳门' THEN '澳门'
+                        WHEN country IS NOT NULL THEN country
+                        ELSE '未知'
+                    END
+                ON DUPLICATE KEY UPDATE
+                    infected_num = VALUES(infected_num),
+                    created_at = VALUES(created_at),
+                    updated_at = VALUES(updated_at)
             """)
-            global_rows = cursor.rowcount
             
             conn.commit()
             
-            logger.info(f"✅ [{botnet_type}] 聚合完成：节点 {node_count} → 中国统计 {china_rows} 条，全球统计 {global_rows} 条")
+            # 查询实际的记录数（不依赖 cursor.rowcount）
+            cursor.execute(f"SELECT COUNT(*) as count FROM {china_table}")
+            china_rows = cursor.fetchone()[0]
+            
+            cursor.execute(f"SELECT COUNT(*) as count FROM {global_table}")
+            global_rows = cursor.fetchone()[0]
+            
+            logger.info(f"[{botnet_type}] 聚合完成：节点 {node_count} -> 中国统计 {china_rows} 条，全球统计 {global_rows} 条")
             
             return {
                 'china_rows': china_rows,
@@ -147,7 +193,7 @@ class StatsAggregator:
             }
             
         except Exception as e:
-            logger.error(f"❌ [{botnet_type}] 聚合失败: {e}")
+            logger.error(f"[{botnet_type}] 聚合失败: {e}")
             if conn:
                 conn.rollback()
             return {'success': False, 'error': str(e)}
@@ -163,8 +209,10 @@ class StatsAggregator:
         确保统计表存在
         
         时间字段说明:
-        - created_at: 该地区/国家第一个节点的创建时间(来自原始表的MIN(created_at))
-        - updated_at: 该地区/国家最新节点的更新时间(来自原始表的MAX(updated_at))
+        - created_at: 该地区/国家第一个节点的创建时间(来自节点表的MIN(created_time))
+        - updated_at: 该地区/国家最新节点的更新时间(来自节点表的MAX(updated_at))
+        
+        注意：统计表使用 created_at，但节点表使用 created_time
         """
         china_table = f"china_botnet_{botnet_type}"
         global_table = f"global_botnet_{botnet_type}"
@@ -278,7 +326,7 @@ def run_daemon(interval_minutes=30):
             next_run = datetime.now().timestamp() + interval_seconds
             next_run_time = datetime.fromtimestamp(next_run).strftime('%Y-%m-%d %H:%M:%S')
             
-            logger.info(f"\n⏰ 下次聚合时间: {next_run_time} (等待 {interval_minutes} 分钟)")
+            logger.info(f"\n下次聚合时间: {next_run_time} (等待 {interval_minutes} 分钟)")
             time.sleep(interval_seconds)
             
             # 执行聚合

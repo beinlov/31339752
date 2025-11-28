@@ -14,7 +14,6 @@ old/
 
 # 文档
 *.md
-*.txt
 
 # IDE
 .vscode/

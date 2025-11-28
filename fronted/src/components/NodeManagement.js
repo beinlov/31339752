@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
@@ -124,8 +124,7 @@ const TableContainer = styled.div`
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   margin-bottom: 0;
   position: relative;
-  display: flex;
-  flex-direction: column;
+  max-height: calc(100vh - 650px);
 `;
 
 const Table = styled.div`
@@ -457,13 +456,21 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [pageSize] = useState(100); // 符合API要求的最小页面大小
-  const [displayLimit] = useState(20); // 实际在UI中显示的条数
   const [nodeStats, setNodeStats] = useState({
     totalNodes: 0,
     onlineNodes: 0,
     offlineNodes: 0,
     countryDistribution: {},
     selectedCount: 0
+  });
+
+  // 独立的图表统计数据（完整数据，不受分页影响）
+  const [chartStats, setChartStats] = useState({
+    totalNodes: 0,
+    activeNodes: 0,
+    inactiveNodes: 0,
+    countryDistribution: {},
+    statusDistribution: {}
   });
 
   // 当从 props 接收到新的 networkType 时更新本地状态
@@ -473,13 +480,59 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     }
   }, [propNetworkType]);
 
-  // 统一的数据获取 effect
+  // 获取图表统计数据（只在网络类型改变时获取，不受分页和勾选影响）
+  useEffect(() => {
+    if (networkType) {
+      fetchChartStats();
+    }
+  }, [networkType]); // 只依赖 networkType
+
+  // 统一的数据获取 effect（节点列表数据）
   useEffect(() => {
     if (networkType) {
       console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}, filter=${filter}`);
       fetchNodesData();
     }
   }, [networkType, currentPage, pageSize, filter]); // 依赖项包含所有会触发重新获取的状态
+
+  // 获取完整的图表统计数据
+  const fetchChartStats = async () => {
+    try {
+      const endpoint = `/api/node-stats/${networkType}`;
+      console.log(`获取图表统计数据: ${endpoint}`);
+
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error(`获取统计数据失败: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.data) {
+        throw new Error('返回的统计数据格式不正确');
+      }
+
+      // 更新图表数据
+      const newChartStats = {
+        totalNodes: result.data.total_nodes || 0,
+        activeNodes: result.data.active_nodes || 0,
+        inactiveNodes: result.data.inactive_nodes || 0,
+        countryDistribution: result.data.country_distribution || {},
+        statusDistribution: result.data.status_distribution || {}
+      };
+      
+      console.log('图表统计数据更新完成:', result.data);
+      console.log('country_distribution 内容:', result.data.country_distribution);
+      console.log('country_distribution 类型:', typeof result.data.country_distribution);
+      console.log('country_distribution 条目数:', Object.keys(result.data.country_distribution || {}).length);
+      
+      setChartStats(newChartStats);
+
+    } catch (error) {
+      console.error('获取图表统计数据失败:', error);
+      // 不影响主数据，只记录错误
+    }
+  };
 
   // 根据不同网络类型获取节点数据
   const fetchNodesData = async () => {
@@ -520,7 +573,24 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       }
 
       // 转换数据格式
-      const formattedNodes = result.data.nodes.map(node => ({
+      // 去重：按 IP 保留最新记录
+      const mapByIp = new Map();
+      for (const node of result.data.nodes) {
+        const key = node.ip || '';
+        const current = mapByIp.get(key);
+        if (!current) {
+          mapByIp.set(key, node);
+        } else {
+          // 选择最近的 last_active
+          const curTime = new Date(current.last_active || 0).getTime();
+          const newTime = new Date(node.last_active || 0).getTime();
+          if (newTime >= curTime) {
+            mapByIp.set(key, node);
+          }
+        }
+      }
+
+      const formattedNodes = Array.from(mapByIp.values()).map(node => ({
         id: node.id,
         ip: node.ip,
         country: node.country || '未知',
@@ -539,7 +609,8 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       // 更新统计信息
       const statistics = result.data.statistics;
       setNodeStats({
-        totalNodes: statistics.active_nodes + statistics.inactive_nodes,
+        // 使用后端分页提供的总数，避免重复统计
+        totalNodes: result.data.pagination.total_count,
         onlineNodes: statistics.active_nodes,
         offlineNodes: statistics.inactive_nodes,
         countryDistribution: statistics.country_distribution,
@@ -575,8 +646,8 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     return matchesSearch && matchesFilter;
   });
 
-  // 本地分页，只显示前displayLimit条
-  const displayedNodes = filteredNodes.slice(0, displayLimit);
+  // 显示完整的当前页结果，允许在容器内滚动
+  const displayedNodes = filteredNodes;
 
   // 处理节点选择
   const handleNodeSelect = (nodeId) => {
@@ -724,119 +795,161 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     }
   };
 
-  // 准备图表数据
-  const getLocationChartOption = () => ({
-    title: {
-      text: '节点地理分布',
-      left: 'center',
-      textStyle: {
-        fontWeight: 'normal',
-        fontSize: 16
-      }
-    },
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    legend: {
-      type: 'scroll',
-      orient: 'vertical',
-      right: 10,
-      top: 20,
-      bottom: 20,
-      data: Array.from(new Set(nodes.map(node => node.country)))
-    },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['40%', '50%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: '#fff',
-        borderWidth: 2
-      },
-      label: {
-        show: false,
-        position: 'center'
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: '18',
-          fontWeight: 'bold'
-        }
-      },
-      labelLine: {
-        show: false
-      },
-      data: Array.from(
-        nodes.reduce((acc, node) => {
-          acc.set(node.country, (acc.get(node.country) || 0) + 1);
-          return acc;
-        }, new Map())
-      ).map(([name, value]) => ({
+  // 准备图表数据 - 使用 useMemo 缓存，避免不必要的重新渲染
+  const getLocationChartOption = useMemo(() => {
+    // 使用完整的统计数据，而不是分页数据
+    const distribution = chartStats.countryDistribution || {};
+    
+    // 调试日志
+    console.log('饼状图数据源 chartStats.countryDistribution:', distribution);
+    console.log('数据条目数:', Object.keys(distribution).length);
+    
+    const countryData = Object.entries(distribution)
+      .map(([name, value]) => ({
         name,
         value,
         label: {
           formatter: '{b}: {c} ({d}%)'
         }
       }))
-    }]
-  });
+      .sort((a, b) => b.value - a.value); // 按数量排序
 
-  const getStatusChartOption = () => ({
-    title: {
-      text: '节点状态分布',
-      left: 'center',
-      textStyle: {
-        fontWeight: 'normal',
-        fontSize: 16
-      }
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'value'
-    },
-    yAxis: {
-      type: 'category',
-      data: ['在线', '下线'],
-      axisLabel: {
-        formatter: function(value) {
-          return value === '在线' ? '🟢 在线' : '🔴 下线';
-        }
-      }
-    },
-    series: [{
-      name: '节点数量',
-      type: 'bar',
-      data: [
-        {
-          value: nodes.filter(node => node.status === '在线').length,
-          itemStyle: { color: '#2e7d32' }
+    console.log('处理后的饼图数据:', countryData);
+
+    // 如果没有数据，返回空状态配置
+    if (countryData.length === 0) {
+      return {
+        title: {
+          text: '节点地理分布',
+          left: 'center',
+          textStyle: {
+            fontWeight: 'normal',
+            fontSize: 16
+          }
         },
-        {
-          value: nodes.filter(node => node.status === '下线').length,
-          itemStyle: { color: '#c62828' }
+        graphic: {
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '暂无数据',
+            fontSize: 16,
+            fill: '#999'
+          }
         }
-      ],
-      showBackground: true,
-      backgroundStyle: {
-        color: 'rgba(180, 180, 180, 0.1)'
-      }
-    }]
-  });
+      };
+    }
+
+    return {
+      title: {
+        text: '节点地理分布',
+        left: 'center',
+        textStyle: {
+          fontWeight: 'normal',
+          fontSize: 16
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: (params) => {
+          return `${params.name}: ${params.value} (${params.percent}%)`;
+        }
+      },
+      legend: {
+        type: 'scroll',
+        orient: 'vertical',
+        right: 10,
+        top: 20,
+        bottom: 20,
+        data: countryData.map(item => item.name)
+      },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['40%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: '18',
+            fontWeight: 'bold'
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: countryData
+      }]
+    };
+  }, [chartStats.countryDistribution]); // 只依赖图表数据，不依赖节点列表或勾选状态
+
+  const getStatusChartOption = useMemo(() => {
+    // 使用完整的统计数据
+    const activeCount = chartStats.activeNodes || 0;
+    const inactiveCount = chartStats.inactiveNodes || 0;
+
+    return {
+      title: {
+        text: '节点状态分布',
+        left: 'center',
+        textStyle: {
+          fontWeight: 'normal',
+          fontSize: 16
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'shadow'
+        }
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'value'
+      },
+      yAxis: {
+        type: 'category',
+        data: ['在线', '下线'],
+        axisLabel: {
+          formatter: function(value) {
+            return value === '在线' ? '🟢 在线' : '🔴 下线';
+          }
+        }
+      },
+      series: [{
+        name: '节点数量',
+        type: 'bar',
+        data: [
+          {
+            value: activeCount,
+            itemStyle: { color: '#2e7d32' }
+          },
+          {
+            value: inactiveCount,
+            itemStyle: { color: '#c62828' }
+          }
+        ],
+        showBackground: true,
+        backgroundStyle: {
+          color: 'rgba(180, 180, 180, 0.1)'
+        }
+      }]
+    };
+  }, [chartStats.activeNodes, chartStats.inactiveNodes]); // 只依赖图表统计数据
 
   useEffect(() => {
     // 如果执行了操作，更新选择状态
@@ -880,16 +993,14 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
       <ChartsContainer>
         <ChartCard
-          option={getLocationChartOption()}
+          option={getLocationChartOption}
           height="300px"
           accentColor="linear-gradient(90deg, #1a237e, #0d47a1)"
-          loading={isLoading ? true : undefined}
         />
         <ChartCard
-          option={getStatusChartOption()}
+          option={getStatusChartOption}
           height="300px"
           accentColor="linear-gradient(90deg, #2e7d32, #1b5e20)"
-          loading={isLoading ? true : undefined}
         />
       </ChartsContainer>
 
@@ -1056,7 +1167,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           末页
         </PageButton>
         <span style={{ marginLeft: '10px', color: '#666' }}>
-          共 {totalCount} 条记录，{totalPages} 页，每页 {displayLimit} 条显示（API加载 {pageSize} 条）
+          共 {totalCount} 条记录，{totalPages} 页，当前页最多显示 {pageSize} 条
         </span>
       </Pagination>
 

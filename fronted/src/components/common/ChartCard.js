@@ -77,30 +77,35 @@ const ChartCard = ({ option, height, accentColor, loading = false }) => {
   );
 
   useEffect(() => {
-    // 初始化图表
-    if (chartRef.current) {
-      if (!chartInstance.current) {
-        chartInstance.current = echarts.init(chartRef.current);
-      }
-      chartInstance.current.setOption(option);
+    // 初始化图表实例（只执行一次）
+    if (chartRef.current && !chartInstance.current) {
+      chartInstance.current = echarts.init(chartRef.current);
+      
+      // 处理窗口大小变化
+      const handleResize = () => {
+        if (chartInstance.current) {
+          chartInstance.current.resize();
+        }
+      };
+      window.addEventListener('resize', handleResize);
+      
+      // 清理函数（仅在组件卸载时执行）
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (chartInstance.current) {
+          chartInstance.current.dispose();
+          chartInstance.current = null;
+        }
+      };
     }
+  }, []); // 空依赖数组，只在挂载时执行一次
 
-    // 处理窗口大小变化
-    const handleResize = () => {
-      if (chartInstance.current) {
-        chartInstance.current.resize();
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
-    // 清理函数
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (chartInstance.current) {
-        chartInstance.current.dispose();
-        chartInstance.current = null;
-      }
-    };
+  useEffect(() => {
+    // 更新图表配置（当 option 改变时）
+    if (chartInstance.current && option) {
+      console.log('ChartCard 更新图表配置:', option);
+      chartInstance.current.setOption(option, true); // true 表示不合并，完全替换
+    }
   }, [option]);
 
   return (

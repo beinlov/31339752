@@ -16,6 +16,7 @@ from router.node import router as node_router
 # from router.asruex import router as asruex_router  # 已废弃，功能由log_processor替代
 from router.botnet import router as botnet_router
 from router.amount import router as amount_router
+from api_ip_upload import router as ip_upload_router
 
 import logging
 import re
@@ -83,6 +84,9 @@ app.include_router(botnet_router, prefix="/api", tags=["botnet"])
 # 包含amount路由
 app.include_router(amount_router, prefix="/api", tags=["amount"])
 
+# 包含IP上传路由（用于远端上传器）
+app.include_router(ip_upload_router, tags=["ip-upload"])
+
 
 # 数据模型
 class ProvinceAmount(BaseModel):
@@ -110,10 +114,18 @@ class BotnetType(BaseModel):
 # 日志上传接口（用于接收远端传输的日志）
 # ============================================================
 
+# IP数据项模型（用于新格式）
+class IPDataItem(BaseModel):
+    ip: str
+    date: str
+    botnet_type: str
+    timestamp: str
+
 class LogUploadRequest(BaseModel):
-    """日志上传请求模型"""
+    """日志上传请求模型（兼容两种格式）"""
     botnet_type: str = Field(..., description="僵尸网络类型，如：asruex, mozi, moobot等")
-    logs: List[str] = Field(..., description="日志行列表，每行格式：timestamp,ip,event_type,extras...")
+    logs: Optional[List[str]] = Field(None, description="日志行列表（旧格式）")
+    ip_data: Optional[List[IPDataItem]] = Field(None, description="IP数据列表（新格式）")
     source_ip: Optional[str] = Field(None, description="远端IP（可选）")
     
     @validator('botnet_type')
@@ -124,11 +136,27 @@ class LogUploadRequest(BaseModel):
     
     @validator('logs')
     def validate_logs(cls, v):
-        if not v:
-            raise ValueError('日志列表不能为空')
-        if len(v) > MAX_LOGS_PER_UPLOAD:
-            raise ValueError(f'单次上传日志行数不能超过{MAX_LOGS_PER_UPLOAD}条')
+        if v is not None:
+            if not v:
+                raise ValueError('日志列表不能为空')
+            if len(v) > MAX_LOGS_PER_UPLOAD:
+                raise ValueError(f'单次上传日志行数不能超过{MAX_LOGS_PER_UPLOAD}条')
         return v
+    
+    @validator('ip_data')
+    def validate_ip_data(cls, v):
+        if v is not None:
+            if not v:
+                raise ValueError('IP数据列表不能为空')
+            if len(v) > 1000:
+                raise ValueError('单次上传IP数量不能超过1000个')
+        return v
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        # 确保至少有一种数据格式
+        if not self.logs and not self.ip_data:
+            raise ValueError('必须提供logs或ip_data中的一种')
 
 
 class LogUploadResponse(BaseModel):
@@ -180,42 +208,124 @@ async def upload_logs(
             logger.warning(f"未授权的IP尝试上传: {client_ip}")
             raise HTTPException(status_code=403, detail="IP未授权")
         
-        logger.info(f"收到来自 {client_ip} 的日志上传请求，类型: {request.botnet_type}, 行数: {len(request.logs)}")
+        # 处理IP数据
+        if request.ip_data:
+            # 新格式：结构化IP数据，直接处理入库
+            try:
+                from log_processor.enricher import IPEnricher
+                from log_processor.db_writer import BotnetDBWriter
+                
+                # 获取处理器
+                enricher = IPEnricher()
+                writer = BotnetDBWriter(
+                    request.botnet_type, 
+                    DB_CONFIG, 
+                    batch_size=100,
+                    use_connection_pool=True,
+                    enable_monitoring=True
+                )
+                
+                # 记录批次开始（由 db_writer 输出日志）
+                writer.start_batch(client_ip, len(request.ip_data))
+                
+                # 处理每个IP数据
+                for ip_item in request.ip_data:
+                    try:
+                        # 构造parsed_data格式
+                        parsed_data = {
+                            'ip': ip_item.ip,
+                            'timestamp': datetime.fromisoformat(ip_item.timestamp.replace('Z', '+00:00')),
+                            'event_type': 'remote_upload',
+                            'source': 'remote_uploader',
+                            'date': ip_item.date,
+                            'botnet_type': ip_item.botnet_type
+                        }
+                        
+                        # IP地理位置增强
+                        ip_info = await enricher.enrich(ip_item.ip)
+                        
+                        # 写入数据库（add_node 现在会自动统计）
+                        writer.add_node(parsed_data, ip_info)
+                            
+                    except Exception as e:
+                        logger.error(f"处理IP数据失败 {ip_item.ip}: {e}")
+                
+                # 强制刷新写入器（会输出批量写入日志）
+                await writer.flush(force=True)
+                
+                return LogUploadResponse(
+                    status="success",
+                    message=f"成功处理 {writer.processed_count} 个IP，重复 {writer.duplicate_count} 个，写入 {writer.total_written} 条",
+                    received_count=writer.received_count,
+                    saved_to="database",
+                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                )
+                
+            except Exception as e:
+                logger.error(f"IP数据处理失败: {e}")
+                raise HTTPException(status_code=500, detail=f"IP数据处理失败: {str(e)}")
         
-        # 确定保存路径
-        logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
-        botnet_dir = os.path.join(logs_base_dir, request.botnet_type)
+        elif request.logs:
+            # 旧格式：原始日志行，保存到文件
+            logger.info(f"收到来自 {client_ip} 的日志上传请求，类型: {request.botnet_type}, 行数: {len(request.logs)}")
+            
+            # 确定保存路径
+            logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
+            botnet_dir = os.path.join(logs_base_dir, request.botnet_type)
+            
+            # 创建目录（如果不存在）
+            os.makedirs(botnet_dir, exist_ok=True)
+            
+            # 生成文件名：YYYY-MM-DD.txt
+            today = datetime.now().strftime('%Y-%m-%d')
+            log_file = os.path.join(botnet_dir, f'{today}.txt')
+            
+            # 追加写入日志文件
+            with open(log_file, 'a', encoding='utf-8') as f:
+                for log_line in request.logs:
+                    # 确保每行以换行符结尾
+                    if not log_line.endswith('\n'):
+                        log_line += '\n'
+                    f.write(log_line)
+            
+            logger.info(f"✅ 成功保存 {len(request.logs)} 条日志到 {log_file}")
+            
+            return LogUploadResponse(
+                status="success",
+                message=f"成功接收并保存 {len(request.logs)} 条日志",
+                received_count=len(request.logs),
+                saved_to=log_file,
+                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
         
-        # 创建目录（如果不存在）
-        os.makedirs(botnet_dir, exist_ok=True)
-        
-        # 生成文件名：YYYY-MM-DD.txt
-        today = datetime.now().strftime('%Y-%m-%d')
-        log_file = os.path.join(botnet_dir, f'{today}.txt')
-        
-        # 追加写入日志文件
-        with open(log_file, 'a', encoding='utf-8') as f:
-            for log_line in request.logs:
-                # 确保每行以换行符结尾
-                if not log_line.endswith('\n'):
-                    log_line += '\n'
-                f.write(log_line)
-        
-        logger.info(f"✅ 成功保存 {len(request.logs)} 条日志到 {log_file}")
-        
-        return LogUploadResponse(
-            status="success",
-            message=f"成功接收并保存 {len(request.logs)} 条日志",
-            received_count=len(request.logs),
-            saved_to=log_file,
-            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        )
+        else:
+            raise HTTPException(status_code=400, detail="必须提供logs或ip_data中的一种")
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ 日志上传处理失败: {e}")
         raise HTTPException(status_code=500, detail=f"日志上传失败: {str(e)}")
+
+
+@app.get("/")
+async def root_index():
+    return {
+        "status": "ok",
+        "message": "Botnet API is running",
+        "upload_endpoint": "/api/upload-logs",
+        "docs": "/docs"
+    }
+
+
+@app.post("/")
+async def root_upload_proxy(
+    request: LogUploadRequest,
+    client_request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    # 代理到正式上传接口，保持相同的认证与逻辑
+    return await upload_logs(request, client_request, x_api_key)
 
 
 @app.get("/api/upload-status")
