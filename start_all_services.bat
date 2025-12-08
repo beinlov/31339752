@@ -1,61 +1,73 @@
 @echo off
-chcp 65001 >nul
+REM ============================================================
+REM Botnet Monitoring System - Start All Services
+REM ============================================================
+
+chcp 65001 >nul 2>&1
+
+echo.
 echo ============================================================
-echo   僵尸网络监控系统 - 全服务启动脚本
+echo   Starting All Services...
 echo ============================================================
 echo.
-echo 本脚本将启动以下服务：
-echo   1. FastAPI 后端服务 (端口 8000)
-echo   2. 日志处理器
-echo   3. 统计数据聚合器 (每30分钟)
+echo This script will start:
+echo   1. FastAPI Backend Service (Port 8000)
+echo   2. Log Processor
+echo   3. Statistics Aggregator (every 30min)
+echo   4. Frontend Dev Server (Vite)
 echo.
-echo 按任意键开始启动，或按 Ctrl+C 取消...
+echo Press any key to continue, or Ctrl+C to cancel...
 pause >nul
 echo.
 
-REM 获取脚本所在目录
+REM Get script directory
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
 echo ============================================================
-echo [1/3] 启动 FastAPI 后端服务...
+echo [1/3] Starting FastAPI Backend...
 echo ============================================================
-start "后端服务" cmd /k "cd /d %ROOT_DIR%backend && python main.py"
+start "Backend Service" cmd /k "chcp 65001 >nul 2>&1 && cd /d %ROOT_DIR%backend && python main.py"
 timeout /t 3 /nobreak >nul
 
 echo.
 echo ============================================================
-echo [2/3] 启动日志处理器...
+echo [2/3] Starting Log Processor...
 echo ============================================================
-start "日志处理器" cmd /k "cd /d %ROOT_DIR%backend\log_processor && python main.py"
+start "Log Processor" cmd /k "chcp 65001 >nul 2>&1 && cd /d %ROOT_DIR%backend\log_processor && python main.py"
 timeout /t 3 /nobreak >nul
 
 echo.
 echo ============================================================
-echo [3/3] 启动统计数据聚合器...
+echo [3/4] Starting Statistics Aggregator...
 echo ============================================================
-start "统计聚合器" cmd /k "cd /d %ROOT_DIR%backend\stats_aggregator && python aggregator.py daemon 5"
+start "Stats Aggregator" cmd /k "chcp 65001 >nul 2>&1 && cd /d %ROOT_DIR%backend\stats_aggregator && python aggregator.py daemon 30"
 timeout /t 2 /nobreak >nul
 
 echo.
 echo ============================================================
-echo 所有服务已启动！
+echo [4/4] Starting Frontend Dev Server...
+echo ============================================================
+start "Frontend Dev Server" cmd /k "chcp 65001 >nul 2>&1 && cd /d %ROOT_DIR%fronted && npm run dev"
+timeout /t 3 /nobreak >nul
+
+echo.
+echo ============================================================
+echo All Services Started Successfully!
 echo ============================================================
 echo.
-echo 服务列表：
-echo   • 后端服务:     http://localhost:8000
-echo   • API文档:      http://localhost:8000/docs
-echo   • 日志处理器:   实时监控 backend/logs/ 目录
-echo   • 统计聚合器:   每30分钟聚合一次数据
+echo Services:
+echo   - Frontend:         http://localhost:5173  (Vite Dev Server)
+echo   - Backend Service:  http://localhost:8000
+echo   - API Docs:         http://localhost:8000/docs
+echo   - Log Processor:    Monitoring backend/logs/ directory
+echo   - Stats Aggregator: Aggregating data every 30 minutes
 echo.
-echo 日志文件位置：
-echo   • 后端:         backend/main.log
-echo   • 日志处理器:   backend/log_processor.log
-echo   • 统计聚合器:   backend/stats_aggregator.log
+echo Log Files:
+echo   - Backend:          backend/main.log
+echo   - Log Processor:    backend/log_processor.log
+echo   - Stats Aggregator: backend/stats_aggregator.log
 echo.
-echo 如需停止服务，请关闭对应的命令行窗口
+echo To stop services, close the corresponding command windows
 echo.
 pause
-
-
-
