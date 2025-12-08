@@ -32,7 +32,7 @@ class StatsAggregator:
     """统计数据聚合器"""
     
     # 支持的僵尸网络类型
-    BOTNET_TYPES = ['ramnit']
+    BOTNET_TYPES = ['asruex', 'andromeda', 'mozi', 'leethozer', 'ramnit', 'moobot']
     
     def __init__(self, db_config):
         """

@@ -117,8 +117,11 @@ class BotnetLogHandler(FileSystemEventHandler):
             # 更新当前僵尸网络的状态
             all_states[self.botnet_type] = self.file_positions
             
-            # 保存
-            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            # 保存 - 确保父目录存在
+            state_dir = os.path.dirname(os.path.abspath(self.state_file))
+            if state_dir and not os.path.exists(state_dir):
+                os.makedirs(state_dir, exist_ok=True)
+            
             with open(self.state_file, 'w') as f:
                 json.dump(all_states, f, indent=2)
                 

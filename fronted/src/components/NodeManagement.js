@@ -498,7 +498,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 获取完整的图表统计数据
   const fetchChartStats = async () => {
     try {
-      const endpoint = `/api/node-stats/${networkType}`;
+      const endpoint = `http://localhost:8000/api/node-stats/${networkType}`;
       console.log(`获取图表统计数据: ${endpoint}`);
 
       const response = await fetch(endpoint);
@@ -558,7 +558,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         params.append('country', searchTerm);
       }
 
-      const endpoint = `/api/node-details?${params.toString()}`;
+      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
       console.log(`请求接口: ${endpoint}`);
 
       const response = await fetch(endpoint);
@@ -732,7 +732,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
     setIsLoading(true);
     try {
-      const endpoint = '/api/clean-botnet';
+      const endpoint = 'http://localhost:8000/api/clean-botnet';
 
       // 获取选中节点的IP地址
       const selectedIPs = selectedNodes.map(nodeId =>

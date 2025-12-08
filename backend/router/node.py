@@ -217,9 +217,17 @@ async def get_node_stats(botnet_type: str):
                 SUM(infected_num) as count
             FROM {china_table}
             GROUP BY province
+            ORDER BY count DESC
         """)
         china_stats = cursor.fetchall()
         china_total = int(sum(row['count'] for row in china_stats))
+        
+        # 构建省份分布
+        province_distribution = {}
+        for row in china_stats:
+            province = row['province']
+            if province:
+                province_distribution[province] = int(row['count'])
         
         # 从全球表获取国家分布
         cursor.execute(f"""
@@ -263,6 +271,7 @@ async def get_node_stats(botnet_type: str):
                 "active_nodes": total_nodes,  # 聚合表中的数据默认为活跃
                 "inactive_nodes": 0,           # 聚合表中没有非活跃节点统计
                 "country_distribution": country_distribution,
+                "province_distribution": province_distribution,  # 添加省份分布数据
                 "status_distribution": {
                     "active": total_nodes,
                     "inactive": 0

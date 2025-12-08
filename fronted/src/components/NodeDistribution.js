@@ -26,9 +26,12 @@ class NodeDistribution extends PureComponent {
     loading: true,
     error: null,
     mapType: 'world', // 默认显示世界地图
-    totalNodes: 0,
-    activeNodes: 0,
+    globalTotalNodes: 0,
+    globalActiveNodes: 0,
+    chinaTotalNodes: 0,
+    chinaActiveNodes: 0,
     countryDistribution: {},
+    provinceDistribution: {},  // 添加省份分布
     statsByCountry: {},
     zoomLevel: 1,
     displayMode: 'all', // 'all', 'active', 'inactive'
@@ -107,9 +110,9 @@ class NodeDistribution extends PureComponent {
       this.chart = echarts.init(this.chartRef.current, null, { 
         renderer: 'webgl',
         useDirtyRect: false,
-        progressive: 500,  // 减少每帧渲染数量
-        progressiveThreshold: 1000, // 降低渐进式渲染阈值
-        largeThreshold: 1000, // 降低大数据模式阈值
+        progressive: 1000,  // 增加每帧渲染数量以支持更多节点
+        progressiveThreshold: 5000, // 提高渐进式渲染阈值
+        largeThreshold: 2000, // 提高大数据模式阈值
         devicePixelRatio: 1 // 固定像素比
       });
       
@@ -210,7 +213,7 @@ class NodeDistribution extends PureComponent {
       this.setState({ loading: true });
       
       // 首先获取统计数据
-      const statsResponse = await request(`/api/node-stats/${this.props.networkType}`);
+      const statsResponse = await request(`http://localhost:8000/api/node-stats/${this.props.networkType}`);
       if (!statsResponse || !statsResponse.data) {
         throw new Error('获取统计数据失败');
       }
@@ -222,26 +225,34 @@ class NodeDistribution extends PureComponent {
         page_size: 100000 // 使用较大的页面大小以获取足够的数据点
       });
       
-      const response = await request(`/api/node-details?${params.toString()}`);
+      const response = await request(`http://localhost:8000/api/node-details?${params.toString()}`);
       if (!response || !response.data || !response.data.nodes) {
         throw new Error('获取节点数据失败');
       }
       
       // 处理统计数据
       const stats = statsResponse.data;
-      const totalNodes = stats.total_nodes;
-      const activeNodes = stats.active_nodes;
+      const globalTotalNodes = stats.total_nodes;
+      const globalActiveNodes = stats.active_nodes;
       const countryDistribution = {};
       const statsByCountry = {};
+      const provinceDistribution = stats.province_distribution || {}; // 获取省份分布数据
       
       // 处理国家分布数据
-      Object.entries(stats.country_distribution).forEach(([country, data]) => {
-        countryDistribution[country] = data.total;
+      // 后端返回的格式是 {country: count}，不是嵌套对象
+      Object.entries(stats.country_distribution).forEach(([country, count]) => {
+        // 如果count是数字，直接使用；如果是对象（旧格式），则提取total
+        const nodeCount = typeof count === 'number' ? count : (count.total || 0);
+        countryDistribution[country] = nodeCount;
         statsByCountry[country] = {
-          active: data.active,
-          inactive: data.total - data.active
+          active: typeof count === 'number' ? nodeCount : (count.active || 0),
+          inactive: typeof count === 'number' ? 0 : (nodeCount - (count.active || 0))
         };
       });
+      
+      // 计算中国节点数
+      const chinaTotalNodes = countryDistribution['中国'] || 0;
+      const chinaActiveNodes = statsByCountry['中国']?.active || 0;
       
       // 处理节点数据
       const processedData = response.data.nodes.map(node => ({
@@ -250,14 +261,17 @@ class NodeDistribution extends PureComponent {
         latitude: parseFloat(node.latitude) || 0
       }));
       
-      console.log(`NodeDistribution: 获取到 ${totalNodes} 条节点数据，活跃节点: ${activeNodes}`);
+      console.log(`NodeDistribution: 全球节点 ${globalTotalNodes}，中国节点 ${chinaTotalNodes}`);
       
       this.setState({ 
         nodeData: processedData,
-        totalNodes,
-        activeNodes,
+        globalTotalNodes,
+        globalActiveNodes,
+        chinaTotalNodes,
+        chinaActiveNodes,
         countryDistribution,
-        statsByCountry
+        statsByCountry,
+        provinceDistribution  // 保存省份分布数据
       }, () => {
         this.prepareNodeData();
         this.updateChart();
@@ -419,19 +433,42 @@ class NodeDistribution extends PureComponent {
           value: this.state.countryDistribution[country]
         }));
       } else if (mapType === 'china') {
-        const provinceDistribution = {};
-        this.state.nodeData.filter(node => node.country === '中国').forEach(node => {
-          if (node.province) {
-            if (!provinceDistribution[node.province]) {
-              provinceDistribution[node.province] = 0;
-            }
-            provinceDistribution[node.province]++;
+        // 使用后端返回的省份分布数据，而不是从 nodeData 中计算
+        // 需要将省份名称转换为地图JSON中的格式（添加后缀）
+        mapData = Object.keys(this.state.provinceDistribution).map(province => {
+          // 为省份名称添加适当的后缀以匹配地图JSON
+          let mapName = province;
+          
+          // 直辖市
+          if (['北京', '天津', '上海', '重庆'].includes(province)) {
+            mapName = province; // 直辖市不需要后缀
           }
+          // 自治区
+          else if (province === '内蒙古') {
+            mapName = '内蒙古自治区';
+          } else if (province === '广西') {
+            mapName = '广西壮族自治区';
+          } else if (province === '西藏') {
+            mapName = '西藏自治区';
+          } else if (province === '宁夏') {
+            mapName = '宁夏回族自治区';
+          } else if (province === '新疆') {
+            mapName = '新疆维吾尔自治区';
+          }
+          // 特别行政区
+          else if (['香港', '澳门'].includes(province)) {
+            mapName = province + '特别行政区';
+          }
+          // 其他省份添加"省"后缀
+          else {
+            mapName = province + '省';
+          }
+          
+          return {
+            name: mapName,
+            value: this.state.provinceDistribution[province]
+          };
         });
-        mapData = Object.keys(provinceDistribution).map(province => ({
-          name: province,
-          value: provinceDistribution[province]
-        }));
       }
     } catch (error) {
       console.error('处理地图数据失败:', error);
@@ -442,7 +479,8 @@ class NodeDistribution extends PureComponent {
     let activeNodesData = [];
     let inactiveNodesData = [];
     
-    const maxPointsPerType = 5000; // 每种类型最多显示5000个点
+    // 移除节点数量限制，渲染所有节点
+    const maxPointsPerType = Infinity; // 不限制节点数量
 
     if (displayMode === 'all' || displayMode === 'active') {
       activeNodesData = this.sampleData(this.allNodesData.active, maxPointsPerType);
@@ -465,11 +503,11 @@ class NodeDistribution extends PureComponent {
     const option = {
       backgroundColor: '#061633',
       animation: false,
-      progressive: 500,
-      progressiveThreshold: 1000,
+      progressive: 2000,
+      progressiveThreshold: 10000,
       title: {
         text: `${this.props.networkType.toUpperCase()} 僵尸网络节点分布`,
-        subtext: `总节点数: ${this.state.totalNodes} | 活跃节点: ${this.state.activeNodes} | 当前视图: ${mapType === 'world' ? '全球' : '中国'}`,
+        subtext: `总节点数: ${mapType === 'world' ? this.state.globalTotalNodes : this.state.chinaTotalNodes} | 活跃节点: ${mapType === 'world' ? this.state.globalActiveNodes : this.state.chinaActiveNodes} | 当前视图: ${mapType === 'world' ? '全球' : '中国'}`,
         left: 'center',
         top: 10,
         textStyle: {
@@ -598,9 +636,9 @@ class NodeDistribution extends PureComponent {
             color: '#ffeb3b'
           },
           large: true,
-          largeThreshold: 1000,
-          progressive: 500,
-          progressiveThreshold: 1000,
+          largeThreshold: 2000,
+          progressive: 1000,
+          progressiveThreshold: 5000,
           animation: false,
           blendMode: 'source-over',
           silent: true, // 禁用交互
@@ -618,9 +656,9 @@ class NodeDistribution extends PureComponent {
             color: '#ff5252'
           },
           large: true,
-          largeThreshold: 1000,
-          progressive: 500,
-          progressiveThreshold: 1000,
+          largeThreshold: 2000,
+          progressive: 1000,
+          progressiveThreshold: 5000,
           animation: false,
           blendMode: 'source-over',
           silent: true, // 禁用交互
@@ -648,11 +686,15 @@ class NodeDistribution extends PureComponent {
   };
 
   renderStats = () => {
-    const { countryDistribution, renderedActiveNodes, renderedInactiveNodes, totalNodes, activeNodes } = this.state;
+    const { countryDistribution, renderedActiveNodes, renderedInactiveNodes, mapType, globalTotalNodes, globalActiveNodes, chinaTotalNodes, chinaActiveNodes } = this.state;
     // 按节点数量排序
     const sortedCountries = Object.keys(countryDistribution).sort(
       (a, b) => countryDistribution[b] - countryDistribution[a]
     ).slice(0, 10);
+
+    // 根据地图类型选择显示的数据
+    const totalNodes = mapType === 'world' ? globalTotalNodes : chinaTotalNodes;
+    const activeNodes = mapType === 'world' ? globalActiveNodes : chinaActiveNodes;
 
     return (
       <div style={{
@@ -698,26 +740,17 @@ class NodeDistribution extends PureComponent {
   };
 
   renderProvinceStats = () => {
-    const { nodeData, renderedActiveNodes, renderedInactiveNodes, totalNodes, activeNodes } = this.state;
+    const { provinceDistribution, renderedActiveNodes, renderedInactiveNodes, mapType, globalTotalNodes, globalActiveNodes, chinaTotalNodes, chinaActiveNodes } = this.state;
     
-    // 只筛选中国节点
-    const chinaNodes = nodeData.filter(node => node.country === '中国');
-    
-    // 统计省份分布
-    const provinceDistribution = {};
-    chinaNodes.forEach(node => {
-      if (node.province) {
-        if (!provinceDistribution[node.province]) {
-          provinceDistribution[node.province] = 0;
-        }
-        provinceDistribution[node.province]++;
-      }
-    });
-    
+    // 使用后端返回的省份分布数据，而不是从 nodeData 计算
     // 按节点数量排序
     const sortedProvinces = Object.keys(provinceDistribution).sort(
       (a, b) => provinceDistribution[b] - provinceDistribution[a]
     ).slice(0, 10);
+    
+    // 根据地图类型选择显示的数据
+    const totalNodes = mapType === 'world' ? globalTotalNodes : chinaTotalNodes;
+    const activeNodes = mapType === 'world' ? globalActiveNodes : chinaActiveNodes;
     
     return (
       <div style={{

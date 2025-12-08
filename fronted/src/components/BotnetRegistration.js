@@ -270,22 +270,65 @@ const BotnetRegistration = () => {
       // 自动生成table_name
       const table_name = `china_botnet_${formData.name.toLowerCase()}`;
       
-      const response = await axios.post('/api/botnet-types', {
+      // 获取token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('请先登录');
+      }
+      
+      console.log('发送请求，token:', token ? '存在' : '不存在');
+      console.log('请求数据:', { ...formData, table_name });
+      
+      const response = await axios.post('http://localhost:8000/api/botnet-types', {
         ...formData,
-        table_name
+        table_name,
+        clean_methods: ["clear", "suppress"]  // 默认清理方法
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
+      console.log('响应:', response.data);
+      
       if (response.data.status === 'success') {
-        setSuccess('僵尸网络类型添加成功！');
+        setSuccess('僵尸网络类型添加成功！相关数据表已自动创建。');
         // 清空表单
         setFormData({
           name: '',
           display_name: '',
           description: ''
         });
+        
+        // 3秒后刷新页面或跳转
+        setTimeout(() => {
+          setSuccess('');
+        }, 3000);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || '添加失败，请稍后重试');
+      console.error('添加失败:', err);
+      console.error('错误响应:', err.response?.data);
+      
+      let errorMsg = '添加失败，请稍后重试';
+      
+      if (err.response?.status === 401) {
+        errorMsg = '认证失败，请重新登录';
+        // 清除过期的token
+        localStorage.removeItem('token');
+        // 3秒后跳转到登录页
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      } else if (err.response?.status === 403) {
+        errorMsg = '权限不足，需要管理员权限';
+      } else if (err.response?.data?.detail) {
+        errorMsg = err.response.data.detail;
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
+      setError(errorMsg);
     } finally {
       setIsSubmitting(false);
     }

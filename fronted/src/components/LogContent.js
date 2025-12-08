@@ -330,7 +330,7 @@ const LogContent = ({ networkType }) => {
     setIsLoading(true);
     try {
       // 使用统一的日志接口
-      const response = await fetch('/api/user-events');
+      const response = await fetch('http://localhost:8000/api/user-events');
       if (!response.ok) {
         throw new Error('Failed to fetch logs');
       }
