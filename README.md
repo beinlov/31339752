@@ -24,3 +24,8 @@ backend/config_docker.py
 ### 代码编写规范
 1.ai生成的文件如果觉得有必要留存，请把md文件放进backend/debugging,把测试脚本放进test文件夹
 2.把自己进行的改动放到根目录下的change.md，最好自己写
+
+### Github使用规范
+按照CodeGuide.md中的流程进行代码提交和协作。
+详细流程请参考CodeGuide.md文件。
+
