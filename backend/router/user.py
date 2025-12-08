@@ -9,18 +9,14 @@ from datetime import datetime, timedelta
 import bcrypt
 import logging
 import hashlib
-from config import DB_CONFIG
+from config import DB_CONFIG, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth_middleware import require_admin
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# JWT配置
-SECRET_KEY = "your-secret-key-here"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # 数据模型
 class User(BaseModel):
@@ -214,7 +210,7 @@ async def get_users():
             conn.close()
 
 @router.post("/users")
-async def create_user(user: UserCreate):
+async def create_user(user: UserCreate, current_user: dict = Depends(require_admin)):
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -248,7 +244,7 @@ async def create_user(user: UserCreate):
             conn.close()
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: int, user: UserUpdate):
+async def update_user(user_id: int, user: UserUpdate, current_user: dict = Depends(require_admin)):
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -293,7 +289,7 @@ async def update_user(user_id: int, user: UserUpdate):
             conn.close()
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: int):
+async def delete_user(user_id: int, current_user: dict = Depends(require_admin)):
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -335,16 +331,11 @@ async def get_user_statistics():
         cursor.execute("SELECT role, COUNT(*) FROM users GROUP BY role")
         role_counts = dict(cursor.fetchall())
         
-        # 获取在线用户数
-        cursor.execute("SELECT COUNT(*) FROM users WHERE status = '在线'")
-        online_users = cursor.fetchone()[0]
-        
         return {
             "totalUsers": total_users,
             "adminUsers": role_counts.get('管理员', 0),
             "operatorUsers": role_counts.get('操作员', 0),
-            "viewerUsers": role_counts.get('访客', 0),
-            "onlineUsers": online_users
+            "viewerUsers": role_counts.get('访客', 0)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -418,7 +409,6 @@ async def get_user_operations():
                 CASE
                     WHEN command LIKE '%clear%' THEN '清除操作'
                     WHEN command LIKE '%reuse%' THEN '再利用'
-                    WHEN command LIKE '%ddos%' THEN 'DDoS攻击'
                     WHEN command LIKE '%suppress%' THEN '抑制操作'
                     ELSE '其他操作'
                 END as operation_type,

@@ -5,8 +5,12 @@ interval_minutes: 5
 
 # 支持的僵尸网络类型
 botnet_types:
+  - asruex
+  - andromeda
+  - mozi
+  - leethozer
   - ramnit
-
+  - moobot
 
 # 日志配置
 logging:

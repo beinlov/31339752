@@ -162,6 +162,11 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const [internalAntiTrace, setInternalAntiTrace] = useState(false);
   const [externalAntiTrace, setExternalAntiTrace] = useState(false);
+  
+  // 获取用户角色，判断是否有操作权限
+  const userRole = localStorage.getItem('role');
+  const canOperate = userRole === '管理员' || userRole === '操作员';  // 只有管理员和操作员可以操作
+  const isGuest = userRole === '访客';  // 访客只能查看
 
   const handleClean = async () => {
     if (!selectedNetwork) {
@@ -180,10 +185,12 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
       console.log('操作者IP地理位置:', locationInfo);
 
       // 调用清除API
+      const token = localStorage.getItem('token');
       fetch('http://localhost:8000/api/clean-botnet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           botnet_type: selectedNetwork,  // 使用选中的僵尸网络类型
@@ -231,10 +238,12 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
       // 这里可以添加一个弹窗让用户选择要清理的IP范围
       const targetMachines = []; // 这里应该从用户选择中获取
 
+      const token = localStorage.getItem('token');
       fetch('http://localhost:8000/api/clean-botnet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           botnet_type: selectedNetwork,
@@ -273,10 +282,12 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
     try {
       const locationInfo = await getUserLocation();
       
+      const token = localStorage.getItem('token');
       fetch('http://localhost:8000/api/clean-botnet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           botnet_type: selectedNetwork,
@@ -325,7 +336,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
       <Box className={classes.buttonContainer}>
         <Box 
           className={classes.actionButton}
-          onClick={handleSuppress}
+          onClick={canOperate ? handleSuppress : undefined}
+          style={{ 
+            opacity: canOperate ? 1 : 0.5, 
+            cursor: canOperate ? 'pointer' : 'not-allowed',
+            pointerEvents: canOperate ? 'auto' : 'none'
+          }}
+          title={isGuest ? '访客无操作权限' : ''}
         >
           <Typography className={classes.buttonText}>
             抑制阻断
@@ -334,7 +351,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
 
         <Box 
           className={classes.actionButton}
-          onClick={handleRangeClean}
+          onClick={canOperate ? handleRangeClean : undefined}
+          style={{ 
+            opacity: canOperate ? 1 : 0.5, 
+            cursor: canOperate ? 'pointer' : 'not-allowed',
+            pointerEvents: canOperate ? 'auto' : 'none'
+          }}
+          title={isGuest ? '访客无操作权限' : ''}
         >
           <Typography className={classes.buttonText}>
             范围清除
@@ -343,7 +366,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
         
         <Box 
           className={classes.actionButton}
-          onClick={handleClean}
+          onClick={canOperate ? handleClean : undefined}
+          style={{ 
+            opacity: canOperate ? 1 : 0.5, 
+            cursor: canOperate ? 'pointer' : 'not-allowed',
+            pointerEvents: canOperate ? 'auto' : 'none'
+          }}
+          title={isGuest ? '访客无操作权限' : ''}
         >
           <Typography className={classes.buttonText}>
             一键清除
@@ -352,7 +381,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
 
         <Box 
           className={classes.actionButton}
-          onClick={handleReuse}
+          onClick={canOperate ? handleReuse : undefined}
+          style={{ 
+            opacity: canOperate ? 1 : 0.5, 
+            cursor: canOperate ? 'pointer' : 'not-allowed',
+            pointerEvents: canOperate ? 'auto' : 'none'
+          }}
+          title={isGuest ? '访客无操作权限' : ''}
         >
           <Typography className={classes.buttonText}>
             设置

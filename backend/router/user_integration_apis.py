@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# JWT配置
-SECRET_KEY = "your-secret-key-here"
-ALGORITHM = "HS256"
+# 从config导入JWT配置
+try:
+    from config import SECRET_KEY, ALGORITHM
+except ImportError:
+    from config_docker import SECRET_KEY, ALGORITHM
 
 
 # ============================================================

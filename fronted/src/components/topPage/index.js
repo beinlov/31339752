@@ -6,8 +6,9 @@ import {
   Decoration6,
   Loading
 } from '@jiaminghi/data-view-react';
+import { withRouter } from 'dva/router';
 
-import { TopBox, TimeBox } from './style';
+import { TopBox, TimeBox, BackButton } from './style';
 
 class TopPage extends PureComponent {
   constructor(props) {
@@ -66,8 +67,17 @@ class TopPage extends PureComponent {
     }, 1000);
   }
 
+  handleBackClick = () => {
+    // 跳转回后台管理系统
+    this.props.history.push('/admin');
+  }
+
   render() {
     const { title, dateStr, timeStr, weekDay, loading } = this.state;
+    
+    // 获取用户角色
+    const userRole = localStorage.getItem('role');
+    const isAdmin = userRole === '管理员';
     
     if (loading) {
       return (
@@ -108,6 +118,13 @@ class TopPage extends PureComponent {
               />
             </div>
             <Decoration10 className='top_decoration10 top_decoration10_reverse' />
+            {/* 只有管理员才显示返回按钮 */}
+            {isAdmin && (
+              <BackButton onClick={this.handleBackClick}>
+                <span className='back-icon'>←</span>
+                <span className='back-text'>返回</span>
+              </BackButton>
+            )}
             <TimeBox>
               <h3>{dateStr}</h3>
               <h3>{timeStr} {weekDay}</h3>
@@ -119,4 +136,4 @@ class TopPage extends PureComponent {
   }
 }
 
-export default TopPage;
+export default withRouter(TopPage);

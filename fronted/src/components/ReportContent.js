@@ -262,7 +262,7 @@ const ReportContent = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/anomaly-reports');
+      const response = await fetch('http://localhost:8000/api/anomaly-reports');
       if (!response.ok) {
         throw new Error('Failed to fetch reports');
       }

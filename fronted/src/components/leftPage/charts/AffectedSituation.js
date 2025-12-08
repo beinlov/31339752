@@ -44,35 +44,63 @@ class AffectedSituation extends PureComponent {
   updateChartData = () => {
     const { selectedNetwork, isSwapped, currentMap, provinceData, cityData } = this.props;
 
-    // 如果有当前选中的省份，显示城市数据
-    if (currentMap !== 'china' && cityData) {
-      const currentCityData = cityData[selectedNetwork] || [];
-      const sortedCityData = [...currentCityData]
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 15);
-
-      const total = currentCityData.reduce((sum, item) => sum + (item.amount || 0), 0);
-
-      const cities = sortedCityData.map(item => item.city);
-      const data = sortedCityData.map(item => ({
-        value: item.amount || 0,
-        percentage: ((item.amount || 0) / (total || 1) * 100).toFixed(1)
-      }));
-
-      this.setState({
-        affectedData: {
-          provinces: cities,
-          data,
-          isWorldView: false,
-          isCityView: true
-        }
-      });
-    }
-    // 如果是世界视图，显示国家数据
-    else if (isSwapped) {
+    // 优先判断：如果是全球视图，显示国家数据
+    if (isSwapped) {
       this.fetchCountryData(selectedNetwork);
     }
-    // 默认显示省份数据
+    // 如果有当前选中的省份（非中国地图且非全球视图），显示城市数据
+    // 但香港和澳门只显示整体数据，不显示城市详细数据
+    else if (currentMap !== 'china' && cityData && !isSwapped) {
+      // 香港和澳门特殊处理：只显示整体数据
+      if (currentMap === '香港' || currentMap === '澳门') {
+        // 从provinceData中获取香港/澳门的整体数据
+        if (provinceData) {
+          const networkData = provinceData[selectedNetwork] || [];
+          const currentProvinceData = networkData.find(item => 
+            item.province === currentMap || 
+            item.province === `${currentMap}特别行政区`
+          );
+          
+          if (currentProvinceData) {
+            this.setState({
+              affectedData: {
+                provinces: [currentMap],
+                data: [{
+                  value: currentProvinceData.amount,
+                  percentage: '100.0'
+                }],
+                isWorldView: false,
+                isCityView: false
+              }
+            });
+          }
+        }
+      } else {
+        // 其他省份显示城市详细数据
+        const currentCityData = cityData[selectedNetwork] || [];
+        const sortedCityData = [...currentCityData]
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 15);
+
+        const total = currentCityData.reduce((sum, item) => sum + (item.amount || 0), 0);
+
+        const cities = sortedCityData.map(item => item.city);
+        const data = sortedCityData.map(item => ({
+          value: item.amount || 0,
+          percentage: ((item.amount || 0) / (total || 1) * 100).toFixed(1)
+        }));
+
+        this.setState({
+          affectedData: {
+            provinces: cities,
+            data,
+            isWorldView: false,
+            isCityView: true
+          }
+        });
+      }
+    }
+    // 默认显示省份数据（中国地图）
     else if (provinceData) {
       const networkData = provinceData[selectedNetwork] || [];
       const sortedNetworkData = [...networkData]
@@ -100,13 +128,35 @@ class AffectedSituation extends PureComponent {
 
   fetchCountryData = async (botnetType) => {
     try {
-      const network = botnetType || selectedNetwork;
+      const network = botnetType || this.props.selectedNetwork;
       const url = `http://localhost:8000/api/world-amounts?botnet_type=${network}`;
       const response = await request(url);
+      
       if (response) {
+        // 处理全球国家数据
+        const countryData = response[network] || [];
+        
+        // 按数量降序排列，取前15个
+        const sortedCountryData = [...countryData]
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 15);
+        
+        const total = countryData.reduce((sum, item) => sum + (item.amount || 0), 0);
+        
+        const countries = sortedCountryData.map(item => item.country);
+        const data = sortedCountryData.map(item => ({
+          value: item.amount || 0,
+          percentage: ((item.amount || 0) / (total || 1) * 100).toFixed(1)
+        }));
+        
         this.setState({
-          allCountryData: response
-        }, this.updateChartData);
+          affectedData: {
+            provinces: countries,  // 使用 provinces 字段存储国家名
+            data,
+            isWorldView: true,
+            isCityView: false
+          }
+        });
       }
     } catch (error) {
       console.error('获取国家数据失败:', error);

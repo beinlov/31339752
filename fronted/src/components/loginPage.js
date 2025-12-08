@@ -131,9 +131,9 @@ const LoginPage = ({ history }) => {
 
       // 根据角色重定向到不同页面
       if (role === '管理员') {
-        history.push('/admin');
+        history.push('/admin');  // 管理员跳转到后台管理页面
       } else {
-        history.push('/index');
+        history.push('/index');  // 操作员和访客都跳转到展示平台
       }
     } catch (error) {
       console.error('Login error:', error);

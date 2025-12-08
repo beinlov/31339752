@@ -352,8 +352,7 @@ const UserContent = () => {
     totalUsers: 0,
     adminUsers: 0,
     operatorUsers: 0,
-    viewerUsers: 0,
-    onlineUsers: 0
+    viewerUsers: 0
   });
   const [activityData, setActivityData] = useState({
     dates: [],
@@ -632,8 +631,8 @@ const UserContent = () => {
           itemStyle: {
             color: item.operation_type === '清除操作' ? '#2e7d32' :
                   item.operation_type === '再利用' ? '#1565c0' :
-                  item.operation_type === 'DDoS攻击' ? '#c2185b' :
-                  item.operation_type === '抑制操作' ? '#e65100' :
+                  item.operation_type === '抑制操作' ? '#c2185b' :
+                  item.operation_type === '其他操作' ? '#e65100' :
                   '#6a1b9a'
           }
         })),
@@ -702,9 +701,9 @@ const UserContent = () => {
           background="linear-gradient(135deg, #303f9f 0%, #1a237e 100%)"
         />
         <StatCard
-          title="在线用户"
-          value={stats.onlineUsers}
-          trend={`${((stats.onlineUsers / stats.totalUsers) * 100).toFixed(1)}% 在线率`}
+          title="操作员"
+          value={stats.operatorUsers}
+          trend={`${((stats.operatorUsers / stats.totalUsers) * 100).toFixed(1)}% 占比`}
           background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
         />
         <StatCard
@@ -730,13 +729,13 @@ const UserContent = () => {
           background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
         />
         <StatCard
-          title="DDoS攻击"
-          value={operationStats.operation_types?.find(op => op.operation_type === 'DDoS攻击')?.count || 0}
-          trend="DDoS攻击次数"
+          title="抑制操作"
+          value={operationStats.operation_types?.find(op => op.operation_type === '抑制操作')?.count || 0}
+          trend="僵尸网络抑制次数"
           background="linear-gradient(135deg, #c62828 0%, #b71c1c 100%)"
         />
         <StatCard
-          title="操作僵尸网络"
+          title="已操作的僵尸网络数量"
           value={operationStats.user_operations?.reduce((sum, user) => Math.max(sum, user.botnet_types || 0), 0) || 0}
           trend="不同类型僵尸网络"
           background="linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%)"

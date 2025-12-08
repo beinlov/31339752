@@ -97,6 +97,51 @@ export const TopBox = styled.div`
   } // end top_box
 `;
 
+export const BackButton = styled.button`
+  position: absolute;
+  left: 2%;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(91, 192, 222, 0.2) 0%, rgba(91, 192, 222, 0.1) 100%);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(91, 192, 222, 0.5);
+  box-shadow: 0 0 10px rgba(91, 192, 222, 0.3);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  
+  .back-icon {
+    font-size: 0.9vw;
+    color: ${TitleColor};
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(188, 220, 255, 0.5);
+  }
+  
+  .back-text {
+    font-size: 0.8vw;
+    color: ${TitleColor};
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-shadow: 0 0 5px rgba(188, 220, 255, 0.5);
+  }
+  
+  &:hover {
+    background: linear-gradient(135deg, rgba(91, 192, 222, 0.4) 0%, rgba(91, 192, 222, 0.2) 100%);
+    border-color: rgba(91, 192, 222, 0.8);
+    box-shadow: 0 0 15px rgba(91, 192, 222, 0.5);
+    transform: translateY(-50%) translateX(2px);
+  }
+  
+  &:active {
+    transform: translateY(-50%) translateX(0);
+    box-shadow: 0 0 8px rgba(91, 192, 222, 0.4);
+  }
+`;
+
 export const TimeBox = styled.div`
   position: absolute;
   right: 2%;

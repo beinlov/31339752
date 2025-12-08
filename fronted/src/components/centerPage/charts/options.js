@@ -64,7 +64,7 @@ export const provinceNameMap = {
   '湖北省': '湖北',
   '湖南省': '湖南',
   '广东省': '广东',
-  '广西壮族自治区': '广西',  // 修正：广西壮族自治区
+  '广西壮族自治区': '广西',
   '海南省': '海南',
   '重庆市': '重庆',
   '四川省': '四川',
@@ -75,7 +75,7 @@ export const provinceNameMap = {
   '甘肃省': '甘肃',
   '青海省': '青海',
   '宁夏回族自治区': '宁夏',
-  '新疆维吾尔自治区': '新疆',  // 修正：新疆维吾尔自治区
+  '新疆维吾尔自治区': '新疆',
   '台湾省': '台湾',
   '香港特别行政区': '香港',
   '澳门特别行政区': '澳门',
@@ -180,6 +180,7 @@ const normalizeProvince = (rawName) => {
   // 例如："新疆维吾尔自治区乌鲁木齐市" → "新疆"
   //       "广西壮族自治区南宁市" → "广西"
   //       "河北省石家庄市" → "河北"
+  //       "山西省太原市" → "山西"
   const match = name.match(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区|省|市)/);
   if (match) {
     const index = match.index;
@@ -222,7 +223,6 @@ const convertData = (data) => {
     
     // 跳过"未知"省份（地图上没有这个区域）
     if (!provinceName || provinceName === '未知' || provinceName === '') {
-      console.log(`跳过未知省份，节点数: ${item.amount}`);
       return;
     }
     
@@ -239,21 +239,40 @@ const convertData = (data) => {
       // 2）还不行的话，再做一轮更激进的模糊匹配
       if (!fullName) {
         Object.entries(provinceNameMap).forEach(([full, short]) => {
-          if (short === normalized || full.includes(normalized)) {
+          if (short === normalized || full.includes(normalized) || normalized.includes(short)) {
             fullName = full;
           }
         });
+      }
+      
+      // 3）最后尝试：检查是否包含省份简称（处理"山西"、"陕西"等易混淆的情况）
+      if (!fullName) {
+        // 特殊处理：山西 vs 陕西
+        if (normalized === '山西' || provinceName.includes('山西')) {
+          fullName = '山西省';
+        } else if (normalized === '陕西' || provinceName.includes('陕西')) {
+          fullName = '陕西省';
+        }
       }
     }
     
     if (fullName) {
       provinceDataMap[fullName] = item.amount;
+      console.log(`✓ 匹配成功: "${provinceName}" → "${fullName}" (数量: ${item.amount})`);
     } else {
-      // 调试：输出未匹配的省份名
-      console.warn(`未能匹配省份: "${provinceName}" (标准化后: "${normalizeProvince(provinceName)}")，节点数: ${item.amount}`);
+      // 输出未匹配的省份名用于调试
+      console.warn(`✗ 未能匹配省份: "${provinceName}" (标准化后: "${normalizeProvince(provinceName)}")，节点数: ${item.amount}`);
     }
   });
 
+  // 输出最终的省份数据映射（用于调试）
+  console.log('=== 省份数据映射 ===');
+  Object.entries(provinceDataMap).forEach(([name, value]) => {
+    if (value > 0) {
+      console.log(`${name}: ${value}`);
+    }
+  });
+  
   // 转换为ECharts需要的格式
   return Object.entries(provinceDataMap).map(([name, value]) => ({
     name,
@@ -278,14 +297,64 @@ const convertCityData = (data) => {
   // 找出最大值用于相对比例计算
   const maxValue = data.length > 0 ? Math.max(...data.map(item => item.amount)) : 0;
 
-  return data.map(item => ({
-    name: item.city + '市',  // 添加"市"后缀以匹配地图数据
-    value: item.amount,
-    itemStyle: {
-      areaColor: getProvinceColorByRatio(item.amount, maxValue),
-      borderColor: 'rgba(147, 235, 248, 0.3)'
+  console.log('=== 城市数据转换 ===');
+  const result = data.map(item => {
+    // 处理城市名称，智能添加后缀
+    let cityName = item.city;
+    const originalName = cityName;
+    
+    // 如果城市名称已经包含"市"后缀，直接使用
+    if (cityName.endsWith('市')) {
+      // 已有"市"后缀，直接使用
     }
-  }));
+    // 特殊处理：自治州（如"伊犁哈萨克自治州"）
+    else if (cityName.endsWith('自治州')) {
+      // 已有"自治州"后缀，直接使用
+    }
+    // 特殊处理：地区（如"和田地区"）
+    else if (cityName.endsWith('地区')) {
+      // 已有"地区"后缀，直接使用
+    }
+    // 特殊处理：盟（如"阿拉善盟"）
+    else if (cityName.endsWith('盟')) {
+      // 已有"盟"后缀，直接使用
+    }
+    // 特殊处理：县（某些县级市、台湾的县）
+    else if (cityName.endsWith('县')) {
+      // 已有"县"后缀，直接使用
+    }
+    // 对于以"州"结尾但不是"自治州"的城市（如"忻州"、"朔州"、"广州"等），需要添加"市"
+    else if (cityName.endsWith('州')) {
+      cityName = cityName + '市';
+    }
+    // 特殊处理：台湾地区的特殊名称
+    else if (cityName === '桃园') {
+      // 桃园在地图上是"桃园县"
+      cityName = '桃园县';
+    }
+    else if (['基隆', '新竹', '嘉义', '台南', '台北', '台中', '高雄'].includes(cityName)) {
+      // 台湾的直辖市和省辖市，添加"市"后缀
+      cityName = cityName + '市';
+    }
+    // 默认添加"市"后缀
+    else {
+      cityName = cityName + '市';
+    }
+    
+    console.log(`城市名称转换: "${originalName}" → "${cityName}" (数量: ${item.amount})`);
+    
+    return {
+      name: cityName,
+      value: item.amount,
+      itemStyle: {
+        areaColor: getProvinceColorByRatio(item.amount, maxValue),
+        borderColor: 'rgba(147, 235, 248, 0.3)'
+      }
+    };
+  });
+  
+  console.log('城市数据转换完成，共', result.length, '个城市');
+  return result;
 };
 
 export const mapOptions = (params, currentMap, isLeftPage = false) => {
@@ -359,12 +428,36 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
     tooltip: {
       trigger: 'item',
       formatter: params => {
-        const value = params.value || (params.data && params.data.value);
-        if (value !== undefined) {
-          return `${params.name.replace(/(市|州|地区)$/, '')}<br/>感染节点数量：${value}`;
+        // 尝试多种方式获取value值
+        let value = params.value;
+        
+        // 如果params.value是数组，取第三个元素（ECharts地图有时会返回[lng, lat, value]格式）
+        if (Array.isArray(value)) {
+          value = value[2] !== undefined ? value[2] : value[0];
         }
-        return params.name;
-      }
+        
+        // 如果还是undefined，尝试从data对象获取
+        if (value === undefined && params.data) {
+          value = params.data.value;
+        }
+        
+        // 显示省份/城市名称和感染数量
+        if (value !== undefined && value !== null) {
+          const displayName = params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
+          return `${displayName}<br/>感染节点数量：${value}`;
+        }
+        
+        // 如果没有数据，只显示名称
+        return params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
+      },
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      borderColor: '#00d4ff',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff',
+        fontSize: 14
+      },
+      padding: [8, 12]
     },
     visualMap: {
       show: true,
@@ -439,7 +532,33 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
         data: isProvince ?
           (params.cityData ? convertCityData(params.cityData) : []) :
           (params.provinceData ? convertData(params.provinceData) : []),
-        nameProperty: 'name'
+        nameProperty: 'name',
+        tooltip: {
+          show: true,
+          formatter: (params) => {
+            // 获取value值
+            let value = params.value;
+            
+            // 如果params.value是数组，取第三个元素
+            if (Array.isArray(value)) {
+              value = value[2] !== undefined ? value[2] : value[0];
+            }
+            
+            // 如果还是undefined，尝试从data对象获取
+            if (value === undefined && params.data) {
+              value = params.data.value;
+            }
+            
+            // 显示省份/城市名称和感染数量
+            if (value !== undefined && value !== null) {
+              const displayName = params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
+              return `${displayName}<br/>感染节点数量：${value}`;
+            }
+            
+            // 如果没有数据，只显示名称
+            return params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
+          }
+        }
       },
       {
         name: '清除路线',

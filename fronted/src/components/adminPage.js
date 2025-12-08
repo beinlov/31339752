@@ -269,7 +269,7 @@ const AdminPage = ({ history }) => {
 
   const fetchNetworkTypes = async () => {
     try {
-      const response = await axios.get('/api/botnet-types');
+      const response = await axios.get('http://localhost:8000/api/botnet-types');
       if (response.data.status === 'success') {
         setNetworkTypes(response.data.data);
       }
