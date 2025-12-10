@@ -17,6 +17,7 @@ from router.node import router as node_router
 from router.botnet import router as botnet_router
 from router.amount import router as amount_router
 from api_ip_upload import router as ip_upload_router
+from router.server import router as server_router
 
 import logging
 import re
@@ -86,6 +87,9 @@ app.include_router(amount_router, prefix="/api", tags=["amount"])
 
 # 包含IP上传路由（用于远端上传器）
 app.include_router(ip_upload_router, tags=["ip-upload"])
+
+# 包含服务器管理路由
+app.include_router(server_router, prefix="/api/server", tags=["server-management"])
 
 
 # 数据模型
