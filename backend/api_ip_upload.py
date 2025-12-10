@@ -3,7 +3,7 @@
 专门用于接收远端上传器发送的结构化IP数据
 """
 from fastapi import APIRouter, HTTPException, Request, Header
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict
 import logging
 from datetime import datetime
@@ -30,7 +30,8 @@ class IPDataItem(BaseModel):
     botnet_type: str = Field(..., description="僵尸网络类型")
     timestamp: str = Field(..., description="时间戳")
     
-    @validator('ip')
+    @field_validator('ip')
+    @classmethod
     def validate_ip(cls, v):
         import re
         pattern = r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
@@ -44,13 +45,15 @@ class IPUploadRequest(BaseModel):
     ip_data: List[IPDataItem] = Field(..., description="IP数据列表")
     source_ip: Optional[str] = Field(None, description="远端服务器IP")
     
-    @validator('botnet_type')
+    @field_validator('botnet_type')
+    @classmethod
     def validate_botnet_type(cls, v):
         if v not in ALLOWED_BOTNET_TYPES:
             raise ValueError(f'僵尸网络类型必须是以下之一: {", ".join(ALLOWED_BOTNET_TYPES)}')
         return v
     
-    @validator('ip_data')
+    @field_validator('ip_data')
+    @classmethod
     def validate_ip_data(cls, v):
         if not v:
             raise ValueError('IP数据列表不能为空')
@@ -102,9 +105,6 @@ async def upload_ip_data(
         
         logger.info(f"[{request.botnet_type}] 收到来自 {client_ip} 的IP数据上传，数量: {len(request.ip_data)}")
         
-        # 获取日志处理器
-        processor = get_processor()
-        
         # 转换数据格式
         ip_data_list = []
         for ip_item in request.ip_data:
@@ -115,10 +115,28 @@ async def upload_ip_data(
                 'botnet_type': ip_item.botnet_type
             })
         
-        # 后台异步处理数据，不阻塞API响应
-        asyncio.create_task(processor.process_api_data(request.botnet_type, ip_data_list))
+        # 使用后台线程处理数据，避免阻塞事件循环
+        # 注意：不在这里调用 get_processor()，因为它可能触发耗时的初始化
+        import concurrent.futures
+        import threading
         
-        # 立即返回响应（处理在后台进行）
+        def background_process():
+            """在后台线程中处理数据"""
+            try:
+                processor = get_processor()
+                # 在后台线程中运行异步任务
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(processor.process_api_data(request.botnet_type, ip_data_list))
+                loop.close()
+            except Exception as e:
+                logger.error(f"后台处理失败: {e}", exc_info=True)
+        
+        # 启动后台线程
+        thread = threading.Thread(target=background_process, daemon=True)
+        thread.start()
+        
+        # 立即返回响应（处理在后台线程中进行）
         return IPUploadResponse(
             status="success",
             message=f"已接收 {len(request.ip_data)} 个IP，正在后台处理",

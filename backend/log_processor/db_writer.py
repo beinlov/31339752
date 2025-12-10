@@ -363,38 +363,88 @@ class BotnetDBWriter:
                     conn.close()
                 
     async def update_statistics(self):
-        """更新统计表"""
+        """更新统计表（带重试机制）"""
         if not self.china_stats and not self.global_stats:
             return
-            
-        try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
-            
-            # 更新中国统计表
-            if self.china_stats:
-                await self._update_china_stats(cursor)
+        
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            conn = None
+            try:
+                if self.use_connection_pool:
+                    conn = self.connection_pool.get_connection()
+                else:
+                    conn = pymysql.connect(**self.db_config)
+                cursor = conn.cursor()
                 
-            # 更新全球统计表
-            if self.global_stats:
-                await self._update_global_stats(cursor)
+                # 更新中国统计表
+                if self.china_stats:
+                    await self._update_china_stats(cursor)
+                    
+                # 更新全球统计表
+                if self.global_stats:
+                    await self._update_global_stats(cursor)
+                    
+                conn.commit()
+                logger.info(f"[{self.botnet_type}] Statistics updated")
                 
-            conn.commit()
-            logger.info(f"[{self.botnet_type}] Statistics updated")
-            
-            # 清空统计缓冲
-            self.china_stats.clear()
-            self.global_stats.clear()
-            
-        except Exception as e:
-            logger.error(f"[{self.botnet_type}] Error updating statistics: {e}")
-            if 'conn' in locals():
-                conn.rollback()
-        finally:
-            if 'cursor' in locals():
-                cursor.close()
-            if 'conn' in locals():
-                conn.close()
+                # 清空统计缓冲
+                self.china_stats.clear()
+                self.global_stats.clear()
+                break
+                
+            except pymysql.err.OperationalError as e:
+                error_code = e.args[0] if e.args else 0
+                if error_code in (2006, 2013) and attempt < max_retries - 1:
+                    logger.warning(
+                        f"[{self.botnet_type}] MySQL connection error in update_statistics "
+                        f"(attempt {attempt + 1}/{max_retries}): {e}. Retrying..."
+                    )
+                    if conn:
+                        try:
+                            if self.use_connection_pool:
+                                self.connection_pool.return_connection(conn)
+                            else:
+                                conn.close()
+                        except:
+                            pass
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    logger.error(f"[{self.botnet_type}] Error updating statistics: {e}")
+                    if conn:
+                        try:
+                            conn.rollback()
+                        except:
+                            pass
+                    break
+                    
+            except Exception as e:
+                logger.error(f"[{self.botnet_type}] Error updating statistics: {e}")
+                if conn:
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                break
+                
+            finally:
+                if 'cursor' in locals():
+                    try:
+                        cursor.close()
+                    except:
+                        pass
+                if conn:
+                    try:
+                        if self.use_connection_pool:
+                            self.connection_pool.return_connection(conn)
+                        else:
+                            conn.close()
+                    except:
+                        pass
                 
     async def _ensure_tables_exist(self, cursor):
         """确保数据表存在并升级表结构"""

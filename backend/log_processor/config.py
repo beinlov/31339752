@@ -13,7 +13,13 @@ DB_CONFIG = {
     "user": "root",
     "password": "123456",
     "database": "botnet",
-    "charset": "utf8mb4"
+    "charset": "utf8mb4",
+    # 连接超时设置（秒）- 防止"MySQL server has gone away"错误
+    "connect_timeout": 30,  # 建立连接超时
+    "read_timeout": 60,     # 读取超时
+    "write_timeout": 60,    # 写入超时
+    # 自动重连和保持连接活跃
+    "autocommit": True,     # 自动提交（对于连接池更安全）
 }
 
 # 僵尸网络配置
