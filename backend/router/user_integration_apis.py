@@ -5,7 +5,7 @@
 用于集成到大型平台系统
 """
 from fastapi import APIRouter, HTTPException, Depends, status, Request
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import pymysql
 from typing import Optional, List
 import jwt
@@ -106,7 +106,8 @@ class SSOLoginRequest(BaseModel):
     password: str = Field(..., description="用户密码", min_length=1)
     role: Optional[str] = Field(default=None, description="用户角色：管理员、操作员、访客（可选）")
     
-    @validator('role')
+    @field_validator('role')
+    @classmethod
     def validate_role(cls, v):
         if v is None:
             return v
@@ -129,7 +130,8 @@ class UserSyncRequest(BaseModel):
     password: str = Field(..., description="用户密码（明文）", min_length=1)
     role: Optional[str] = Field(default=None, description="用户角色（可选）")
     
-    @validator('role')
+    @field_validator('role')
+    @classmethod
     def validate_role(cls, v):
         if v is None:
             return v
