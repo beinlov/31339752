@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import List, Dict, Union, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import random
 from datetime import datetime, timedelta
 import asyncio
@@ -128,13 +128,15 @@ class LogUploadRequest(BaseModel):
     ip_data: Optional[List[IPDataItem]] = Field(None, description="IP数据列表（新格式）")
     source_ip: Optional[str] = Field(None, description="远端IP（可选）")
     
-    @validator('botnet_type')
+    @field_validator('botnet_type')
+    @classmethod
     def validate_botnet_type(cls, v):
         if v not in ALLOWED_BOTNET_TYPES:
             raise ValueError(f'僵尸网络类型必须是以下之一: {", ".join(ALLOWED_BOTNET_TYPES)}')
         return v
     
-    @validator('logs')
+    @field_validator('logs')
+    @classmethod
     def validate_logs(cls, v):
         if v is not None:
             if not v:
@@ -143,7 +145,8 @@ class LogUploadRequest(BaseModel):
                 raise ValueError(f'单次上传日志行数不能超过{MAX_LOGS_PER_UPLOAD}条')
         return v
     
-    @validator('ip_data')
+    @field_validator('ip_data')
+    @classmethod
     def validate_ip_data(cls, v):
         if v is not None:
             if not v:
@@ -624,7 +627,8 @@ async def get_anomaly_reports():
 class IPLocationRequest(BaseModel):
     ip: str
 
-    @validator('ip')
+    @field_validator('ip')
+    @classmethod
     def validate_ip(cls, v):
         pattern = r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
         if not re.match(pattern, v):

@@ -57,7 +57,7 @@ echo All Services Started Successfully!
 echo ============================================================
 echo.
 echo Services:
-echo   - Frontend:         http://localhost:5173  (Vite Dev Server)
+echo   - Frontend:         http://localhost:9000  (Vite Dev Server)
 echo   - Backend Service:  http://localhost:8000
 echo   - API Docs:         http://localhost:8000/docs
 echo   - Log Processor:    Monitoring backend/logs/ directory
