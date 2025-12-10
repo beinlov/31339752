@@ -9,6 +9,7 @@ import ExtensionContent from './ExtensionContent';
 import AsruexLogViewer from './AsruexLogViewer';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
+import ServerManagement from './ServerManagement';
 import axios from 'axios';
 
 // 样式定义
@@ -315,11 +316,18 @@ const AdminPage = ({ history }) => {
         icon: '&#xe7fb;' // lock icon
       },
       {
-        id: 'extension',
-        name: '扩展与应用',
-        component: ExtensionContent,
-        icon: '&#xe89e;' // application icon
+        id: 'server',
+        name: '服务器管理',
+        component: ServerManagement,
+        icon: '💻' // 服务器图标 (电脑符号)
       },
+      // 扩展与应用菜单项已隐藏
+      // {
+      //   id: 'extension',
+      //   name: '扩展与应用',
+      //   component: ExtensionContent,
+      //   icon: '&#xe89e;' // application icon
+      // },
     ];
 
     // 根据网络类型添加特定的菜单项
@@ -514,7 +522,11 @@ const AdminPage = ({ history }) => {
                 active={activeMenu === item.id}
                 onClick={() => handleMenuClick(item.id)}
               >
-                <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                {item.icon.startsWith('&') ? (
+                  <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                ) : (
+                  <span className="icon">{item.icon}</span>
+                )}
                 <span>{item.name}</span>
               </SidebarItem>
               {index === 0 && <SidebarDivider />}
