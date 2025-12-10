@@ -1,7 +1,7 @@
 import httpx
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import List, Dict, Optional
@@ -38,7 +38,8 @@ class CleanBotnetRequest(BaseModel):
     location: str
     operator_ip: str = None
 
-    @validator('target_machines')
+    @field_validator('target_machines')
+    @classmethod
     def validate_target_machines(cls, v):
         pattern = r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
         for ip in v:
@@ -46,14 +47,16 @@ class CleanBotnetRequest(BaseModel):
                 raise ValueError(f'Invalid IP address format: {ip}')
         return v
 
-    @validator('botnet_type')
+    @field_validator('botnet_type')
+    @classmethod
     def validate_botnet_type(cls, v):
         valid_botnets = ["asruex", "andromeda", "mozi", "leethozer", "ramnit", "autoupdate"]
         if v not in valid_botnets:
             raise ValueError(f'Invalid botnet type: {v}')
         return v
 
-    @validator('clean_method')
+    @field_validator('clean_method')
+    @classmethod
     def validate_clean_method(cls, v):
         valid_methods = ["monitor", "clear", "suppress", "reuse", "ddos"]
         if v not in valid_methods:

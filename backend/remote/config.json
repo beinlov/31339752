@@ -1,0 +1,33 @@
+{
+  "server": {
+    "api_endpoint": "https://periotic-multifaced-christena.ngrok-free.dev",
+    "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+    "local_server_host": "your-local-server-ip",
+    "local_server_port": 8000
+  },
+  "botnet": {
+    "botnet_type": "ramnit",
+    "log_dir": "/home/ubuntu",
+    "log_file_pattern": "ramnit_{date}.log"
+  },
+  "processing": {
+    "upload_interval": 300,
+    "batch_size": 500,
+    "max_retries": 3,
+    "retry_delay": 30,
+    "read_chunk_size": 8192
+  },
+  "server_check": {
+    "check_interval": 60,
+    "check_timeout": 10,
+    "max_check_retries": 5
+  },
+  "files": {
+    "state_file": "/tmp/uploader_state.json",
+    "duplicate_cache_file": "/tmp/ip_cache.json",
+    "offset_state_file": "/tmp/file_offsets.json"
+  },
+  "cache": {
+    "expire_days": 7
+  }
+}
