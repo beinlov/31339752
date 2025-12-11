@@ -39,13 +39,19 @@ const ServerManagement = () => {
     setLoading(true);
     try {
       const response = await getServers(page, pageSize);
-      if (response.status === 'success') {
-        setServers(response.data.servers);
+      console.log('API Response:', response); // 添加日志以便调试
+      if (response && response.status === 'success') {
+        // 按ID升序排序服务器数据
+        const sortedServers = (response.data.servers || []).sort((a, b) => a.id - b.id);
+        setServers(sortedServers);
         setPagination({
           current: page,
           pageSize: pageSize,
-          total: response.data.pagination.total_count
+          total: response.data.pagination?.total_count || 0
         });
+      } else {
+        console.error('Invalid response format:', response);
+        message.error('获取服务器列表失败: 响应格式错误');
       }
     } catch (error) {
       console.error('Error fetching servers:', error);
@@ -63,9 +69,9 @@ const ServerManagement = () => {
   const columns = [
     {
       title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
+      key: 'index',
       width: 60,
+      render: (_, __, index) => index + 1 + (pagination.current - 1) * pagination.pageSize,
     },
     {
       title: '地理位置',
@@ -166,9 +172,13 @@ const ServerManagement = () => {
   const handleDelete = async (id) => {
     try {
       const response = await deleteServer(id);
-      if (response.status === 'success') {
+      console.log('Delete Response:', response); // 添加日志以便调试
+      if (response && response.status === 'success') {
         message.success('服务器删除成功');
         fetchServers(pagination.current, pagination.pageSize);
+      } else {
+        console.error('Invalid delete response:', response);
+        message.error('删除服务器失败: 响应格式错误');
       }
     } catch (error) {
       console.error('Error deleting server:', error);
@@ -183,18 +193,28 @@ const ServerManagement = () => {
         if (editingServer) {
           // 更新服务器
           const response = await updateServer(editingServer.id, values);
-          if (response.status === 'success') {
+          console.log('Update Response:', response); // 添加日志以便调试
+          if (response && response.status === 'success') {
             message.success('服务器更新成功');
+            setModalVisible(false);
+            fetchServers(pagination.current, pagination.pageSize);
+          } else {
+            console.error('Invalid update response:', response);
+            message.error('更新服务器失败: 响应格式错误');
           }
         } else {
           // 添加服务器
           const response = await createServer(values);
-          if (response.status === 'success') {
+          console.log('Create Response:', response); // 添加日志以便调试
+          if (response && response.status === 'success') {
             message.success('服务器添加成功');
+            setModalVisible(false);
+            fetchServers(pagination.current, pagination.pageSize);
+          } else {
+            console.error('Invalid create response:', response);
+            message.error('添加服务器失败: 响应格式错误');
           }
         }
-        setModalVisible(false);
-        fetchServers(pagination.current, pagination.pageSize);
       } catch (error) {
         console.error('Error saving server:', error);
         message.error(editingServer ? '更新服务器失败' : '添加服务器失败');
@@ -231,7 +251,7 @@ const ServerManagement = () => {
 
       <Modal
         title={editingServer ? '编辑服务器' : '添加服务器'}
-        visible={modalVisible}
+        open={modalVisible}
         onOk={handleModalOk}
         onCancel={handleModalCancel}
         destroyOnClose
