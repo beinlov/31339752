@@ -445,3 +445,217 @@ async def get_botnet_nodes(
             cursor.close()
         if conn:
             conn.close()
+
+@router.get("/all-botnet-node-stats", response_model=List[BotnetNodeStats])
+async def get_all_botnet_node_stats():
+    """
+    获取所有僵尸网络的节点统计信息（一键返回）
+    
+    返回:
+    - 所有僵尸网络的节点统计数据列表
+    - 包括节点数量和地理分布
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        # 获取所有僵尸网络类型
+        cursor.execute("SELECT name, display_name FROM botnet_types ORDER BY created_at")
+        botnets = cursor.fetchall()
+        
+        result = []
+        
+        for botnet in botnets:
+            botnet_name = botnet['name']
+            china_nodes = 0
+            global_nodes = 0
+            province_distribution = {}
+            country_distribution = {}
+            
+            # 获取中国节点分布
+            china_table = f"china_botnet_{botnet_name}"
+            try:
+                cursor.execute(f"SELECT province, SUM(infected_num) as count FROM {china_table} GROUP BY province")
+                provinces = cursor.fetchall()
+                
+                for province in provinces:
+                    if province['province'] and province['count']:
+                        province_distribution[province['province']] = int(province['count'])
+                        china_nodes += int(province['count'])
+            except Exception as e:
+                logger.warning(f"Error getting province distribution for {botnet_name}: {e}")
+            
+            # 获取全球节点分布
+            global_table = f"global_botnet_{botnet_name}"
+            try:
+                cursor.execute(f"SELECT country, SUM(infected_num) as count FROM {global_table} GROUP BY country")
+                countries = cursor.fetchall()
+                
+                for country in countries:
+                    if country['country'] and country['count']:
+                        country_distribution[country['country']] = int(country['count'])
+                        if country['country'] != '中国':  # 避免重复计算中国节点
+                            global_nodes += int(country['count'])
+            except Exception as e:
+                logger.warning(f"Error getting country distribution for {botnet_name}: {e}")
+            
+            result.append({
+                "name": botnet_name,
+                "display_name": botnet['display_name'],
+                "total_nodes": china_nodes + global_nodes,
+                "china_nodes": china_nodes,
+                "global_nodes": global_nodes,
+                "province_distribution": province_distribution,
+                "country_distribution": country_distribution
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting all botnet node stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+@router.get("/all-botnet-nodes")
+async def get_all_botnet_nodes(
+    page: int = 1,
+    page_size: int = 50,
+    status: Optional[str] = None,
+    country: Optional[str] = None,
+    province: Optional[str] = None,
+    city: Optional[str] = None
+):
+    """
+    获取所有僵尸网络的节点详细信息（一键返回）
+    
+    参数:
+    - page: 页码，默认1
+    - page_size: 每页条数，默认50
+    - status: 可选的状态过滤（active/inactive）
+    - country: 可选的国家过滤
+    - province: 可选的省份过滤
+    - city: 可选的城市过滤
+    
+    返回:
+    - 所有僵尸网络的节点详细信息列表
+    - 分页信息
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        # 获取所有僵尸网络类型
+        cursor.execute("SELECT name, display_name FROM botnet_types ORDER BY created_at")
+        botnets = cursor.fetchall()
+        
+        all_nodes = []
+        total_count = 0
+        
+        for botnet in botnets:
+            botnet_name = botnet['name']
+            node_table = f"botnet_nodes_{botnet_name}"
+            
+            # 检查节点表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM information_schema.tables 
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], node_table))
+            
+            if cursor.fetchone()['count'] == 0:
+                logger.warning(f"Node table {node_table} not found, skipping")
+                continue
+            
+            # 构建查询条件
+            conditions = []
+            params = []
+            
+            if status:
+                conditions.append("status = %s")
+                params.append(status)
+            
+            if country:
+                conditions.append("country = %s")
+                params.append(country)
+            
+            if province:
+                conditions.append("province = %s")
+                params.append(province)
+            
+            if city:
+                conditions.append("city = %s")
+                params.append(city)
+            
+            # 构建基本查询
+            base_query = f"""
+                SELECT 
+                    '{botnet_name}' as botnet_name,
+                    '{botnet['display_name']}' as botnet_display_name,
+                    id, ip, longitude, latitude, country, province, city, continent, isp, asn, status,
+                    active_time, created_time, updated_at
+                FROM {node_table}
+            """
+            
+            if conditions:
+                base_query += " WHERE " + " AND ".join(conditions)
+            
+            try:
+                # 获取该僵尸网络的节点数量
+                count_query = f"SELECT COUNT(*) as count FROM ({base_query}) as t"
+                cursor.execute(count_query, tuple(params))
+                botnet_count = cursor.fetchone()['count']
+                total_count += botnet_count
+                
+                # 获取该僵尸网络的节点数据
+                cursor.execute(base_query, tuple(params))
+                nodes = list(cursor.fetchall())
+                
+                # 处理日期格式
+                for node in nodes:
+                    for key in ['active_time', 'created_time', 'updated_at']:
+                        if node.get(key) and isinstance(node[key], datetime):
+                            node[key] = node[key].strftime('%Y-%m-%d %H:%M:%S')
+                
+                all_nodes.extend(nodes)
+                
+            except Exception as e:
+                logger.warning(f"Error getting nodes for {botnet_name}: {e}")
+                continue
+        
+        # 按更新时间排序
+        all_nodes.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+        
+        # 分页处理
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_nodes = all_nodes[start_idx:end_idx]
+        
+        return {
+            "status": "success",
+            "data": {
+                "nodes": paginated_nodes,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": (total_count + page_size - 1) // page_size,
+                    "total_count": total_count
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting all botnet nodes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
