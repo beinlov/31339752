@@ -114,7 +114,7 @@ class StatsAggregator:
                         WHEN city IS NOT NULL THEN TRIM(TRAILING '市' FROM city)
                         ELSE '未知'
                     END as municipality,
-                    COUNT(*) as infected_num,
+                    COUNT(DISTINCT ip) as infected_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
@@ -156,7 +156,7 @@ class StatsAggregator:
                         WHEN country IS NOT NULL THEN country
                         ELSE '未知'
                     END as country,
-                    COUNT(*) as infected_num,
+                    COUNT(DISTINCT ip) as infected_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}

@@ -607,12 +607,14 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       setTotalCount(result.data.pagination.total_count);
 
       // 更新统计信息
+      // 注意：这里使用chartStats中的总数（来自聚合表），而不是分页数据的total_count
+      // 因为分页数据可能不完整，聚合表的数据与节点分布界面一致
       const statistics = result.data.statistics;
       setNodeStats({
-        // 使用后端分页提供的总数，避免重复统计
-        totalNodes: result.data.pagination.total_count,
-        onlineNodes: statistics.active_nodes,
-        offlineNodes: statistics.inactive_nodes,
+        // 使用chartStats的数据（来自聚合表），与节点分布界面保持一致
+        totalNodes: chartStats.totalNodes || result.data.pagination.total_count,
+        onlineNodes: chartStats.activeNodes || statistics.active_nodes,
+        offlineNodes: chartStats.inactiveNodes || statistics.inactive_nodes,
         countryDistribution: statistics.country_distribution,
         selectedCount: selectedNodes.length
       });

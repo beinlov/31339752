@@ -92,15 +92,15 @@ def load_config(config_file: str = None) -> Dict:
             print(f"Error loading config file: {e}")
             print("Using default configuration")
     else:
-        # 🔧 修复问题1：Create template config file
+        #  修复问题1：Create template config file
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, indent=2, ensure_ascii=False)
             print("="*60)
             print(f"✓ 已创建配置文件模板: {config_file}")
-            print("⚠️  请先编辑配置文件，然后重新运行程序！")
+            print("  请先编辑配置文件，然后重新运行程序！")
             print("="*60)
-            # 🔧 关键修复：提示后退出，避免用默认配置运行
+            #  关键修复：提示后退出，避免用默认配置运行
             sys.exit(0)
         except Exception as e:
             print(f"Error creating config file: {e}")
@@ -203,7 +203,7 @@ class LogReader:
         """获取可用的日志文件列表（支持缓存，减少文件系统扫描）"""
         current_time = time.time()
         
-        # 🔧 优化：使用缓存，减少文件系统扫描
+        #  优化：使用缓存，减少文件系统扫描
         if use_cache and self.file_cache is not None:
             if current_time - self.file_cache_time < FILE_SCAN_CACHE_TTL:
                 logger.debug(f"使用文件列表缓存（{len(self.file_cache)} 个文件）")
@@ -294,7 +294,7 @@ class LogReader:
         
         file_size = file_path.stat().st_size
         
-        # 🔧 修复问题2：offset > file_size 说明文件被截断，重置为0
+        #  修复问题2：offset > file_size 说明文件被截断，重置为0
         if start_offset > file_size:
             logger.warning(f"文件 {file_path} 被截断 (offset={start_offset} > size={file_size})，重置偏移量为0")
             start_offset = 0
@@ -312,13 +312,13 @@ class LogReader:
                 # 定位到上次读取的位置
                 await f.seek(start_offset)
                 
-                # 🔧 改进：恢复上次的不完整行
+                #  改进：恢复上次的不完整行
                 buffer = self.incomplete_lines.get(file_path_str, "")
                 if buffer:
                     logger.debug(f"恢复不完整行: {buffer[:50]}...")
                 
                 while True:
-                    # 🔧 新增：支持限制读取行数
+                    #  新增：支持限制读取行数
                     if max_lines and processed_lines >= max_lines:
                         logger.debug(f"达到最大行数限制 {max_lines}，停止读取")
                         break
@@ -330,7 +330,7 @@ class LogReader:
                     buffer += chunk
                     lines = buffer.split('\n')
                     
-                    # 🔧 改进：更安全的不完整行处理
+                    #  改进：更安全的不完整行处理
                     if len(chunk) < READ_CHUNK_SIZE:  # 已到文件末尾
                         # 如果最后一行没有换行符，保存到缓存
                         if not chunk.endswith('\n') and lines[-1]:
@@ -354,9 +354,9 @@ class LogReader:
                             await processor.process_line(line.strip())
                             processed_lines += 1
                             
-                            # 🔧 新增：达到行数限制就停止
+                            #  新增：达到行数限制就停止
                             if max_lines and processed_lines >= max_lines:
-                                # 🔧 修复问题4：将未处理的行回填到buffer
+                                #  修复问题4：将未处理的行回填到buffer
                                 unprocessed_lines = lines[line_index + 1:]
                                 if unprocessed_lines:
                                     # 把未处理的完整行拼回 buffer
@@ -374,7 +374,7 @@ class LogReader:
                 # 更新当前偏移量（减去未处理的buffer长度）
                 current_offset = await f.tell() - len(buffer.encode('utf-8'))
                 
-                # 🔧 修复问题3：如果文件真正结束且有不完整行，尝试处理它
+                #  修复问题3：如果文件真正结束且有不完整行，尝试处理它
                 if not max_lines:  # 只有在读到文件末尾时（而非因为max_lines限制）
                     if file_path_str in self.incomplete_lines:
                         final_line = self.incomplete_lines[file_path_str]
@@ -395,7 +395,7 @@ class LogReader:
         
         except Exception as e:
             logger.error(f"读取日志文件失败 {file_path}: {e}")
-            # 🔧 改进：出错时也保存进度
+            #  改进：出错时也保存进度
             if processed_lines > 0:
                 logger.warning(f"已处理 {processed_lines} 行，保存当前进度")
                 return processed_lines, current_offset
@@ -413,7 +413,7 @@ class IPProcessor:
         self.cache_file = cache_file
         self.pending_queue_file = pending_queue_file
         
-        # 🔧 改进：全局去重，而不是仅按日期去重
+        #  改进：全局去重，而不是仅按日期去重
         self.global_ip_cache: Set[str] = set()  # 全局IP缓存，用于去重
         self.ip_last_seen: Dict[str, str] = {}  # 记录IP最后出现的日期
         
@@ -434,7 +434,7 @@ class IPProcessor:
                 with open(self.cache_file, 'r') as f:
                     cache_data = json.load(f)
                 
-                # 🔧 改进：加载用于全局去重
+                #  改进：加载用于全局去重
                 self.global_ip_cache = set()
                 self.ip_last_seen = {}
                 
@@ -532,7 +532,7 @@ class IPProcessor:
             ip = ip_data['ip']
             log_date = ip_data['date']
             
-            # 🔧 改进：全局去重策略
+            #  改进：全局去重策略
             # 如果IP已经在全局缓存中，检查是否需要更新
             if ip in self.global_ip_cache:
                 last_date = self.ip_last_seen.get(ip)
@@ -971,7 +971,7 @@ class AsyncLogProcessor:
             logger.info(f"处理日志文件: {file_path} (日期: {date.strftime('%Y-%m-%d')})")
             
             try:
-                # 🔧 改进：流式处理 - 分块读取和上传
+                #  改进：流式处理 - 分块读取和上传
                 await self.process_file_streaming(
                     file_path, file_path_str, start_offset, file_offsets
                 )
@@ -980,14 +980,14 @@ class AsyncLogProcessor:
                 logger.error(f"❌ 处理文件失败 {file_path}: {e}", exc_info=True)
                 # 保存当前进度
                 self.ip_processor.save_pending_queue()
-                # 🔧 改进：不要因为一个文件失败就退出，继续处理下一个
+                #  改进：不要因为一个文件失败就退出，继续处理下一个
                 logger.warning(f"跳过失败文件 {file_path}，继续处理下一个文件")
                 continue
     
     async def process_file_streaming(self, file_path: Path, file_path_str: str, 
                                      start_offset: int, file_offsets: Dict[str, int]):
         """流式处理单个文件 - 边读边传（真正的分块处理）"""
-        chunk_lines = 5000  # 🔧 改进：每次只读取5000行，真正分块
+        chunk_lines = 5000  #  改进：每次只读取5000行，真正分块
         total_processed = 0
         current_offset = start_offset
         last_saved_offset = start_offset
@@ -1000,7 +1000,7 @@ class AsyncLogProcessor:
                 logger.warning(f"内存压力过大，暂停读取并强制上传")
                 await self.force_upload_all()
             
-            # 🔧 关键改进：每次只读取指定行数，真正分块
+            #  关键改进：每次只读取指定行数，真正分块
             batch_processed, new_offset = await self.log_reader.read_log_file(
                 file_path, self.ip_processor, current_offset, max_lines=chunk_lines
             )
@@ -1015,14 +1015,14 @@ class AsyncLogProcessor:
             
             logger.info(f"批次处理: {batch_processed} 行, 累计: {total_processed} 行, 当前偏移量: {current_offset}")
             
-            # 🔧 关键改进：频繁上传，避免积压
+            #  关键改进：频繁上传，避免积压
             await self.upload_if_needed_aggressive()
             
             # 定期持久化待上传队列
             if self.ip_processor.should_persist():
                 self.ip_processor.save_pending_queue()
             
-            # 🔧 关键改进：只在上传成功后才保存偏移量
+            #  关键改进：只在上传成功后才保存偏移量
             stats = self.ip_processor.get_stats()
             if stats['new_ips_pending'] < MIN_UPLOAD_BATCH:
                 # 待上传数据少，说明刚上传过，可以安全保存偏移量
@@ -1033,7 +1033,7 @@ class AsyncLogProcessor:
                 last_saved_offset = current_offset
                 logger.debug(f"安全保存偏移量: {current_offset}")
         
-        # 🔧 新增：文件处理完成后，上传剩余数据
+        #  新增：文件处理完成后，上传剩余数据
         if total_processed > 0:
             logger.info(f"文件处理完成: {file_path}, 总共处理 {total_processed} 行")
             
@@ -1068,7 +1068,7 @@ class AsyncLogProcessor:
         ip_stats = self.ip_processor.get_stats()
         pending_ips = ip_stats['new_ips_pending']
         
-        # 🔧 改进：降低上传阈值，更频繁上传
+        #  改进：降低上传阈值，更频繁上传
         if pending_ips >= FORCE_UPLOAD_THRESHOLD:
             logger.info(f"达到强制上传阈值({pending_ips} >= {FORCE_UPLOAD_THRESHOLD})")
             await self.upload_new_ips()
@@ -1116,14 +1116,14 @@ class AsyncLogProcessor:
             
             logger.info(f"准备上传 {len(new_ips)} 个新IP")
             
-            # 🔧 关键改进：上传前先持久化到磁盘
+            #  关键改进：上传前先持久化到磁盘
             self.ip_processor.save_pending_queue()
             
             # 上传IP数据
             success = await self.uploader.upload_ips(new_ips)
             
             if success:
-                # 🔧 只在上传成功后才清理
+                #  只在上传成功后才清理
                 self.ip_processor.clear_uploaded_ips(len(new_ips))
                 self.state['last_upload_time'] = datetime.now().isoformat()
                 
@@ -1134,7 +1134,7 @@ class AsyncLogProcessor:
                 
                 logger.info(f"✓ 上传成功，累计上传: {self.uploader.upload_count} 个IP")
             else:
-                # 🔧 改进：上传失败，数据已持久化，不会丢失
+                #  改进：上传失败，数据已持久化，不会丢失
                 logger.error(f"✗ 上传失败，数据已持久化到 {PENDING_QUEUE_FILE}，下次重启会恢复")
                 # 不清理数据，保留在内存和磁盘中
         finally:
@@ -1153,7 +1153,7 @@ class AsyncLogProcessor:
         if is_online:
             # 服务器在线，重置离线计数器
             if self.server_offline_count > 0:
-                logger.info(f"🎉 服务器已恢复在线（之前离线 {self.server_offline_count} 次）")
+                logger.info(f" 服务器已恢复在线（之前离线 {self.server_offline_count} 次）")
             self.server_offline_count = 0
             return True
         
@@ -1244,11 +1244,11 @@ class AsyncLogProcessor:
         ip_stats = self.ip_processor.get_stats()
         
         logger.info("=" * 80)
-        logger.info("📊 处理统计报告")
+        logger.info(" 处理统计报告")
         logger.info("=" * 80)
         
         # 基础统计
-        logger.info("📝 数据处理:")
+        logger.info(" 数据处理:")
         logger.info(f"  ├─ 已处理行数: {ip_stats['processed_lines']:,}")
         logger.info(f"  ├─ 日内重复IP: {ip_stats['duplicate_count']:,}")
         logger.info(f"  ├─ 全局重复IP: {ip_stats.get('global_duplicate_count', 0):,}")
@@ -1256,7 +1256,7 @@ class AsyncLogProcessor:
         
         # 上传统计
         logger.info("")
-        logger.info("📤 上传状态:")
+        logger.info(" 上传状态:")
         logger.info(f"  ├─ 待上传IP数: {ip_stats['new_ips_pending']:,}")
         logger.info(f"  ├─ 已缓存IP数: {ip_stats['cached_ips']:,}")
         logger.info(f"  ├─ 累计上传数: {self.uploader.upload_count:,}")
@@ -1267,12 +1267,12 @@ class AsyncLogProcessor:
             total_duplicates = ip_stats['duplicate_count'] + ip_stats.get('global_duplicate_count', 0)
             dedup_rate = (total_duplicates / ip_stats['processed_lines']) * 100
             logger.info("")
-            logger.info("🎯 去重效率:")
+            logger.info(" 去重效率:")
             logger.info(f"  └─ 去重率: {dedup_rate:.1f}% ({total_duplicates:,} / {ip_stats['processed_lines']:,})")
         
         # 内存和磁盘状态
         logger.info("")
-        logger.info("💾 存储状态:")
+        logger.info(" 存储状态:")
         
         # 持久化队列检查
         if os.path.exists(PENDING_QUEUE_FILE):
@@ -1296,9 +1296,9 @@ class AsyncLogProcessor:
         # 内存压力告警
         logger.info("")
         if ip_stats['new_ips_pending'] > FORCE_UPLOAD_THRESHOLD:
-            logger.warning(f"⚠️  内存压力警告: 待上传数据 {ip_stats['new_ips_pending']:,} 超过阈值 {FORCE_UPLOAD_THRESHOLD:,}")
+            logger.warning(f"  内存压力警告: 待上传数据 {ip_stats['new_ips_pending']:,} 超过阈值 {FORCE_UPLOAD_THRESHOLD:,}")
         elif ip_stats['new_ips_pending'] > MIN_UPLOAD_BATCH:
-            logger.info(f"ℹ️  待上传数据: {ip_stats['new_ips_pending']:,} 条 (正常范围)")
+            logger.info(f"ℹ  待上传数据: {ip_stats['new_ips_pending']:,} 条 (正常范围)")
         else:
             logger.info(f"✓  待上传数据: {ip_stats['new_ips_pending']:,} 条 (健康)")
         
