@@ -190,12 +190,13 @@ class IncrementalStatsAggregator:
         
         for province, municipality in affected_locations:
             # 注意：节点表使用 created_time，但统计表使用 created_at
+            # 按IP去重统计节点数量，避免重复计数
             cursor.execute(f"""
                 INSERT INTO {china_table} (province, municipality, infected_num, created_at, updated_at)
                 SELECT 
                     %s as province,
                     %s as municipality,
-                    COUNT(*) as infected_num,
+                    COUNT(DISTINCT ip) as infected_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
@@ -223,11 +224,12 @@ class IncrementalStatsAggregator:
         
         for country in affected_countries:
             # 注意：节点表使用 created_time，但统计表使用 created_at
+            # 按IP去重统计节点数量，避免重复计数
             cursor.execute(f"""
                 INSERT INTO {global_table} (country, infected_num, created_at, updated_at)
                 SELECT 
                     %s as country,
-                    COUNT(*) as infected_num,
+                    COUNT(DISTINCT ip) as infected_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
