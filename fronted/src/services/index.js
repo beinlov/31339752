@@ -26,14 +26,14 @@ export const getRightPageData = async () => {
 // 获取服务器列表
 export const getServers = async (page = 1, pageSize = 10) => {
   return request(`http://localhost:8000/api/server/servers?page=${page}&page_size=${pageSize}`).then(response => {
-    return response.data;
+    return response;
   });
 };
 
 // 获取单个服务器详情
 export const getServerById = async (id) => {
   return request(`http://localhost:8000/api/server/servers/${id}`).then(response => {
-    return response.data;
+    return response;
   });
 };
 
@@ -43,7 +43,7 @@ export const createServer = async (serverData) => {
     method: 'POST',
     data: serverData,
   }).then(response => {
-    return response.data;
+    return response;
   });
 };
 
@@ -53,7 +53,7 @@ export const updateServer = async (id, serverData) => {
     method: 'PUT',
     data: serverData,
   }).then(response => {
-    return response.data;
+    return response;
   });
 };
 
@@ -62,6 +62,6 @@ export const deleteServer = async (id) => {
   return request(`http://localhost:8000/api/server/servers/${id}`, {
     method: 'DELETE',
   }).then(response => {
-    return response.data;
+    return response;
   });
 };
