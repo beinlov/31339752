@@ -13,9 +13,10 @@ from datetime import datetime
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from log_processor.config import (
+from config import (
     BOTNET_CONFIG, DB_CONFIG, DB_BATCH_SIZE, 
-    DB_COMMIT_INTERVAL, POSITION_STATE_FILE
+    DB_COMMIT_INTERVAL, POSITION_STATE_FILE,
+    LOG_PROCESSOR_LOG_FILE
 )
 from log_processor.parser import LogParser
 from log_processor.enricher import IPEnricher
@@ -29,7 +30,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('log_processor.log'),
+        logging.FileHandler(LOG_PROCESSOR_LOG_FILE),
         logging.StreamHandler()
     ]
 )

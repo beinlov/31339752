@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 # 添加父目录到路径以便导入config
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from config import DB_CONFIG
+from config import DB_CONFIG, BOTNET_TYPES, get_enabled_botnet_types
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 class IncrementalStatsAggregator:
     """增量统计数据聚合器"""
     
-    BOTNET_TYPES = ['asruex', 'mozi', 'andromeda', 'moobot', 'ramnit', 'leethozer']
+    # 支持的僵尸网络类型（从统一配置导入）
+    BOTNET_TYPES = BOTNET_TYPES
     
     def __init__(self, db_config):
         self.db_config = db_config
