@@ -14,14 +14,14 @@ from datetime import datetime
 
 # 添加父目录到路径以便导入config
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from config import DB_CONFIG
+from config import DB_CONFIG, BOTNET_TYPES, get_enabled_botnet_types, STATS_AGGREGATOR_LOG_FILE
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), '..', 'stats_aggregator.log')),
+        logging.FileHandler(STATS_AGGREGATOR_LOG_FILE),
         logging.StreamHandler()
     ]
 )
@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 class StatsAggregator:
     """统计数据聚合器"""
     
-    # 支持的僵尸网络类型
-    BOTNET_TYPES = ['asruex', 'andromeda', 'mozi', 'leethozer', 'ramnit', 'moobot']
+    # 支持的僵尸网络类型（从统一配置导入）
+    BOTNET_TYPES = BOTNET_TYPES
     
     def __init__(self, db_config):
         """

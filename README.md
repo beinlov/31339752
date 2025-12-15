@@ -7,10 +7,16 @@
 2. 放置到 `backend/ip_location/` 目录
 3. 用U盘拷
 
-### 需要进行修改的配置文件(修改数据库密码等操作）
-1.backend/config.py 
-2.backend/log_processor/config.py
-3.backend/config_docker.py
+### 配置文件说明（修改数据库密码等操作）
+
+**✅ 配置已统一！现在只需修改一个配置文件！**
+
+- **非Docker环境**: 只需修改 `backend/config.py`
+- **Docker环境**: 只需修改 `backend/config_docker.py` 或使用环境变量
+
+详细配置指南请查看：[CONFIG_GUIDE.md](CONFIG_GUIDE.md)
+
+> ⚠️ 注意：`backend/log_processor/config.py` 已弃用，所有配置已统一到 `backend/config.py`
 
 ### 关于数据库
 详见backend/migrations目录

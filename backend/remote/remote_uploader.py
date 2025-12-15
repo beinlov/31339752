@@ -141,6 +141,7 @@ MAX_SERVER_CHECK_RETRIES = CONFIG["server_check"]["max_check_retries"]
 STATE_FILE = CONFIG["files"]["state_file"]
 DUPLICATE_CACHE_FILE = CONFIG["files"]["duplicate_cache_file"]
 OFFSET_STATE_FILE = CONFIG["files"]["offset_state_file"]
+LOG_FILE = CONFIG["files"]["log_file"]  # 日志文件路径（从配置读取）
 PENDING_QUEUE_FILE = "/tmp/pending_upload_queue.json"  # 待上传数据持久化队列
 
 CACHE_EXPIRE_DAYS = CONFIG["cache"]["expire_days"]
@@ -163,12 +164,17 @@ IP_REGEX = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
 # 日志配置
 # ============================================================
 
+# 确保日志文件目录存在
+log_file_dir = os.path.dirname(LOG_FILE)
+if log_file_dir and not os.path.exists(log_file_dir):
+    os.makedirs(log_file_dir, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/tmp/remote_uploader.log')
+        logging.FileHandler(LOG_FILE)
     ]
 )
 logger = logging.getLogger(__name__)
