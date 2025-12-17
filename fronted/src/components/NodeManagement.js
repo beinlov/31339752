@@ -28,25 +28,28 @@ const TopBar = styled.div`
 const Select = styled.select`
   padding: 12px 16px;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
+  color: #e0e0e0;
   width: 180px;
   appearance: none;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%23333"/></svg>');
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%2364b5f6"/></svg>');
   background-repeat: no-repeat;
   background-position: right 15px center;
   background-size: 12px;
   font-size: 14px;
   transition: all 0.3s ease;
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.2);
 
   &:focus {
-    border-color: #1a237e;
+    border-color: #1a73e8;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.4);
   }
 
   &:disabled {
-    background-color: #f5f5f5;
+    background-color: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     opacity: 0.7;
   }
@@ -54,40 +57,45 @@ const Select = styled.select`
   option {
     padding: 10px;
     font-size: 14px;
+    background: #0d47a1;
+    color: white;
   }
 `;
 
 const SearchInput = styled.input`
   padding: 12px 16px;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
+  color: #e0e0e0;
   width: 250px;
   margin-left: -1.5%;
   transition: all 0.3s ease;
   font-size: 14px;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>');
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2364b5f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>');
   background-repeat: no-repeat;
   background-position: 12px center;
   padding-left: 40px;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.2);
 
   &:focus {
-    border-color: #1a237e;
+    border-color: #1a73e8;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.4);
     width: 280px;
   }
 
   &::placeholder {
-    color: #aaa;
+    color: rgba(255, 255, 255, 0.5);
   }
 `;
 
 const Button = styled.button`
   padding: 12px 18px;
   border-radius: 8px;
-  border: none;
-  background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
-  color: ${props => props.active ? 'white' : '#333'};
+  border: 1px solid ${props => props.active ? 'rgba(100, 181, 246, 0.5)' : 'rgba(100, 181, 246, 0.2)'};
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
   transition: all 0.25s ease;
   display: flex;
@@ -95,21 +103,21 @@ const Button = styled.button`
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  box-shadow: ${props => props.active ? '0 4px 10px rgba(26, 35, 126, 0.2)' : 'none'};
+  box-shadow: ${props => props.active ? '0 0 15px rgba(26, 115, 232, 0.4)' : '0 0 10px rgba(26, 115, 232, 0.1)'};
 
   &:hover {
-    background: ${props => props.active ? '#0d1642' : '#e0e0e0'};
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
+    border-color: rgba(100, 181, 246, 0.6);
   }
 
   &:active {
     transform: translateY(0);
-    box-shadow: none;
   }
 
   &:disabled {
-    background: #cccccc;
+    background: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -129,23 +137,25 @@ const TableContainer = styled.div`
 
 const Table = styled.div`
   width: 100%;
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(26, 115, 232, 0.2);
+  border: 1px solid rgba(100, 181, 246, 0.2);
 `;
 
 const TableHeader = styled.div`
   display: grid;
   grid-template-columns: 60px 180px 160px 1fr 120px;
   padding: 16px;
-  background: #f5f5f5;
-  border-bottom: 2px solid #ddd;
+  background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   font-weight: 600;
-  color: #333;
+  color: #64b5f6;
   position: sticky;
   top: 0;
   z-index: 1;
+  box-shadow: 0 2px 10px rgba(26, 115, 232, 0.2);
 
   > div {
     padding: 0 10px;
@@ -164,15 +174,16 @@ const TableRow = styled.div`
   display: grid;
   grid-template-columns: 60px 180px 160px 1fr 120px;
   padding: 12px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
   opacity: ${props => props.disabled ? 0.5 : 1};
-  background: ${props => props.disabled ? '#f9f9f9' : 'white'};
+  background: ${props => props.disabled ? 'rgba(26, 115, 232, 0.05)' : 'transparent'};
+  color: #e0e0e0;
 
   &:hover {
-    background: ${props => !props.disabled && '#f0f4ff'};
+    background: ${props => !props.disabled && 'rgba(26, 115, 232, 0.15)'};
     transform: ${props => !props.disabled && 'translateY(-1px)'};
-    box-shadow: ${props => !props.disabled && '0 2px 5px rgba(0, 0, 0, 0.05)'};
+    box-shadow: ${props => !props.disabled && '0 2px 8px rgba(26, 115, 232, 0.2)'};
   }
 
   > div {
@@ -848,7 +859,8 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         left: 'center',
         textStyle: {
           fontWeight: 'normal',
-          fontSize: 16
+          fontSize: 16,
+          color: '#ffffff'
         }
       },
       tooltip: {
@@ -863,7 +875,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         right: 10,
         top: 20,
         bottom: 20,
-        data: countryData.map(item => item.name)
+        data: countryData.map(item => item.name),
+        textStyle: {
+          color: '#ffffff'
+        }
       },
       series: [{
         type: 'pie',
@@ -905,7 +920,8 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         left: 'center',
         textStyle: {
           fontWeight: 'normal',
-          fontSize: 16
+          fontSize: 16,
+          color: '#ffffff'
         }
       },
       tooltip: {
@@ -921,14 +937,33 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         containLabel: true
       },
       xAxis: {
-        type: 'value'
+        type: 'value',
+        axisLabel: {
+          color: '#ffffff'
+        },
+        axisLine: {
+          lineStyle: {
+            color: 'rgba(255, 255, 255, 0.3)'
+          }
+        },
+        splitLine: {
+          lineStyle: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          }
+        }
       },
       yAxis: {
         type: 'category',
         data: ['在线', '下线'],
         axisLabel: {
+          color: '#ffffff',
           formatter: function(value) {
             return value === '在线' ? '🟢 在线' : '🔴 下线';
+          }
+        },
+        axisLine: {
+          lineStyle: {
+            color: 'rgba(255, 255, 255, 0.3)'
           }
         }
       },

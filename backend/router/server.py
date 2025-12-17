@@ -22,6 +22,7 @@ class ServerModel(BaseModel):
     domain: str
     status: str
     os: str
+    botnet_name: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -32,6 +33,7 @@ class CreateServerRequest(BaseModel):
     domain: str
     status: str
     os: str
+    botnet_name: Optional[str] = None
 
 # 更新服务器请求模型
 class UpdateServerRequest(BaseModel):
@@ -40,6 +42,7 @@ class UpdateServerRequest(BaseModel):
     domain: Optional[str] = None
     status: Optional[str] = None
     os: Optional[str] = None
+    botnet_name: Optional[str] = None
 
 # 初始化数据库表
 def init_server_table():
@@ -65,6 +68,7 @@ def init_server_table():
                     domain VARCHAR(255) NOT NULL,
                     status VARCHAR(50) NOT NULL,
                     os VARCHAR(100) NOT NULL,
+                    Botnet_Name VARCHAR(255),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 )
@@ -106,12 +110,15 @@ async def get_servers(
         
         servers = list(cursor.fetchall())
         
-        # 处理datetime格式
+        # 处理datetime格式和字段名转换
         for server in servers:
             if isinstance(server['created_at'], datetime):
                 server['created_at'] = server['created_at'].strftime('%Y-%m-%d %H:%M:%S')
             if isinstance(server['updated_at'], datetime):
                 server['updated_at'] = server['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+            # 将Botnet_Name转换为botnet_name以匹配前端
+            if 'Botnet_Name' in server:
+                server['botnet_name'] = server.pop('Botnet_Name')
         
         response_data = {
             "status": "success",
@@ -151,11 +158,14 @@ async def get_server(server_id: int):
         if not server:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
         
-        # 处理datetime格式
+        # 处理datetime格式和字段名转换
         if isinstance(server['created_at'], datetime):
             server['created_at'] = server['created_at'].strftime('%Y-%m-%d %H:%M:%S')
         if isinstance(server['updated_at'], datetime):
             server['updated_at'] = server['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+        # 将Botnet_Name转换为botnet_name以匹配前端
+        if 'Botnet_Name' in server:
+            server['botnet_name'] = server.pop('Botnet_Name')
         
         return {
             "status": "success",
@@ -181,9 +191,9 @@ async def create_server(server: CreateServerRequest):
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO Server_Management (location, ip, domain, status, os)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (server.location, server.ip, server.domain, server.status, server.os))
+            INSERT INTO Server_Management (location, ip, domain, status, os, Botnet_Name)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (server.location, server.ip, server.domain, server.status, server.os, server.botnet_name))
         
         conn.commit()
         server_id = cursor.lastrowid
@@ -240,6 +250,10 @@ async def update_server(server_id: int, server_update: UpdateServerRequest):
         if server_update.os is not None:
             update_fields.append("os = %s")
             params.append(server_update.os)
+            
+        if server_update.botnet_name is not None:
+            update_fields.append("Botnet_Name = %s")
+            params.append(server_update.botnet_name)
         
         if not update_fields:
             return {
