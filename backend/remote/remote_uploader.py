@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 远端日志上传脚本
-部署在远端蜜罐服务器上，异步读取每日日志文件，去重后上传到本地服务器
+部署在远端蜜罐服务器上，异步读取每小时日志文件，上传所有数据到本地服务器
 
 架构设计:
-- LogReader: 异步日志读取器，负责读取每日日志文件
-- IPProcessor: IP处理器，负责解析、去重和缓存IP数据
+- LogReader: 异步日志读取器，负责读取每小时日志文件
+- IPProcessor: IP处理器，负责解析和缓存IP数据（不再去重）
 - RemoteUploader: 上传器，负责将处理后的数据上传到本地服务器
 """
 
@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Set, Tuple
 import logging
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, deque
 
 # ============================================================
 # Configuration Loading
@@ -44,7 +44,7 @@ def load_config(config_file: str = None) -> Dict:
         "botnet": {
             "botnet_type": "ramnit",
             "log_dir": "/home/ubuntu",
-            "log_file_pattern": "ramnit_{date}.log"
+            "log_file_pattern": "ramnit_{datetime}.log"
         },
         "processing": {
             "upload_interval": 300,
@@ -61,7 +61,8 @@ def load_config(config_file: str = None) -> Dict:
         "files": {
             "state_file": "/tmp/uploader_state.json",
             "duplicate_cache_file": "/tmp/ip_cache.json",
-            "offset_state_file": "/tmp/file_offsets.json"
+            "offset_state_file": "/tmp/file_offsets.json",
+            "log_file": "/tmp/remote_uploader.log"
         },
         "cache": {
             "expire_days": 7
@@ -151,11 +152,21 @@ MAX_MEMORY_IPS = 10000  # 内存中最多保留的IP数量
 FORCE_UPLOAD_THRESHOLD = 5000  # 达到此数量强制上传
 MIN_UPLOAD_BATCH = 100  # 最小上传批次
 
+# 上传失败重试配置
+MAX_CONSECUTIVE_UPLOAD_FAILURES = 3  # 连续上传失败次数阈值
+UPLOAD_FAILURE_BACKOFF = 60  # 上传失败后的退避时间（秒）
+
 # 文件扫描缓存配置
 FILE_SCAN_CACHE_TTL = 300  # 文件列表缓存时间（秒），默认5分钟
+FILE_STABILITY_MARGIN = 300  # 文件稳定窗口（秒），只处理修改时间超过此值的文件
+FILE_SIZE_STABLE_CHECK_INTERVAL = 5  # 文件大小稳定性检查间隔（秒）
 
 # 不完整行缓存文件
 INCOMPLETE_LINES_FILE = "/tmp/incomplete_lines.json"  # 保存不完整行的文件
+INCOMPLETE_LINES_MAX_AGE_HOURS = 24  # 不完整行最大保留时间（小时）
+
+# 文件身份识别
+FILE_IDENTITY_CACHE = "/tmp/file_identities.json"  # 文件身份缓存（用于检测文件轮转）
 
 # IP parsing regex
 IP_REGEX = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
@@ -196,18 +207,29 @@ class LogReader:
         self.file_cache_time = 0
         
         # 不完整行缓存
-        self.incomplete_lines = {}  # {file_path: incomplete_line}
+        self.incomplete_lines = {}  # {file_path: {'line': str, 'timestamp': float}}
         self.load_incomplete_lines()
         
-    def get_log_file_path(self, date: datetime) -> Path:
-        """获取指定日期的日志文件路径"""
-        date_str = date.strftime('%Y-%m-%d')
-        filename = self.file_pattern.format(date=date_str)
+        # 文件身份缓存（用于检测文件轮转）
+        self.file_identities = {}  # {file_path: {'inode': int, 'ctime': float, 'size': int}}
+        self.load_file_identities()
+        
+    def get_log_file_path(self, datetime_obj: datetime) -> Path:
+        """获取指定时间的日志文件路径（按小时）"""
+        # 支持两种格式：{date} 和 {datetime}
+        if '{datetime}' in self.file_pattern:
+            datetime_str = datetime_obj.strftime('%Y-%m-%d_%H')
+            filename = self.file_pattern.format(datetime=datetime_str)
+        else:
+            # 兼容旧格式
+            date_str = datetime_obj.strftime('%Y-%m-%d')
+            filename = self.file_pattern.format(date=date_str)
         return self.log_dir / filename
     
-    def get_available_log_files(self, days_back: int = 30, use_cache: bool = True) -> List[Tuple[datetime, Path]]:
-        """获取可用的日志文件列表（支持缓存，减少文件系统扫描）"""
+    async def get_available_log_files(self, hours_back: int = 720, use_cache: bool = True) -> List[Tuple[datetime, Path]]:
+        """获取可用的日志文件列表（按小时，只返回上一小时及更早的文件）"""
         current_time = time.time()
+        now = datetime.now()
         
         #  优化：使用缓存，减少文件系统扫描
         if use_cache and self.file_cache is not None:
@@ -217,42 +239,94 @@ class LogReader:
         
         files = []
         
+        # 计算当前小时（用于过滤正在写入的文件）
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        # 计算最早时间（用于过滤过旧的文件）
+        earliest_time = now - timedelta(hours=hours_back)
+        
         # 扫描目录中所有匹配的日志文件
         if self.log_dir.exists() and self.log_dir.is_dir():
-            # 提取文件模式的前缀和后缀（例如：ramnit_{date}.log -> ramnit_*.log）
-            pattern_parts = self.file_pattern.split('{date}')
-            if len(pattern_parts) == 2:
-                prefix, suffix = pattern_parts
-                glob_pattern = f"{prefix}*{suffix}"
-                
-                # 使用glob查找所有匹配的文件
-                for file_path in self.log_dir.glob(glob_pattern):
-                    if file_path.is_file():
-                        # 尝试从文件名中提取日期
-                        try:
-                            filename = file_path.name
-                            # 移除前缀和后缀，提取日期部分
-                            date_str = filename[len(prefix):-len(suffix)] if suffix else filename[len(prefix):]
-                            
-                            # 尝试解析日期（支持 YYYY-MM-DD 格式）
-                            date = datetime.strptime(date_str, '%Y-%m-%d')
-                            files.append((date, file_path))
-                            logger.debug(f"发现日志文件: {file_path} (日期: {date_str})")
-                        except ValueError:
-                            logger.warning(f"无法从文件名解析日期: {file_path}")
-                            continue
+            # 支持两种模式：{datetime} 和 {date}
+            if '{datetime}' in self.file_pattern:
+                # 按小时的文件模式
+                pattern_parts = self.file_pattern.split('{datetime}')
+                if len(pattern_parts) == 2:
+                    prefix, suffix = pattern_parts
+                    glob_pattern = f"{prefix}*{suffix}"
+                    
+                    # 使用glob查找所有匹配的文件
+                    for file_path in self.log_dir.glob(glob_pattern):
+                        if file_path.is_file():
+                            try:
+                                filename = file_path.name
+                                # 移除前缀和后缀，提取日期时间部分
+                                datetime_str = filename[len(prefix):-len(suffix)] if suffix else filename[len(prefix):]
+                                
+                                # 解析日期时间（格式：YYYY-MM-DD_HH）
+                                file_datetime = datetime.strptime(datetime_str, '%Y-%m-%d_%H')
+                                
+                                # 过滤条件：
+                                # 1. 不早于 earliest_time（过滤过旧文件）
+                                # 2. 早于 current_hour（跳过当前小时正在写入的文件）
+                                if file_datetime >= earliest_time and file_datetime < current_hour:
+                                    # 额外检查：文件修改时间必须稳定（避免延迟写入）
+                                    file_mtime = file_path.stat().st_mtime
+                                    time_since_modified = current_time - file_mtime
+                                    
+                                    if time_since_modified > FILE_STABILITY_MARGIN:
+                                        # 只对最近2小时内的文件做大小稳定性检查（避免扫描过慢）
+                                        # 更早的文件已经足够稳定，不需要额外检查
+                                        hours_old = (current_time - file_mtime) / 3600
+                                        if hours_old < 2:
+                                            # 最近的文件：进一步检查大小是否稳定
+                                            if await self.is_file_size_stable(file_path):
+                                                files.append((file_datetime, file_path))
+                                                logger.debug(f"发现可处理的日志文件: {file_path} (时间: {datetime_str}, 稳定: {time_since_modified:.0f}秒)")
+                                            else:
+                                                logger.debug(f"跳过文件大小不稳定的文件: {file_path}")
+                                        else:
+                                            # 较旧的文件：直接接受（已经足够稳定）
+                                            files.append((file_datetime, file_path))
+                                            logger.debug(f"发现可处理的日志文件: {file_path} (时间: {datetime_str}, 稳定: {time_since_modified:.0f}秒)")
+                                    else:
+                                        logger.debug(f"跳过不稳定文件（最近修改于{time_since_modified:.0f}秒前）: {file_path}")
+                                else:
+                                    logger.debug(f"跳过当前小时文件（正在写入）: {file_path}")
+                            except ValueError:
+                                logger.warning(f"无法从文件名解析日期时间: {file_path}")
+                                continue
+                else:
+                    logger.warning(f"文件模式格式不正确: {self.file_pattern}")
             else:
-                logger.warning(f"文件模式格式不正确: {self.file_pattern}")
+                # 兼容旧的按天模式
+                pattern_parts = self.file_pattern.split('{date}')
+                if len(pattern_parts) == 2:
+                    prefix, suffix = pattern_parts
+                    glob_pattern = f"{prefix}*{suffix}"
+                    
+                    for file_path in self.log_dir.glob(glob_pattern):
+                        if file_path.is_file():
+                            try:
+                                filename = file_path.name
+                                date_str = filename[len(prefix):-len(suffix)] if suffix else filename[len(prefix):]
+                                date = datetime.strptime(date_str, '%Y-%m-%d')
+                                files.append((date, file_path))
+                                logger.debug(f"发现日志文件: {file_path} (日期: {date_str})")
+                            except ValueError:
+                                logger.warning(f"无法从文件名解析日期: {file_path}")
+                                continue
+                else:
+                    logger.warning(f"文件模式格式不正确: {self.file_pattern}")
         else:
             logger.warning(f"日志目录不存在: {self.log_dir}")
         
-        # 按日期排序（从旧到新）
+        # 按日期时间排序（从旧到新）
         sorted_files = sorted(files, key=lambda x: x[0])
         
         # 更新缓存
         self.file_cache = sorted_files
         self.file_cache_time = current_time
-        logger.debug(f"更新文件列表缓存（{len(sorted_files)} 个文件）")
+        logger.info(f"扫描到 {len(sorted_files)} 个可处理的日志文件（排除当前小时）")
         
         return sorted_files
     
@@ -262,6 +336,21 @@ class LogReader:
         self.file_cache_time = 0
         logger.debug("文件列表缓存已失效")
     
+    async def is_file_size_stable(self, file_path: Path) -> bool:
+        """检查文件大小是否稳定（连续两次检查大小不变）"""
+        try:
+            size_1 = file_path.stat().st_size
+            await asyncio.sleep(FILE_SIZE_STABLE_CHECK_INTERVAL)
+            size_2 = file_path.stat().st_size
+            
+            is_stable = (size_1 == size_2)
+            if not is_stable:
+                logger.debug(f"文件大小不稳定: {file_path} ({size_1} -> {size_2})")
+            return is_stable
+        except Exception as e:
+            logger.warning(f"检查文件大小稳定性失败 {file_path}: {e}")
+            return False
+    
     def load_incomplete_lines(self):
         """加载不完整行缓存"""
         try:
@@ -269,6 +358,8 @@ class LogReader:
                 with open(INCOMPLETE_LINES_FILE, 'r') as f:
                     self.incomplete_lines = json.load(f)
                 logger.debug(f"加载不完整行缓存: {len(self.incomplete_lines)} 个文件")
+                # 清理过期的不完整行
+                self.cleanup_old_incomplete_lines()
         except Exception as e:
             logger.warning(f"加载不完整行缓存失败: {e}")
             self.incomplete_lines = {}
@@ -281,6 +372,85 @@ class LogReader:
             logger.debug(f"保存不完整行缓存: {len(self.incomplete_lines)} 个文件")
         except Exception as e:
             logger.error(f"保存不完整行缓存失败: {e}")
+    
+    def cleanup_old_incomplete_lines(self):
+        """清理超过指定时间的不完整行（防止内存泄漏）"""
+        current_time = time.time()
+        to_remove = []
+        
+        for file_path, data in self.incomplete_lines.items():
+            if isinstance(data, dict) and 'timestamp' in data:
+                age_hours = (current_time - data['timestamp']) / 3600
+                if age_hours > INCOMPLETE_LINES_MAX_AGE_HOURS:
+                    to_remove.append(file_path)
+                    logger.debug(f"清理过期不完整行: {file_path} (年龄: {age_hours:.1f}小时)")
+            elif isinstance(data, str):
+                # 兼容旧格式，添加时间戳
+                self.incomplete_lines[file_path] = {
+                    'line': data,
+                    'timestamp': current_time
+                }
+        
+        for fp in to_remove:
+            del self.incomplete_lines[fp]
+        
+        if to_remove:
+            logger.info(f"清理了 {len(to_remove)} 个过期的不完整行缓存")
+    
+    def load_file_identities(self):
+        """加载文件身份缓存"""
+        try:
+            if os.path.exists(FILE_IDENTITY_CACHE):
+                with open(FILE_IDENTITY_CACHE, 'r') as f:
+                    self.file_identities = json.load(f)
+                logger.debug(f"加载文件身份缓存: {len(self.file_identities)} 个文件")
+        except Exception as e:
+            logger.warning(f"加载文件身份缓存失败: {e}")
+            self.file_identities = {}
+    
+    def save_file_identities(self):
+        """保存文件身份缓存"""
+        try:
+            with open(FILE_IDENTITY_CACHE, 'w') as f:
+                json.dump(self.file_identities, f, indent=2)
+            logger.debug(f"保存文件身份缓存: {len(self.file_identities)} 个文件")
+        except Exception as e:
+            logger.error(f"保存文件身份缓存失败: {e}")
+    
+    def get_file_identity(self, file_path: Path) -> dict:
+        """获取文件唯一标识（用于检测文件轮转）"""
+        try:
+            stat = file_path.stat()
+            return {
+                'inode': stat.st_ino,
+                'ctime': stat.st_ctime,
+                'size': stat.st_size
+            }
+        except Exception as e:
+            logger.warning(f"获取文件身份失败 {file_path}: {e}")
+            return None
+    
+    def is_file_rotated(self, file_path: Path, current_identity: dict) -> bool:
+        """检测文件是否被轮转（截断或替换）"""
+        file_path_str = str(file_path)
+        
+        if file_path_str not in self.file_identities:
+            # 首次见到此文件
+            return False
+        
+        old_identity = self.file_identities[file_path_str]
+        
+        # 检查inode是否变化（文件被替换）
+        if current_identity['inode'] != old_identity['inode']:
+            logger.warning(f"检测到文件轮转（inode变化）: {file_path}")
+            return True
+        
+        # 检查文件大小是否变小（文件被截断）
+        if current_identity['size'] < old_identity['size']:
+            logger.warning(f"检测到文件截断（大小从 {old_identity['size']} 变为 {current_identity['size']}）: {file_path}")
+            return True
+        
+        return False
     
     async def read_log_file(self, file_path: Path, processor, start_offset: int = 0, max_lines: int = None) -> tuple[int, int]:
         """异步增量读取日志文件（改进版：支持限制行数，真正分块）
@@ -298,11 +468,35 @@ class LogReader:
             logger.warning(f"日志文件不存在: {file_path}")
             return 0, start_offset
         
-        file_size = file_path.stat().st_size
+        # 获取文件身份
+        current_identity = self.get_file_identity(file_path)
+        if current_identity is None:
+            logger.error(f"无法获取文件身份: {file_path}")
+            return 0, start_offset
+        
+        file_path_str = str(file_path)
+        
+        # 检测文件是否被轮转（只调用一次，缓存结果）
+        is_rotated = self.is_file_rotated(file_path, current_identity)
+        is_first_time = file_path_str not in self.file_identities
+        
+        if is_rotated:
+            logger.warning(f"文件已轮转，从头开始读取: {file_path}")
+            start_offset = 0
+            # 清除该文件的不完整行缓存
+            if file_path_str in self.incomplete_lines:
+                del self.incomplete_lines[file_path_str]
+        
+        # 更新文件身份缓存（仅在首次或轮转时保存，避免频繁写盘）
+        self.file_identities[file_path_str] = current_identity
+        if is_first_time or is_rotated:
+            self.save_file_identities()
+        
+        file_size = current_identity['size']
         
         #  修复问题2：offset > file_size 说明文件被截断，重置为0
         if start_offset > file_size:
-            logger.warning(f"文件 {file_path} 被截断 (offset={start_offset} > size={file_size})，重置偏移量为0")
+            logger.warning(f"文件 {file_path} 偏移量异常 (offset={start_offset} > size={file_size})，重置偏移量为0")
             start_offset = 0
         elif start_offset == file_size:
             logger.debug(f"文件 {file_path} 无新数据 (offset={start_offset}, size={file_size})")
@@ -311,17 +505,26 @@ class LogReader:
         logger.info(f"读取日志文件: {file_path} (从偏移量 {start_offset} 开始)")
         processed_lines = 0
         current_offset = start_offset
-        file_path_str = str(file_path)
         
         try:
-            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+            # 使用二进制模式读取，确保偏移量准确（避免 UTF-8 多字节字符导致的偏移漂移）
+            async with aiofiles.open(file_path, 'rb') as f:
                 # 定位到上次读取的位置
                 await f.seek(start_offset)
                 
-                #  改进：恢复上次的不完整行
-                buffer = self.incomplete_lines.get(file_path_str, "")
-                if buffer:
-                    logger.debug(f"恢复不完整行: {buffer[:50]}...")
+                # 使用字节缓冲区（而非字符串缓冲区），避免编码/解码导致的偏移漂移
+                tail_bytes = b''
+                
+                # 恢复上次的不完整行（如果有）
+                incomplete_data = self.incomplete_lines.get(file_path_str, {})
+                if isinstance(incomplete_data, dict):
+                    incomplete_line = incomplete_data.get('line', '')
+                    if incomplete_line:
+                        tail_bytes = incomplete_line.encode('utf-8')
+                        logger.debug(f"恢复不完整行: {incomplete_line[:50]}...")
+                elif isinstance(incomplete_data, str) and incomplete_data:
+                    # 兼容旧格式
+                    tail_bytes = incomplete_data.encode('utf-8')
                 
                 while True:
                     #  新增：支持限制读取行数
@@ -330,73 +533,90 @@ class LogReader:
                         break
                     
                     chunk = await f.read(READ_CHUNK_SIZE)
-                    if not chunk:
+                    if not chunk:  # EOF：空 bytes 才是真正的文件结束
                         break
                     
-                    buffer += chunk
-                    lines = buffer.split('\n')
+                    # 拼接到尾部字节
+                    tail_bytes += chunk
                     
-                    #  改进：更安全的不完整行处理
-                    if len(chunk) < READ_CHUNK_SIZE:  # 已到文件末尾
-                        # 如果最后一行没有换行符，保存到缓存
-                        if not chunk.endswith('\n') and lines[-1]:
-                            self.incomplete_lines[file_path_str] = lines[-1]
-                            logger.debug(f"保存不完整行到缓存: {lines[-1][:50]}...")
-                            lines = lines[:-1]
-                            buffer = self.incomplete_lines[file_path_str]
-                        else:
-                            # 最后一行已完整，清除缓存
-                            if file_path_str in self.incomplete_lines:
-                                del self.incomplete_lines[file_path_str]
-                            buffer = ""
-                    else:
-                        buffer = lines[-1]
-                        lines = lines[:-1]
+                    # 按换行符分割（二进制层面）
+                    lines_bytes = tail_bytes.split(b'\n')
+                    
+                    # 最后一个元素是不完整行（或空）
+                    tail_bytes = lines_bytes[-1]
+                    complete_lines_bytes = lines_bytes[:-1]
                     
                     # 处理完整的行
-                    line_index = 0
-                    for line_index, line in enumerate(lines):
+                    for line_bytes in complete_lines_bytes:
+                        if not line_bytes:  # 跳过空行
+                            continue
+                        
+                        # 解码为字符串（使用 errors='replace' 避免解码错误）
+                        try:
+                            line = line_bytes.decode('utf-8')
+                        except UnicodeDecodeError:
+                            line = line_bytes.decode('utf-8', errors='replace')
+                            logger.warning(f"文件 {file_path} 包含无效 UTF-8 字符，已替换")
+                        
                         if line.strip():
-                            await processor.process_line(line.strip())
+                            await processor.process_line(line.strip(), file_path)
                             processed_lines += 1
                             
                             #  新增：达到行数限制就停止
                             if max_lines and processed_lines >= max_lines:
-                                #  修复问题4：将未处理的行回填到buffer
-                                unprocessed_lines = lines[line_index + 1:]
-                                if unprocessed_lines:
-                                    # 把未处理的完整行拼回 buffer
-                                    buffer = '\n'.join(unprocessed_lines)
-                                    if buffer and not buffer.endswith('\n'):
-                                        # buffer最后部分是原来的不完整行
-                                        pass
-                                    logger.debug(f"回填 {len(unprocessed_lines)} 行未处理数据到buffer")
+                                logger.debug(f"达到最大行数限制，停止读取")
+                                # 注意：tail_bytes 已经正确保留了未处理的数据
                                 break
                             
                             # 每处理一定数量的行就让出控制权
                             if processed_lines % 1000 == 0:
                                 await asyncio.sleep(0.001)
+                    
+                    # 如果达到行数限制，退出外层循环
+                    if max_lines and processed_lines >= max_lines:
+                        break
                 
-                # 更新当前偏移量（减去未处理的buffer长度）
-                current_offset = await f.tell() - len(buffer.encode('utf-8'))
+                # 更新当前偏移量（二进制模式下 tell() 返回准确的字节偏移）
+                # 减去未处理的尾部字节数
+                current_offset = await f.tell() - len(tail_bytes)
                 
                 #  修复问题3：如果文件真正结束且有不完整行，尝试处理它
                 if not max_lines:  # 只有在读到文件末尾时（而非因为max_lines限制）
-                    if file_path_str in self.incomplete_lines:
-                        final_line = self.incomplete_lines[file_path_str]
+                    if tail_bytes:  # 有未处理的尾部字节
                         # 检查文件大小是否还在增长
                         current_file_size = file_path.stat().st_size
                         if current_offset >= current_file_size:
                             # 文件不再增长，处理最后一行
+                            try:
+                                final_line = tail_bytes.decode('utf-8')
+                            except UnicodeDecodeError:
+                                final_line = tail_bytes.decode('utf-8', errors='replace')
+                            
                             logger.info(f"文件结束，处理最后一行（无换行符）: {final_line[:50]}...")
                             if final_line.strip():
-                                await processor.process_line(final_line.strip())
+                                await processor.process_line(final_line.strip(), file_path)
                                 processed_lines += 1
-                                current_offset += len(final_line.encode('utf-8'))
+                                current_offset += len(tail_bytes)
                             # 清除缓存
-                            del self.incomplete_lines[file_path_str]
+                            if file_path_str in self.incomplete_lines:
+                                del self.incomplete_lines[file_path_str]
+                            tail_bytes = b''  # 已处理完
                 
-                # 保存不完整行缓存
+                # 保存不完整行缓存（如果还有未处理的尾部）
+                if tail_bytes:
+                    try:
+                        tail_str = tail_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        tail_str = tail_bytes.decode('utf-8', errors='replace')
+                    
+                    self.incomplete_lines[file_path_str] = {
+                        'line': tail_str,
+                        'timestamp': time.time()
+                    }
+                elif file_path_str in self.incomplete_lines:
+                    # 没有尾部了，清除缓存
+                    del self.incomplete_lines[file_path_str]
+                
                 self.save_incomplete_lines()
         
         except Exception as e:
@@ -412,72 +632,32 @@ class LogReader:
 
 
 class IPProcessor:
-    """IP处理器 - 负责解析、去重和缓存IP数据（改进版：全局去重）"""
+    """IP处理器 - 负责解析和缓存IP数据（不再去重，传输所有数据用于节点交互统计）"""
     
     def __init__(self, botnet_type: str, cache_file: str, pending_queue_file: str = PENDING_QUEUE_FILE):
         self.botnet_type = botnet_type
-        self.cache_file = cache_file
+        self.cache_file = cache_file  # 保留以兼容旧代码，但不再使用
         self.pending_queue_file = pending_queue_file
         
-        #  改进：全局去重，而不是仅按日期去重
-        self.global_ip_cache: Set[str] = set()  # 全局IP缓存，用于去重
-        self.ip_last_seen: Dict[str, str] = {}  # 记录IP最后出现的日期
-        
-        self.daily_ips: Dict[str, Set[str]] = defaultdict(set)  # 按日期分组的IP
-        self.daily_ips_with_time: Dict[str, List[Dict]] = defaultdict(list)  # 包含时间戳的IP数据
+        # 移除去重逻辑，传输所有数据
+        # 使用 deque 以便高效的 popleft() 操作
+        self.daily_ips_with_time: Dict[str, deque] = defaultdict(deque)  # 包含时间戳的IP数据
+        self.uploading_ips = []  # 正在上传的IP数据（用于事务性上传）
         self.processed_count = 0
-        self.duplicate_count = 0
-        self.global_duplicate_count = 0  # 全局重复计数
+        self.consecutive_upload_failures = 0  # 连续上传失败次数
         
-        self.load_cache()
         self.load_pending_queue()  # 加载未上传的数据
         self.last_persist_time = time.time()
     
     def load_cache(self):
-        """加载IP缓存（用于全局去重）"""
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    cache_data = json.load(f)
-                
-                #  改进：加载用于全局去重
-                self.global_ip_cache = set()
-                self.ip_last_seen = {}
-                
-                for ip_data in cache_data.get('ips', []):
-                    ip = ip_data['ip']
-                    self.global_ip_cache.add(ip)
-                    # 记录最后出现日期
-                    if 'date' in ip_data:
-                        self.ip_last_seen[ip] = ip_data['date']
-                
-                logger.info(f"加载IP缓存: {len(self.global_ip_cache)} 个IP（用于全局去重）")
-        except Exception as e:
-            logger.warning(f"加载IP缓存失败: {e}")
-            self.global_ip_cache = set()
-            self.ip_last_seen = {}
+        """加载IP缓存（已废弃，不再使用去重功能）"""
+        # 不再需要加载缓存进行去重
+        logger.debug("跳过IP缓存加载（已移除去重功能）")
     
     def save_cache(self):
-        """保存IP缓存（包含最后出现日期）"""
-        try:
-            cache_data = {
-                'updated_at': datetime.now().isoformat(),
-                'ips': [
-                    {
-                        'ip': ip,
-                        'date': self.ip_last_seen.get(ip, datetime.now().strftime('%Y-%m-%d')),
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    for ip in self.global_ip_cache
-                ]
-            }
-            
-            with open(self.cache_file, 'w') as f:
-                json.dump(cache_data, f, indent=2)
-                
-            logger.debug(f"保存IP缓存: {len(self.global_ip_cache)} 个IP")
-        except Exception as e:
-            logger.error(f"保存IP缓存失败: {e}")
+        """保存IP缓存（已废弃，不再使用去重功能）"""
+        # 不再需要保存缓存
+        logger.debug("跳过IP缓存保存（已移除去重功能）")
     
     def load_pending_queue(self):
         """加载待上传队列（恢复未上传的数据）"""
@@ -486,24 +666,30 @@ class IPProcessor:
                 with open(self.pending_queue_file, 'r') as f:
                     queue_data = json.load(f)
                     
-                # 恢复到内存中
+                # 恢复到内存中（使用 deque）
                 for item in queue_data.get('items', []):
                     date = item['date']
                     if date not in self.daily_ips_with_time:
-                        self.daily_ips_with_time[date] = []
+                        self.daily_ips_with_time[date] = deque()
                     self.daily_ips_with_time[date].append(item)
-                    self.daily_ips[date].add(item['ip'])
                     
                 logger.info(f"从队列恢复 {len(queue_data.get('items', []))} 条待上传数据")
         except Exception as e:
             logger.warning(f"加载待上传队列失败: {e}")
     
     def save_pending_queue(self):
-        """持久化待上传队列到磁盘"""
+        """持久化待上传队列到磁盘（优化：避免全量序列化）"""
         try:
+            # 优化：直接写入，避免全量拼接
+            total_count = sum(len(queue) for queue in self.daily_ips_with_time.values())
+            
+            # 如果数据量大，考虑只保存元数据而非完整JSON
+            if total_count > 10000:
+                logger.warning(f"待上传队列过大（{total_count} 条），考虑优化存储")
+            
             all_items = []
-            for date, ip_data_list in self.daily_ips_with_time.items():
-                all_items.extend(ip_data_list)
+            for date, ip_data_queue in self.daily_ips_with_time.items():
+                all_items.extend(list(ip_data_queue))
             
             queue_data = {
                 'updated_at': datetime.now().isoformat(),
@@ -511,8 +697,13 @@ class IPProcessor:
                 'items': all_items
             }
             
-            with open(self.pending_queue_file, 'w') as f:
+            # 使用临时文件+原子重命名，防止写入一半崩溃
+            temp_file = self.pending_queue_file + ".tmp"
+            with open(temp_file, 'w') as f:
                 json.dump(queue_data, f, indent=2)
+            
+            # 原子性重命名
+            os.replace(temp_file, self.pending_queue_file)
                 
             logger.debug(f"持久化待上传队列: {len(all_items)} 条")
             self.last_persist_time = time.time()
@@ -527,48 +718,24 @@ class IPProcessor:
         # 条件：数据量超过阈值 或 距离上次持久化超过60秒
         return total_items > 1000 or time_elapsed > 60
     
-    async def process_line(self, line: str):
-        """处理单行日志，提取IP地址和时间戳（改进版：全局去重）"""
+    async def process_line(self, line: str, file_path: Path = None):
+        """处理单行日志，提取IP地址和时间戳（不再去重，传输所有数据）"""
         self.processed_count += 1
         
         # 解析日志格式: 2025-11-12 10:32:32,125.162.162.237
-        ip_data = self.extract_ip_and_timestamp_from_line(line)
+        ip_data = self.extract_ip_and_timestamp_from_line(line, file_path)
         
-        if ip_data and self.is_valid_ip(ip_data['ip']):
-            ip = ip_data['ip']
+        # extract_ip_and_timestamp_from_line 已经做了 normalize_ip 校验，这里直接判断即可
+        if ip_data:
             log_date = ip_data['date']
             
-            #  改进：全局去重策略
-            # 如果IP已经在全局缓存中，检查是否需要更新
-            if ip in self.global_ip_cache:
-                last_date = self.ip_last_seen.get(ip)
-                
-                # 如果是同一天出现，跳过
-                if last_date == log_date:
-                    self.duplicate_count += 1
-                    return
-                
-                # 如果是不同天出现，可能需要更新updated_at
-                # 这里可以选择：A) 每次都上传更新 B) 超过一定天数才更新
-                # 当前策略：跨日期的IP也算重复，减少重复上传
-                self.global_duplicate_count += 1
-                
-                # 更新最后出现日期
-                self.ip_last_seen[ip] = log_date
-                return
-            
-            # 新IP，添加到待上传队列
+            # 不再去重，直接添加所有数据到待上传队列
             if log_date not in self.daily_ips_with_time:
-                self.daily_ips_with_time[log_date] = []
+                self.daily_ips_with_time[log_date] = deque()
             
             self.daily_ips_with_time[log_date].append(ip_data)
-            self.daily_ips[log_date].add(ip)
-            
-            # 更新全局缓存
-            self.global_ip_cache.add(ip)
-            self.ip_last_seen[ip] = log_date
     
-    def extract_ip_and_timestamp_from_line(self, line: str) -> Optional[Dict]:
+    def extract_ip_and_timestamp_from_line(self, line: str, file_path: Path = None) -> Optional[Dict]:
         """从日志行中提取IP地址和时间戳"""
         try:
             line = line.strip()
@@ -602,27 +769,75 @@ class IPProcessor:
                     except ValueError:
                         continue
             
-            # 如果没有解析到时间戳，使用当前时间
+            # 如果没有解析到时间戳，使用更智能的回退策略
+            timestamp_source = "parsed"
             if not log_time:
-                logger.warning(f"未能从日志行提取时间戳，使用当前时间: {line[:50]}...")
-                log_time = datetime.now()
+                # 策略1：尝试从文件名提取时间
+                if file_path:
+                    log_time = self.extract_time_from_filename(file_path)
+                    if log_time:
+                        timestamp_source = "filename"
+                        logger.debug(f"从文件名提取时间戳: {log_time}")
+                
+                # 策略2：使用文件修改时间
+                if not log_time and file_path and file_path.exists():
+                    log_time = datetime.fromtimestamp(file_path.stat().st_mtime)
+                    timestamp_source = "file_mtime"
+                    logger.debug(f"使用文件修改时间: {log_time}")
+                
+                # 策略3：最后才使用当前时间
+                if not log_time:
+                    logger.warning(f"无法提取时间戳，使用当前时间: {line[:50]}...")
+                    log_time = datetime.now()
+                    timestamp_source = "fallback_now"
             
             # 提取IP地址
             ips = IP_REGEX.findall(line)
             if ips:
-                # 过滤掉时间戳中可能被误识别的数字
-                valid_ips = [ip for ip in ips if self.is_valid_ip(ip)]
-                if valid_ips:
-                    return {
-                        'ip': valid_ips[0],
-                        'timestamp': log_time.isoformat(),
-                        'date': log_time.strftime('%Y-%m-%d'),
-                        'botnet_type': self.botnet_type
-                    }
+                # 规范化并验证IP
+                for ip in ips:
+                    normalized_ip = self.normalize_ip(ip)
+                    if normalized_ip:
+                        return {
+                            'ip': normalized_ip,  # 使用规范化后的IP
+                            'raw_ip': ip if ip != normalized_ip else None,  # 保留原始IP用于排查
+                            'timestamp': log_time.isoformat(),
+                            'timestamp_source': timestamp_source,  # 标记timestamp来源
+                            'date': log_time.strftime('%Y-%m-%d'),
+                            'log_hour': log_time.strftime('%Y-%m-%d_%H'),  # 小时级别信息
+                            'botnet_type': self.botnet_type,
+                            'raw_line_prefix': line[:100] if timestamp_source == "fallback_now" else None  # 原始日志片段
+                        }
             
             return None
         except Exception as e:
             logger.debug(f"提取IP和时间戳失败: {line[:50]}... 错误: {e}")
+            return None
+    
+    def extract_time_from_filename(self, file_path: Path) -> Optional[datetime]:
+        """从文件名中提取时间戳"""
+        try:
+            filename = file_path.name
+            # 尝试匹配文件名中的日期时间模式
+            # 例如: ramnit_2025-11-12_10.log
+            import re
+            
+            # 匹配 YYYY-MM-DD_HH 格式
+            match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2})', filename)
+            if match:
+                date_str = match.group(1)
+                hour_str = match.group(2)
+                return datetime.strptime(f"{date_str} {hour_str}:00:00", '%Y-%m-%d %H:%M:%S')
+            
+            # 匹配 YYYY-MM-DD 格式
+            match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+            if match:
+                date_str = match.group(1)
+                return datetime.strptime(f"{date_str} 00:00:00", '%Y-%m-%d %H:%M:%S')
+            
+            return None
+        except Exception as e:
+            logger.debug(f"从文件名提取时间失败 {file_path}: {e}")
             return None
     
     def extract_ip_from_line(self, line: str) -> Optional[str]:
@@ -630,125 +845,134 @@ class IPProcessor:
         ip_data = self.extract_ip_and_timestamp_from_line(line)
         return ip_data['ip'] if ip_data else None
     
-    def is_valid_ip(self, ip: str) -> bool:
-        """验证IP地址是否有效"""
+    def normalize_ip(self, ip: str) -> Optional[str]:
+        """规范化IP地址（去除前导零）并验证"""
         try:
             parts = ip.split('.')
             if len(parts) != 4:
-                return False
+                return None
             
+            normalized_parts = []
             for part in parts:
+                # 检查是否为空或包含非数字字符
+                if not part or not part.isdigit():
+                    return None
+                
+                # 规范化：转为int再转回str，自动去除前导零
                 num = int(part)
                 if num < 0 or num > 255:
-                    return False
+                    return None
+                
+                normalized_parts.append(str(num))
+            
+            normalized_ip = '.'.join(normalized_parts)
+            
+            # 如果规范化后与原始不同，记录日志
+            if normalized_ip != ip:
+                logger.debug(f"规范化IP: {ip} -> {normalized_ip}")
             
             # 过滤私有IP和特殊IP
-            if ip.startswith(('127.', '10.', '192.168.', '169.254.')):
-                return False
-            if ip.startswith('172.'):
-                second_octet = int(parts[1])
+            if normalized_ip.startswith(('127.', '10.', '192.168.', '169.254.')):
+                return None
+            if normalized_ip.startswith('172.'):
+                second_octet = int(normalized_parts[1])
                 if 16 <= second_octet <= 31:
-                    return False
+                    return None
             
-            return True
-        except:
-            return False
+            return normalized_ip
+        except Exception as e:
+            logger.debug(f"IP规范化异常: {ip}, 错误: {e}")
+            return None
+    
+    def is_valid_ip(self, ip: str) -> bool:
+        """验证IP地址是否有效（兼容性方法）"""
+        return self.normalize_ip(ip) is not None
     
     def get_new_ips_for_upload(self, max_count: int = None) -> List[Dict]:
-        """获取需要上传的新IP数据（按时间戳排序）"""
-        all_new_ips = []
+        """获取需要上传的新IP数据（事务性：标记为上传中）"""
+        if self.uploading_ips:
+            logger.warning("已有数据正在上传中，跳过获取新数据")
+            return []
         
-        # 优先使用包含时间戳的数据，并按日期排序
+        result = []
+        
+        # 优化：使用 islice 避免全量复制
+        from itertools import islice
+        
         sorted_dates = sorted(self.daily_ips_with_time.keys())
+        
         for date in sorted_dates:
-            all_new_ips.extend(self.daily_ips_with_time[date])
+            queue = self.daily_ips_with_time[date]
+            
+            # 如果还需要更多数据
+            if max_count is None or len(result) < max_count:
+                remaining = max_count - len(result) if max_count else len(queue)
+                # 使用 islice 避免全量复制（O(k) 而非 O(n)）
+                batch = list(islice(queue, 0, remaining))
+                result.extend(batch)
+                
+                if max_count and len(result) >= max_count:
+                    break
+            else:
+                break
         
-        # 如果没有时间戳数据，回退到旧格式（兼容性）
-        if not all_new_ips:
-            sorted_dates = sorted(self.daily_ips.keys())
-            for date in sorted_dates:
-                for ip in self.daily_ips[date]:
-                    all_new_ips.append({
-                        'ip': ip,
-                        'date': date,
-                        'botnet_type': self.botnet_type,
-                        'timestamp': datetime.now().isoformat()
-                    })
+        # 标记为上传中（事务性保护）
+        self.uploading_ips = result
+        logger.debug(f"标记 {len(result)} 条数据为上传中")
         
-        # 限制数量
-        if max_count and len(all_new_ips) > max_count:
-            return all_new_ips[:max_count]
-        
-        return all_new_ips
+        return result
     
-    def clear_uploaded_ips(self, uploaded_count: int):
-        """清理已上传的IP（包含时间戳数据）"""
-        # 优先清理时间戳数据
+    def confirm_uploaded_ips(self):
+        """确认上传成功，清理已上传的IP数据"""
+        if not self.uploading_ips:
+            return
+        
+        uploaded_count = len(self.uploading_ips)
         cleared_count = 0
         
         for date in list(self.daily_ips_with_time.keys()):
-            ip_data_list = self.daily_ips_with_time[date]
+            queue = self.daily_ips_with_time[date]
             
-            # 清理指定数量的IP数据
-            while ip_data_list and cleared_count < uploaded_count:
-                ip_data = ip_data_list.pop(0)
-                ip = ip_data['ip']
-                
-                # 同时从daily_ips中移除
-                if date in self.daily_ips:
-                    self.daily_ips[date].discard(ip)
-                
+            # 使用 popleft() 高效地移除左侧元素（O(1)）
+            while queue and cleared_count < uploaded_count:
+                queue.popleft()  # O(1) 操作
                 cleared_count += 1
             
-            # 如果该日期的IP数据为空，删除该日期
-            if not ip_data_list:
+            # 如果该日期的数据为空，删除该日期
+            if not queue:
                 del self.daily_ips_with_time[date]
-            
-            # 如果该日期的IP集合为空，删除该日期
-            if date in self.daily_ips and not self.daily_ips[date]:
-                del self.daily_ips[date]
             
             if cleared_count >= uploaded_count:
                 break
         
-        # 如果时间戳数据不足，继续清理普通IP数据（兼容性）
-        if cleared_count < uploaded_count:
-            for date in list(self.daily_ips.keys()):
-                ips_list = list(self.daily_ips[date])
-                
-                for ip in ips_list:
-                    if cleared_count >= uploaded_count:
-                        break
-                        
-                    self.daily_ips[date].discard(ip)
-                    cleared_count += 1
-                
-                # 如果该日期的IP集合为空，删除该日期
-                if not self.daily_ips[date]:
-                    del self.daily_ips[date]
-                
-                if cleared_count >= uploaded_count:
-                    break
-        
-        logger.info(f"清理已上传的IP: {cleared_count} 个")
+        logger.info(f"确认上传成功，清理 {cleared_count} 条数据")
+        self.uploading_ips = []
+    
+    def rollback_uploading_ips(self):
+        """回滚上传失败的数据（保留在队列中）"""
+        if self.uploading_ips:
+            logger.warning(f"上传失败，回滚 {len(self.uploading_ips)} 条数据")
+            self.uploading_ips = []
     
     def get_stats(self) -> Dict:
-        """获取处理统计（增强版）"""
-        # 修复：统计daily_ips_with_time中的数据
-        total_new_ips = sum(len(ip_list) for ip_list in self.daily_ips_with_time.values())
+        """获取处理统计"""
+        total_pending = sum(len(ip_list) for ip_list in self.daily_ips_with_time.values())
         return {
             'processed_lines': self.processed_count,
-            'duplicate_count': self.duplicate_count,
-            'global_duplicate_count': self.global_duplicate_count,  # 新增
-            'cached_ips': len(self.global_ip_cache),
-            'new_ips_pending': total_new_ips,
-            'unique_ips_total': len(self.global_ip_cache) + total_new_ips
+            'new_ips_pending': total_pending,
+            'total_records': self.processed_count  # 总记录数等于处理行数
         }
     
     def check_memory_pressure(self) -> bool:
         """检查内存压力"""
-        total_items = sum(len(ip_list) for ip_list in self.daily_ips_with_time.values())
+        total_items = sum(len(queue) for queue in self.daily_ips_with_time.values())
         return total_items >= MAX_MEMORY_IPS
+    
+    def clear_memory_queue(self):
+        """清空内存队列（仅保留磁盘队列）"""
+        cleared_count = sum(len(queue) for queue in self.daily_ips_with_time.values())
+        self.daily_ips_with_time.clear()
+        logger.warning(f"清空内存队列: {cleared_count} 条记录（已持久化到磁盘）")
 
 
 class RemoteUploader:
@@ -758,6 +982,7 @@ class RemoteUploader:
         self.upload_count = 0
         self.error_count = 0
         self.session = None
+        self.upload_lock = asyncio.Lock()  # 并发控制锁
     
     async def create_session(self):
         """创建HTTP会话"""
@@ -817,66 +1042,68 @@ class RemoteUploader:
             return False
     
     async def upload_ips(self, ip_data: List[Dict]) -> bool:
-        """异步上传IP数据到本地服务器"""
+        """异步上传IP数据到本地服务器（带并发控制）"""
         if not ip_data:
             return True
         
-        await self.create_session()
-        
-        headers = {
-            "Content-Type": "application/json",
-            "X-API-Key": API_KEY
-        }
-        
-        data = {
-            "botnet_type": BOTNET_TYPE,
-            "ip_data": ip_data,
-            "source_ip": await self.get_local_ip()
-        }
-        
-        for attempt in range(MAX_RETRIES):
-            try:
-                logger.info(f"上传 {len(ip_data)} 个IP (尝试 {attempt + 1}/{MAX_RETRIES})")
-                
-                async with self.session.post(
-                    API_ENDPOINT,
-                    json=data,
-                    headers=headers
-                ) as response:
-                    
-                    if response.status == 200:
-                        result = await response.json()
-                        logger.info(f" 上传成功: {result.get('received_count', len(ip_data))} 个IP")
-                        self.upload_count += result.get('received_count', len(ip_data))
-                        return True
-                        
-                    elif response.status == 401:
-                        logger.error(" 认证失败: API密钥无效")
-                        return False
-                        
-                    elif response.status == 403:
-                        logger.error(" 权限不足: IP未在白名单中")
-                        return False
-                        
-                    else:
-                        error_text = await response.text()
-                        logger.warning(f" 上传失败 (HTTP {response.status}): {error_text}")
-                        
-            except aiohttp.ClientError as e:
-                logger.warning(f" 网络错误: {e}")
-                
-            except Exception as e:
-                logger.error(f" 上传异常: {e}")
+        # 使用锁确保同一时间只有一个上传任务
+        async with self.upload_lock:
+            await self.create_session()
             
-            # 重试延迟
-            if attempt < MAX_RETRIES - 1:
-                logger.info(f"等待 {RETRY_DELAY} 秒后重试...")
-                await asyncio.sleep(RETRY_DELAY)
-        
-        # 所有重试都失败
-        logger.error(f" 上传失败: 已重试 {MAX_RETRIES} 次")
-        self.error_count += 1
-        return False
+            headers = {
+                "Content-Type": "application/json",
+                "X-API-Key": API_KEY
+            }
+            
+            data = {
+                "botnet_type": BOTNET_TYPE,
+                "ip_data": ip_data,
+                "source_ip": await self.get_local_ip()
+            }
+            
+            for attempt in range(MAX_RETRIES):
+                try:
+                    logger.info(f"上传 {len(ip_data)} 个IP (尝试 {attempt + 1}/{MAX_RETRIES})")
+                    
+                    async with self.session.post(
+                        API_ENDPOINT,
+                        json=data,
+                        headers=headers
+                    ) as response:
+                        
+                        if response.status == 200:
+                            result = await response.json()
+                            logger.info(f" 上传成功: {result.get('received_count', len(ip_data))} 个IP")
+                            self.upload_count += result.get('received_count', len(ip_data))
+                            return True
+                            
+                        elif response.status == 401:
+                            logger.error(" 认证失败: API密钥无效")
+                            return False
+                            
+                        elif response.status == 403:
+                            logger.error(" 权限不足: IP未在白名单中")
+                            return False
+                            
+                        else:
+                            error_text = await response.text()
+                            logger.warning(f" 上传失败 (HTTP {response.status}): {error_text}")
+                            
+                except aiohttp.ClientError as e:
+                    logger.warning(f" 网络错误: {e}")
+                    
+                except Exception as e:
+                    logger.error(f" 上传异常: {e}")
+                
+                # 重试延迟
+                if attempt < MAX_RETRIES - 1:
+                    logger.info(f"等待 {RETRY_DELAY} 秒后重试...")
+                    await asyncio.sleep(RETRY_DELAY)
+            
+            # 所有重试都失败
+            logger.error(f" 上传失败: 已重试 {MAX_RETRIES} 次")
+            self.error_count += 1
+            return False
     
     async def get_local_ip(self) -> str:
         """获取本机IP"""
@@ -906,7 +1133,7 @@ class AsyncLogProcessor:
         self.uploader = RemoteUploader()
         self.state = self.load_state()
         self.server_offline_count = 0  # 服务器连续离线次数计数器
-        self.upload_in_progress = False  # 上传进行中标志
+        # 移除 upload_in_progress 标志，改用 RemoteUploader 的锁机制
     
     def load_state(self) -> Dict:
         """加载处理状态"""
@@ -914,15 +1141,17 @@ class AsyncLogProcessor:
             if os.path.exists(STATE_FILE):
                 with open(STATE_FILE, 'r') as f:
                     state = json.load(f)
-                    logger.info(f"加载状态: 总共处理 {state.get('total_processed', 0)} 行")
+                    # 兼容旧字段名
+                    total_lines = state.get('total_processed_lines', state.get('total_processed', 0))
+                    logger.info(f"加载状态: 总共处理 {total_lines} 行")
                     return state
         except Exception as e:
             logger.warning(f"加载状态失败: {e}")
         
         return {
-            'file_offsets': {},  # 记录每个文件的读取偏移量 {filepath: offset}
             'last_upload_time': None,
-            'total_processed': 0
+            'total_processed_lines': 0  # 处理的行数（而非字节数）
+            # 注意：file_offsets 使用独立的 OFFSET_STATE_FILE 存储，不在这里
         }
     
     def load_file_offsets(self) -> Dict[str, int]:
@@ -958,7 +1187,7 @@ class AsyncLogProcessor:
     async def process_log_files_and_upload(self):
         """处理日志文件并实现真正的流式上传"""
         # 获取可用的日志文件
-        log_files = self.log_reader.get_available_log_files()
+        log_files = await self.log_reader.get_available_log_files()
         
         if not log_files:
             logger.info("没有找到日志文件")
@@ -996,7 +1225,6 @@ class AsyncLogProcessor:
         chunk_lines = 5000  #  改进：每次只读取5000行，真正分块
         total_processed = 0
         current_offset = start_offset
-        last_saved_offset = start_offset
         
         logger.info(f"开始流式处理文件: {file_path}")
         
@@ -1032,12 +1260,11 @@ class AsyncLogProcessor:
             stats = self.ip_processor.get_stats()
             if stats['new_ips_pending'] < MIN_UPLOAD_BATCH:
                 # 待上传数据少，说明刚上传过，可以安全保存偏移量
+                # 关键：保存偏移量前，强制持久化队列（避免崩溃窗口导致数据丢失）
+                self.ip_processor.save_pending_queue()
                 file_offsets[file_path_str] = current_offset
                 self.save_file_offsets(file_offsets)
-                self.state['total_processed'] += (current_offset - last_saved_offset)
-                self.save_state()
-                last_saved_offset = current_offset
-                logger.debug(f"安全保存偏移量: {current_offset}")
+                logger.debug(f"安全保存偏移量: {current_offset}（队列已持久化）")
         
         #  新增：文件处理完成后，上传剩余数据
         if total_processed > 0:
@@ -1049,12 +1276,17 @@ class AsyncLogProcessor:
                 logger.info(f"上传文件剩余的 {stats['new_ips_pending']} 条数据")
                 await self.upload_new_ips()
                 
-                # 上传成功后保存最终偏移量
+                # 上传成功后保存最终偏移量并累加行数统计
                 stats_after = self.ip_processor.get_stats()
                 if stats_after['new_ips_pending'] == 0:
+                    # 关键：保存偏移量前，确保队列已持久化
+                    self.ip_processor.save_pending_queue()
                     file_offsets[file_path_str] = current_offset
                     self.save_file_offsets(file_offsets)
-                    logger.info(f"✓ 文件 {file_path.name} 完全处理并上传成功")
+                    # 只在这里累加一次行数（避免重复累加）
+                    self.state['total_processed_lines'] = self.state.get('total_processed_lines', 0) + total_processed
+                    self.save_state()
+                    logger.info(f"✓ 文件 {file_path.name} 完全处理并上传成功，累计处理 {self.state['total_processed_lines']} 行")
     
     async def upload_if_needed(self):
         """检查是否有足够的IP需要上传，如果有则立即上传"""
@@ -1068,9 +1300,6 @@ class AsyncLogProcessor:
     
     async def upload_if_needed_aggressive(self):
         """更激进的上传策略 - 用于流式处理"""
-        if self.upload_in_progress:
-            return
-        
         ip_stats = self.ip_processor.get_stats()
         pending_ips = ip_stats['new_ips_pending']
         
@@ -1084,7 +1313,7 @@ class AsyncLogProcessor:
             await self.upload_new_ips()
     
     async def force_upload_all(self):
-        """强制上传所有待上传数据"""
+        """强制上传所有待上传数据（带失败退避）"""
         ip_stats = self.ip_processor.get_stats()
         pending_ips = ip_stats['new_ips_pending']
         
@@ -1093,32 +1322,43 @@ class AsyncLogProcessor:
         
         logger.warning(f"强制上传所有数据: {pending_ips} 条")
         
+        failure_count = 0
         while pending_ips > 0:
-            await self.upload_new_ips()
+            success = await self.upload_new_ips()
             ip_stats = self.ip_processor.get_stats()
             new_pending = ip_stats['new_ips_pending']
             
             if new_pending >= pending_ips:
                 # 没有减少，可能上传失败
-                logger.error("上传失败，无法减少待上传队列")
-                break
+                failure_count += 1
+                logger.error(f"上传失败（第 {failure_count} 次），无法减少待上传队列")
+                
+                if failure_count >= MAX_CONSECUTIVE_UPLOAD_FAILURES:
+                    logger.error(f"连续上传失败 {failure_count} 次，暂停读取，等待 {UPLOAD_FAILURE_BACKOFF} 秒")
+                    # 持久化队列后清空内存，防止OOM
+                    self.ip_processor.save_pending_queue()
+                    self.ip_processor.clear_memory_queue()
+                    await asyncio.sleep(UPLOAD_FAILURE_BACKOFF)
+                    break
+            else:
+                # 上传成功，重置失败计数
+                failure_count = 0
             
             pending_ips = new_pending
     
-    async def upload_new_ips(self):
-        """上传新发现的IP（改进版：持久化保护）"""
-        if self.upload_in_progress:
-            logger.debug("上传正在进行中，跳过")
-            return
+    async def upload_new_ips(self) -> bool:
+        """上传新发现的IP（改进版：事务性上传，防止数据丢失）
         
-        self.upload_in_progress = True
-        
+        Returns:
+            bool: 上传是否成功
+        """
         try:
+            # 获取待上传数据（会标记为上传中）
             new_ips = self.ip_processor.get_new_ips_for_upload(BATCH_SIZE)
             
             if not new_ips:
                 logger.debug("没有新IP需要上传")
-                return
+                return True  # 没有数据也算成功
             
             logger.info(f"准备上传 {len(new_ips)} 个新IP")
             
@@ -1129,8 +1369,9 @@ class AsyncLogProcessor:
             success = await self.uploader.upload_ips(new_ips)
             
             if success:
-                #  只在上传成功后才清理
-                self.ip_processor.clear_uploaded_ips(len(new_ips))
+                #  事务性确认：只在上传成功后才清理
+                self.ip_processor.confirm_uploaded_ips()
+                self.ip_processor.consecutive_upload_failures = 0  # 重置失败计数
                 self.state['last_upload_time'] = datetime.now().isoformat()
                 
                 # 保存IP缓存和状态
@@ -1139,12 +1380,18 @@ class AsyncLogProcessor:
                 self.save_state()
                 
                 logger.info(f"✓ 上传成功，累计上传: {self.uploader.upload_count} 个IP")
+                return True
             else:
-                #  改进：上传失败，数据已持久化，不会丢失
-                logger.error(f"✗ 上传失败，数据已持久化到 {PENDING_QUEUE_FILE}，下次重启会恢复")
-                # 不清理数据，保留在内存和磁盘中
-        finally:
-            self.upload_in_progress = False
+                #  事务性回滚：上传失败，数据保留在队列中
+                self.ip_processor.rollback_uploading_ips()
+                self.ip_processor.consecutive_upload_failures += 1
+                logger.error(f"✗ 上传失败（连续第 {self.ip_processor.consecutive_upload_failures} 次），数据已保留在队列中")
+                return False
+        except Exception as e:
+            logger.error(f"上传过程异常: {e}")
+            # 异常时也要回滚
+            self.ip_processor.rollback_uploading_ips()
+            return False
     
     async def wait_for_server_online(self) -> bool:
         """
@@ -1195,6 +1442,12 @@ class AsyncLogProcessor:
             
             # 3. 显示统计信息
             self.print_stats()
+            
+            # 4. 失效文件缓存，下次扫描时能发现新文件
+            self.log_reader.invalidate_cache()
+            
+            # 5. 清理过期的不完整行缓存
+            self.log_reader.cleanup_old_incomplete_lines()
             
         except Exception as e:
             logger.error(f"处理任务异常: {e}")
@@ -1256,25 +1509,20 @@ class AsyncLogProcessor:
         # 基础统计
         logger.info(" 数据处理:")
         logger.info(f"  ├─ 已处理行数: {ip_stats['processed_lines']:,}")
-        logger.info(f"  ├─ 日内重复IP: {ip_stats['duplicate_count']:,}")
-        logger.info(f"  ├─ 全局重复IP: {ip_stats.get('global_duplicate_count', 0):,}")
-        logger.info(f"  └─ 唯一IP总数: {ip_stats.get('unique_ips_total', 0):,}")
+        logger.info(f"  └─ 总记录数: {ip_stats.get('total_records', 0):,}")
         
         # 上传统计
         logger.info("")
         logger.info(" 上传状态:")
-        logger.info(f"  ├─ 待上传IP数: {ip_stats['new_ips_pending']:,}")
-        logger.info(f"  ├─ 已缓存IP数: {ip_stats['cached_ips']:,}")
+        logger.info(f"  ├─ 待上传数据: {ip_stats['new_ips_pending']:,}")
         logger.info(f"  ├─ 累计上传数: {self.uploader.upload_count:,}")
         logger.info(f"  └─ 失败次数: {self.uploader.error_count}")
         
-        # 去重效率
+        # 数据完整性
         if ip_stats['processed_lines'] > 0:
-            total_duplicates = ip_stats['duplicate_count'] + ip_stats.get('global_duplicate_count', 0)
-            dedup_rate = (total_duplicates / ip_stats['processed_lines']) * 100
             logger.info("")
-            logger.info(" 去重效率:")
-            logger.info(f"  └─ 去重率: {dedup_rate:.1f}% ({total_duplicates:,} / {ip_stats['processed_lines']:,})")
+            logger.info(" 数据完整性:")
+            logger.info(f"  └─ 数据保留率: 100% (不再去重，传输所有数据)")
         
         # 内存和磁盘状态
         logger.info("")
@@ -1371,8 +1619,8 @@ async def test_log_processing():
     
     processor = AsyncLogProcessor()
     
-    # 检查日志文件
-    log_files = processor.log_reader.get_available_log_files()
+    # 检查日志文件（修复：使用 await）
+    log_files = await processor.log_reader.get_available_log_files()
     if not log_files:
         print(" 没有找到日志文件")
         print(f"请检查日志目录: {LOG_DIR}")
