@@ -1,1 +1,7 @@
 export const TitleColor = '#bcdcff'
+export const PrimaryBlue = '#1a73e8'
+export const SecondaryBlue = '#4285f4'
+export const DarkBlue = '#0d47a1'
+export const LightBlue = '#64b5f6'
+export const TechBlue = '#00bcd4'
+export const AccentBlue = '#2196f3'

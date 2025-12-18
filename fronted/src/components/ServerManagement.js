@@ -19,7 +19,9 @@ const Header = styled.div`
 
 const Title = styled.h2`
   margin: 0;
-  color: #1a237e;
+  color: #64b5f6;
+  text-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
+  font-weight: 600;
 `;
 
 const ServerManagement = () => {
@@ -107,6 +109,12 @@ const ServerManagement = () => {
       key: 'os',
     },
     {
+      title: '所属僵尸网络',
+      dataIndex: 'botnet_name',
+      key: 'botnet_name',
+      render: (botnet_name) => botnet_name || '-',
+    },
+    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -164,6 +172,7 @@ const ServerManagement = () => {
       domain: server.domain,
       status: server.status,
       os: server.os,
+      botnet_name: server.botnet_name,
     });
     setModalVisible(true);
   };
@@ -306,6 +315,14 @@ const ServerManagement = () => {
             rules={[{ required: true, message: '请输入操作系统' }]}
           >
             <Input placeholder="例如：CentOS 7.9" />
+          </Form.Item>
+
+          <Form.Item
+            name="botnet_name"
+            label="所控制的僵尸网络"
+            rules={[{ required: false, message: '请输入僵尸网络名称' }]}
+          >
+            <Input placeholder="例如：mirai" />
           </Form.Item>
         </Form>
       </Modal>
