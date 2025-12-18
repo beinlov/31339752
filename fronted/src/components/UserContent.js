@@ -28,8 +28,8 @@ const TopBar = styled.div`
 const Button = styled.button`
   padding: 10px 18px;
   border-radius: 8px;
-  border: none;
-  background: #1a237e;
+  border: 1px solid rgba(100, 181, 246, 0.5);
+  background: linear-gradient(90deg, #1565c0, #1a73e8);
   color: white;
   cursor: pointer;
   transition: all 0.25s ease;
@@ -37,11 +37,14 @@ const Button = styled.button`
   align-items: center;
   gap: 8px;
   font-size: 14px;
+  box-shadow: 0 0 15px rgba(26, 115, 232, 0.3);
+  font-weight: 500;
   
   &:hover {
-    background: #0d1642;
+    background: linear-gradient(90deg, #0d47a1, #1565c0);
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
+    border-color: rgba(100, 181, 246, 0.8);
   }
   
   &:active {
@@ -49,7 +52,7 @@ const Button = styled.button`
   }
   
   &:disabled {
-    background: #cccccc;
+    background: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -59,10 +62,10 @@ const Button = styled.button`
 const ActionButton = styled(Button)`
   padding: 6px 12px;
   font-size: 13px;
-  background: ${props => props.variant === 'edit' ? '#1976d2' : props.variant === 'delete' ? '#d32f2f' : '#1a237e'};
+  background: ${props => props.variant === 'edit' ? 'linear-gradient(90deg, #1976d2, #2196f3)' : props.variant === 'delete' ? 'linear-gradient(90deg, #d32f2f, #f44336)' : 'linear-gradient(90deg, #1565c0, #1a73e8)'};
   
   &:hover {
-    background: ${props => props.variant === 'edit' ? '#115293' : props.variant === 'delete' ? '#b71c1c' : '#0d1642'};
+    background: ${props => props.variant === 'edit' ? 'linear-gradient(90deg, #115293, #1976d2)' : props.variant === 'delete' ? 'linear-gradient(90deg, #b71c1c, #d32f2f)' : 'linear-gradient(90deg, #0d47a1, #1565c0)'};
   }
 `;
 
@@ -80,22 +83,25 @@ const Table = styled.table`
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
   border-radius: 8px;
   table-layout: fixed;
+  border: 1px solid rgba(100, 181, 246, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 `;
 
 const Th = styled.th`
   padding: 14px;
-  background: #f5f5f5;
+  background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   text-align: left;
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   position: sticky;
   top: 0;
   z-index: 1;
   font-weight: 600;
-  color: #333;
+  color: #64b5f6;
   transition: background 0.2s ease;
+  box-shadow: 0 2px 10px rgba(26, 115, 232, 0.2);
   
   &:hover {
     background: #e0e0e0;
@@ -104,13 +110,14 @@ const Th = styled.th`
 
 const Td = styled.td`
   padding: 14px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
+  color: #e0e0e0;
 `;
 
 const Tr = styled.tr`
   &:hover {
-    background: #f8f9ff;
+    background: rgba(26, 115, 232, 0.15);
   }
   transition: all 0.2s ease;
 `;
@@ -126,12 +133,17 @@ const Pagination = styled.div`
 
 const PageButton = styled.button`
   padding: 5px 10px;
-  border: 1px solid #ddd;
-  background: ${props => props.active ? '#1a237e' : 'white'};
-  color: ${props => props.active ? 'white' : '#333'};
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  box-shadow: ${props => props.active ? '0 0 10px rgba(26, 115, 232, 0.3)' : 'none'};
+  
   &:hover {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
+    border-color: rgba(100, 181, 246, 0.5);
   }
 `;
 
@@ -142,7 +154,8 @@ const ModalOverlay = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -150,11 +163,12 @@ const ModalOverlay = styled.div`
 `;
 
 const ModalContent = styled.div`
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.98) 0%, rgba(26, 35, 50, 0.98) 100%);
   padding: 25px;
   border-radius: 12px;
   width: 450px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(26, 115, 232, 0.3);
+  border: 1px solid rgba(100, 181, 246, 0.3);
   transform: translateY(0);
   animation: slideIn 0.3s ease;
   
@@ -174,11 +188,12 @@ const ModalHeader = styled.div`
   font-size: 22px;
   font-weight: bold;
   margin-bottom: 20px;
-  color: #1a237e;
-  border-bottom: 2px solid #e0e0e0;
+  color: #64b5f6;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   padding-bottom: 15px;
   display: flex;
   align-items: center;
+  text-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
   
   &::before {
     content: ${props => props.isEdit ? '"✏️"' : '"👤"'};

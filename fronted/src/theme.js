@@ -1,5 +1,5 @@
 module.exports = {
-  'primary-color': '#1DA57A',
-  'link-color': '#1DA57A',
-  'border-radius-base': '2px',
+  'primary-color': '#1a73e8',
+  'link-color': '#1a73e8',
+  'border-radius-base': '4px',
 }; 
