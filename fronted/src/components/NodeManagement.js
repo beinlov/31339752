@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
-import { getUserLocation } from '../utils/index';
 
 // 样式定义
 const Container = styled.div`
@@ -146,7 +145,7 @@ const Table = styled.div`
 
 const TableHeader = styled.div`
   display: grid;
-  grid-template-columns: 60px 180px 160px 1fr 120px;
+  grid-template-columns: 60px 220px 1fr 200px;
   padding: 16px;
   background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   border-bottom: 2px solid rgba(100, 181, 246, 0.3);
@@ -172,7 +171,7 @@ const TableHeader = styled.div`
 
 const TableRow = styled.div`
   display: grid;
-  grid-template-columns: 60px 180px 160px 1fr 120px;
+  grid-template-columns: 60px 220px 1fr 200px;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
@@ -298,7 +297,7 @@ const PageButton = styled.button`
 
 const StatsContainer = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-bottom: 20px;
   flex-shrink: 0;
@@ -310,41 +309,6 @@ const ChartsContainer = styled.div`
   gap: 20px;
   margin-bottom: 20px;
   flex-shrink: 0;
-`;
-
-const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 0.85em;
-  font-weight: 500;
-  background-color: ${props => props.status === '在线' ? '#e8f5e9' : '#ffebee'};
-  color: ${props => props.status === '在线' ? '#2e7d32' : '#c62828'};
-  border: 1px solid ${props => props.status === '在线' ? '#a5d6a7' : '#ef9a9a'};
-
-  &::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: ${props => props.status === '在线' ? '#2e7d32' : '#c62828'};
-    margin-right: 6px;
-    animation: ${props => props.status === '在线' ? 'pulse 2s infinite' : 'none'};
-  }
-
-  @keyframes pulse {
-    0% {
-      box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.7);
-    }
-    70% {
-      box-shadow: 0 0 0 6px rgba(46, 125, 50, 0);
-    }
-    100% {
-      box-shadow: 0 0 0 0 rgba(46, 125, 50, 0);
-    }
-  }
 `;
 
 const CountryFlag = styled.span`
@@ -451,15 +415,27 @@ const getRelativeTime = (date) => {
   return '刚刚';
 };
 
+const formatDateTime = (value) => {
+  if (!value) return '未知';
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '未知';
+
+  const pad = (num) => String(num).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
+};
+
 const NodeManagement = ({ networkType: propNetworkType }) => {
   const [nodes, setNodes] = useState([]);
   const [selectedNodes, setSelectedNodes] = useState([]);
-  const [operation, setOperation] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [filter, setFilter] = useState('all'); // 'all', 'online', 'offline'
-  const [isOnlineActive, setIsOnlineActive] = useState(false);
-  const [isOfflineActive, setIsOfflineActive] = useState(false);
+  const [sortBy, setSortBy] = useState(''); // 筛选方式: 'ip', 'country', 'last_active'
   const [isSelectAllActive, setIsSelectAllActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [networkType, setNetworkType] = useState(propNetworkType || 'asruex');
@@ -501,10 +477,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 统一的数据获取 effect（节点列表数据）
   useEffect(() => {
     if (networkType) {
-      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}, filter=${filter}`);
+      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}`);
       fetchNodesData();
     }
-  }, [networkType, currentPage, pageSize, filter]); // 依赖项包含所有会触发重新获取的状态
+  }, [networkType, currentPage, pageSize]); // 依赖项包含所有会触发重新获取的状态
 
   // 获取完整的图表统计数据
   const fetchChartStats = async () => {
@@ -557,13 +533,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         page_size: pageSize,
       });
 
-      // 添加过滤条件
-      if (filter === 'online') {
-        params.append('status', 'active');
-      } else if (filter === 'offline') {
-        params.append('status', 'inactive');
-      }
-
       // 如果有搜索词且看起来是国家名，添加country过滤
       if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
         params.append('country', searchTerm);
@@ -601,17 +570,21 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         }
       }
 
-      const formattedNodes = Array.from(mapByIp.values()).map(node => ({
-        id: node.id,
-        ip: node.ip,
-        country: node.country || '未知',
-        province: node.province || '',
-        city: node.city || '',
-        status: node.status === 'active' ? '在线' : '下线',
-        longitude: node.longitude,
-        latitude: node.latitude,
-        lastSeen: node.last_active
-      }));
+      const formattedNodes = Array.from(mapByIp.values()).map(node => {
+        const lastSeenRaw = node.last_active;
+        return {
+          id: node.id,
+          ip: node.ip,
+          country: node.country || '未知',
+          province: node.province || '',
+          city: node.city || '',
+          status: node.status === 'active' ? '在线' : '下线',
+          longitude: node.longitude,
+          latitude: node.latitude,
+          lastSeen: lastSeenRaw,
+          lastSeenFormatted: formatDateTime(lastSeenRaw)
+        };
+      });
 
       setNodes(formattedNodes);
       setTotalPages(result.data.pagination.total_pages);
@@ -649,18 +622,56 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
   // 过滤和分页逻辑
   const filteredNodes = (nodes || []).filter(node => {
-    const matchesSearch =
-      node.country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      node.ip?.includes(searchTerm);
-    const matchesFilter =
-      filter === 'all' ? true :
-      filter === 'online' ? node.status === '在线' :
-      filter === 'offline' ? node.status === '下线' : true;
-    return matchesSearch && matchesFilter;
+    const rawTerm = searchTerm.trim();
+    const term = rawTerm.toLowerCase();
+
+    if (!rawTerm) {
+      return true;
+    }
+
+    if (sortBy === 'ip') {
+      return (node.ip || '').toLowerCase().includes(term);
+    }
+
+    if (sortBy === 'country') {
+      return [node.country, node.province, node.city]
+        .filter(Boolean)
+        .some(value => value.toLowerCase().includes(term));
+    }
+
+    if (sortBy === 'last_active') {
+      return (node.lastSeenFormatted || '').includes(rawTerm);
+    }
+
+    return (node.ip || '').toLowerCase().includes(term) ||
+      (node.country || '').toLowerCase().includes(term);
   });
 
-  // 显示完整的当前页结果，允许在容器内滚动
-  const displayedNodes = filteredNodes;
+  // 根据筛选方式调整排序
+  const displayedNodes = useMemo(() => {
+    const list = [...filteredNodes];
+    if (sortBy === 'last_active') {
+      list.sort((a, b) => {
+        const timeA = new Date(a.lastSeen || 0).getTime();
+        const timeB = new Date(b.lastSeen || 0).getTime();
+        return timeB - timeA;
+      });
+    }
+    return list;
+  }, [filteredNodes, sortBy]);
+
+  const searchPlaceholder = useMemo(() => {
+    switch (sortBy) {
+      case 'ip':
+        return '按IP搜索，例如：192.168';
+      case 'country':
+        return '按国家/省份/城市搜索，例如：中国';
+      case 'last_active':
+        return '按最后活跃日期搜索，例如：2025/12/11';
+      default:
+        return '搜索IP/国家/操作系统';
+    }
+  }, [sortBy]);
 
   // 处理节点选择
   const handleNodeSelect = (nodeId) => {
@@ -681,30 +692,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       setSelectedNodes(availableNodes);
       setIsSelectAllActive(true);
     }
-  };
-
-  // 处理在线/下线过滤
-  const handleFilterChange = (newFilter) => {
-    if (newFilter === 'online') {
-      if (isOnlineActive) {
-        setFilter('all');
-        setIsOnlineActive(false);
-      } else {
-        setFilter('online');
-        setIsOnlineActive(true);
-        setIsOfflineActive(false);
-      }
-    } else if (newFilter === 'offline') {
-      if (isOfflineActive) {
-        setFilter('all');
-        setIsOfflineActive(false);
-      } else {
-        setFilter('offline');
-        setIsOfflineActive(true);
-        setIsOnlineActive(false);
-      }
-    }
-    setCurrentPage(1);
   };
 
   // 根据国家生成模拟操作系统数据
@@ -737,75 +724,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     if (rand < 0.7) return 'Windows 11';
     if (rand < 0.9) return 'Ubuntu 20.04';
     return 'macOS';
-  };
-
-  // 处理节点清除/抑制操作
-  const handleOperation = async () => {
-    if (!operation || selectedNodes.length === 0) return;
-
-    setIsLoading(true);
-    try {
-      const endpoint = 'http://localhost:8000/api/clean-botnet';
-
-      // 获取选中节点的IP地址
-      const selectedIPs = selectedNodes.map(nodeId =>
-        nodes.find(node => node.id === nodeId)?.ip
-      ).filter(ip => ip);
-
-      // 获取操作者的IP地理位置
-      const locationInfo = await getUserLocation();
-      console.log('操作者IP地理位置:', locationInfo);
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          botnet_type: networkType,
-          target_machines: selectedIPs,
-          clean_method: operation,
-          username: localStorage.getItem('username') || 'admin',
-          location: locationInfo.location,
-          operator_ip: locationInfo.ip  // 添加操作者IP
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Operation failed');
-      }
-
-      const result = await response.json();
-
-      // 显示操作已开始的提示
-      alert(`操作已开始: ${result.message}\n影响节点数: ${result.affected_machines}\n\n清理过程将在后台继续，您可以继续使用系统。`);
-
-      // 重置选择状态
-      setSelectedNodes([]);
-      setOperation('');
-
-      // 延迟一段时间后刷新数据，让后台有时间处理一部分
-      setTimeout(async () => {
-        await fetchNodesData();
-      }, 5000);
-
-      // 设置定时刷新，以便看到后台处理的进度
-      const refreshInterval = setInterval(async () => {
-        await fetchNodesData();
-      }, 10000); // 每10秒刷新一次
-
-      // 60秒后停止自动刷新
-      setTimeout(() => {
-        clearInterval(refreshInterval);
-      }, 60000);
-
-    } catch (error) {
-      console.error('Error during operation:', error);
-      alert(`操作失败: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   // 准备图表数据 - 使用 useMemo 缓存，避免不必要的重新渲染
@@ -988,13 +906,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     };
   }, [chartStats.activeNodes, chartStats.inactiveNodes]); // 只依赖图表统计数据
 
-  useEffect(() => {
-    // 如果执行了操作，更新选择状态
-    if (operation && selectedNodes.length > 0) {
-      handleOperation();
-    }
-  }, [operation]);
-
   return (
     <Container>
       <StatsContainer>
@@ -1004,20 +915,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           trend="全部节点"
           background="linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)"
           titleIcon="📊"
-        />
-        <StatCard
-          title="在线节点"
-          value={nodeStats.onlineNodes}
-          trend={`${((nodeStats.onlineNodes / nodeStats.totalNodes) * 100).toFixed(1)}% 在线率`}
-          background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
-          titleIcon="🟢"
-        />
-        <StatCard
-          title="下线节点"
-          value={nodeStats.offlineNodes}
-          trend={`${((nodeStats.offlineNodes / nodeStats.totalNodes) * 100).toFixed(1)}% 下线率`}
-          background="linear-gradient(135deg, #c62828 0%, #b71c1c 100%)"
-          titleIcon="🔴"
         />
         <StatCard
           title="已选节点"
@@ -1043,22 +940,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
       <TopBar>
         <SearchInput
-          placeholder="搜索IP/国家/操作系统"
+          placeholder={searchPlaceholder}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <Button
-          active={isOnlineActive}
-          onClick={() => handleFilterChange('online')}
-        >
-          <span>🟢</span> 在线节点
-        </Button>
-        <Button
-          active={isOfflineActive}
-          onClick={() => handleFilterChange('offline')}
-        >
-          <span>🔴</span> 下线节点
-        </Button>
         <Button
           active={isSelectAllActive}
           onClick={handleSelectAll}
@@ -1066,14 +951,14 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           <span>✓</span> 一键勾选
         </Button>
         <Select
-          value={operation}
-          onChange={(e) => setOperation(e.target.value)}
-          disabled={isLoading || selectedNodes.length === 0}
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          disabled={isLoading}
         >
-          <option value="">操作节点</option>
-          <option value="clear">清除</option>
-          <option value="reuse">再利用</option>
-          <option value="ddos">DDos攻击</option>
+          <option value="">筛选节点</option>
+          <option value="ip">IP</option>
+          <option value="country">国家</option>
+          <option value="last_active">最后活跃时间</option>
         </Select>
       </TopBar>
 
@@ -1082,7 +967,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           <TableHeader>
             <div>选择</div>
             <div>IP地址</div>
-            <div>状态</div>
             <div>地理位置</div>
             <div>最后活动</div>
           </TableHeader>
@@ -1110,40 +994,33 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
                 </IpContainer>
               </div>
               <div>
-                <StatusBadge status={node.status}>
-                  {node.status}
-                </StatusBadge>
+                <LocationInfo>
+                  <div className="location-primary">
+                    <CountryFlag>{countryFlags[node.country] || '🌐'}</CountryFlag>
+                    {node.country}
+                  </div>
+                  {(node.province || node.city) && (
+                    <div className="location-secondary">
+                      {[node.province, node.city].filter(Boolean).join(' - ')}
+                    </div>
+                  )}
+                  {(node.longitude && node.latitude) && (
+                    <div className="coordinates">
+                      {node.longitude.toFixed(4)}° E, {node.latitude.toFixed(4)}° N
+                    </div>
+                  )}
+                </LocationInfo>
               </div>
-              <LocationInfo>
-                <div className="location-primary">
-                  <CountryFlag>{countryFlags[node.country] || '🌐'}</CountryFlag>
-                  {node.country}
-                </div>
-                {(node.province || node.city) && (
-                  <div className="location-secondary">
-                    {[node.province, node.city].filter(Boolean).join(' - ')}
+              <div>
+                <TimeInfo>
+                  <div className="time-absolute">
+                    {node.lastSeenFormatted}
                   </div>
-                )}
-                {(node.longitude && node.latitude) && (
-                  <div className="coordinates">
-                    {node.longitude.toFixed(4)}° E, {node.latitude.toFixed(4)}° N
+                  <div className="time-relative">
+                    {getRelativeTime(new Date(node.lastSeen))}
                   </div>
-                )}
-              </LocationInfo>
-              <TimeInfo>
-                <div className="time-absolute">
-                  {new Date(node.lastSeen).toLocaleString('zh-CN', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </div>
-                <div className="time-relative">
-                  {getRelativeTime(new Date(node.lastSeen))}
-                </div>
-              </TimeInfo>
+                </TimeInfo>
+              </div>
             </TableRow>
           ))}
         </Table>
