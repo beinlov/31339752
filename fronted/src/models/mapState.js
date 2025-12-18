@@ -240,7 +240,7 @@ export default {
           dispatch({ type: 'fetchBotnetDistribution' });
           dispatch({ type: 'fetchWorldData' });
 
-          // Set up single timer for all data updates with 30 second interval
+          // Set up single timer for all data updates with 10 second interval
           dataTimer = setInterval(() => {
             dispatch({ type: 'fetchProvinceData' });
             dispatch({ type: 'fetchBotnetDistribution' });
@@ -250,7 +250,7 @@ export default {
             if (state.currentMap !== 'china') {
               dispatch({ type: 'fetchCityData' });
             }
-          }, 1700); // Changed from 1000ms to 30000ms (30 seconds)
+          }, 10000); // 10秒轮询一次，避免过于频繁导致后端压力
         }
       });
     }

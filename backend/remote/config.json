@@ -8,7 +8,7 @@
   "botnet": {
     "botnet_type": "ramnit",
     "log_dir": "/home/ubuntu",
-    "log_file_pattern": "ramnit_{date}.log"
+    "log_file_pattern": "ramnit_{datetime}.log"
   },
   "processing": {
     "upload_interval": 300,
@@ -25,7 +25,8 @@
   "files": {
     "state_file": "/tmp/uploader_state.json",
     "duplicate_cache_file": "/tmp/ip_cache.json",
-    "offset_state_file": "/tmp/file_offsets.json"
+    "offset_state_file": "/tmp/file_offsets.json",
+    "log_file": "/tmp/remote_uploader.log"
   },
   "cache": {
     "expire_days": 7

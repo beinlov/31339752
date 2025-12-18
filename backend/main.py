@@ -401,138 +401,156 @@ async def get_upload_status():
 
 @app.get("/api/province-amounts")
 async def get_province_amounts(botnet_type: Optional[str] = None):
-    connection = None
-    cursor = None
+    """获取省份数据 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        """在线程池中执行数据库查询"""
+        connection = None
+        cursor = None
+        try:
+            # 建立数据库连接
+            connection = pymysql.connect(**DB_CONFIG)
+            cursor = connection.cursor()
+            
+            # 获取僵尸网络类型
+            cursor.execute("SELECT name, table_name FROM botnet_types")
+            botnet_tables = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            # 如果指定了僵尸网络类型，只查询该类型
+            if botnet_type:
+                if botnet_type not in botnet_tables:
+                    raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
+                botnet_tables = {botnet_type: botnet_tables[botnet_type]}
+
+            # 构建动态查询
+            # 首先获取所有省份
+            provinces_query = " UNION ".join(
+                f"SELECT DISTINCT province FROM {table_name}"
+                for table_name in botnet_tables.values()
+            )
+            cursor.execute(f"SELECT DISTINCT province FROM ({provinces_query}) as provinces WHERE province IS NOT NULL")
+
+            provinces = [row[0] for row in cursor.fetchall()]
+            
+            # 然后为每个僵尸网络类型构建查询
+            query_parts = []
+            for province in provinces:
+                subqueries = []
+                for botnet_name, table_name in botnet_tables.items():
+                    # 使用china_botnet_xxx表
+                    china_table = f"china_botnet_{botnet_name}"
+                    subqueries.append(f"""
+                        SELECT 
+                            '{province}' as province,
+                            '{botnet_name}' as botnet_type,
+                            COALESCE(SUM(infected_num), 0) as total
+                        FROM {china_table}
+                        WHERE province = %s
+                    """)
+                query_parts.extend(subqueries)
+
+            # 执行查询
+            query = " UNION ALL ".join(query_parts)
+            params = [province for province in provinces for _ in botnet_tables]
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            # 转换为响应格式
+            province_amounts = {name: [] for name in botnet_tables.keys()}
+
+            for province, botnet_type_result, total in results:
+                province_amounts[botnet_type_result].append({
+                    "province": province,
+                    "amount": int(total)
+                })
+
+            return province_amounts
+            
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
     try:
-        # 获取所有注册的僵尸网络类型
-        botnet_tables = await get_botnet_tables()
-
-        # 如果指定了僵尸网络类型，只查询该类型
-        if botnet_type:
-            if botnet_type not in botnet_tables:
-                raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
-            botnet_tables = {botnet_type: botnet_tables[botnet_type]}
-
-        # 建立数据库连接
-        connection = pymysql.connect(**DB_CONFIG)
-        cursor = connection.cursor()
-
-        # 构建动态查询
-        # 首先获取所有省份
-        provinces_query = " UNION ".join(
-            f"SELECT DISTINCT province FROM {table_name}"
-            for table_name in botnet_tables.values()
-        )
-        cursor.execute(f"SELECT DISTINCT province FROM ({provinces_query}) as provinces WHERE province IS NOT NULL")
-
-        provinces = [row[0] for row in cursor.fetchall()]
-        print(provinces)
-        # 然后为每个僵尸网络类型构建查询
-        query_parts = []
-        for province in provinces:
-            subqueries = []
-            for botnet_name, table_name in botnet_tables.items():
-                # 使用china_botnet_xxx表
-                china_table = f"china_botnet_{botnet_name}"
-                subqueries.append(f"""
-                    SELECT 
-                        '{province}' as province,
-                        '{botnet_name}' as botnet_type,
-                        COALESCE(SUM(infected_num), 0) as total
-                    FROM {china_table}
-                    WHERE province = %s
-                """)
-            query_parts.extend(subqueries)
-
-        # 执行查询
-        query = " UNION ALL ".join(query_parts)
-        params = [province for province in provinces for _ in botnet_tables]
-        cursor.execute(query, params)
-        results = cursor.fetchall()
-
-        # 转换为响应格式
-        province_amounts = {name: [] for name in botnet_tables.keys()}
-
-        for province, botnet_type, total in results:
-            province_amounts[botnet_type].append({
-                "province": province,
-                "amount": int(total)
-            })
-
-        return province_amounts
-
+        # 在线程池中执行数据库查询，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _query_database)
+        return result
     except Exception as e:
         logger.error(f"Database error in get_province_amounts: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
-
 
 @app.get("/api/world-amounts")
 async def get_world_amounts(botnet_type: Optional[str] = None):
-    connection = None
-    cursor = None
+    """获取全球数据 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        """在线程池中执行数据库查询"""
+        connection = None
+        cursor = None
+        try:
+            # 建立数据库连接
+            connection = pymysql.connect(**DB_CONFIG)
+            cursor = connection.cursor()
+
+            # 获取僵尸网络类型
+            cursor.execute("SELECT name, table_name FROM botnet_types")
+            botnet_tables = {row[0]: row[1] for row in cursor.fetchall()}
+
+            # 如果指定了僵尸网络类型，只查询该类型
+            if botnet_type:
+                if botnet_type not in botnet_tables:
+                    raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
+                botnet_types = [botnet_type]
+            else:
+                botnet_types = list(botnet_tables.keys())
+
+            # 构建查询
+            query_parts = []
+            for bot_type in botnet_types:
+                # 使用global_botnet_xxx表
+                global_table = f"global_botnet_{bot_type}"
+                query_parts.append(f"""
+                    SELECT 
+                        country,
+                        '{bot_type}' as botnet_type,
+                        infected_num
+                    FROM {global_table}
+                """)
+
+            # 执行查询
+            if query_parts:
+                query = " UNION ALL ".join(query_parts)
+                cursor.execute(query)
+                results = cursor.fetchall()
+            else:
+                results = []
+
+            # 转换为响应格式
+            world_amounts = {bot_type: [] for bot_type in botnet_types}
+
+            for country, bot_type_result, amount in results:
+                world_amounts[bot_type_result].append({
+                    "country": country,
+                    "amount": int(amount or 0)
+                })
+
+            return world_amounts
+            
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
     try:
-        # 建立数据库连接
-        connection = pymysql.connect(**DB_CONFIG)
-        cursor = connection.cursor()
-
-        # 获取所有注册的僵尸网络类型
-        botnet_tables = await get_botnet_tables()
-
-        # 如果指定了僵尸网络类型，只查询该类型
-        if botnet_type:
-            if botnet_type not in botnet_tables:
-                raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
-            botnet_types = [botnet_type]
-        else:
-            botnet_types = list(botnet_tables.keys())
-
-        # 构建查询
-        query_parts = []
-        for bot_type in botnet_types:
-            # 使用global_botnet_xxx表
-            global_table = f"global_botnet_{bot_type}"
-            query_parts.append(f"""
-                SELECT 
-                    country,
-                    '{bot_type}' as botnet_type,
-                    infected_num
-                FROM {global_table}
-            """)
-
-        # 执行查询
-        if query_parts:
-            query = " UNION ALL ".join(query_parts)
-            cursor.execute(query)
-            results = cursor.fetchall()
-        else:
-            results = []
-
-        # 转换为响应格式
-        world_amounts = {bot_type: [] for bot_type in botnet_types}
-
-        for country, bot_type, amount in results:
-            world_amounts[bot_type].append({
-                "country": country,
-                "amount": int(amount or 0)
-            })
-
-        return world_amounts
-
+        # 在线程池中执行数据库查询，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _query_database)
+        return result
     except Exception as e:
         logger.error(f"Database error in get_world_amounts: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-    finally:
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
 
 
 @app.get("/api/industry-distribution")
@@ -553,35 +571,40 @@ async def get_industry_distribution():
 
 @app.get("/api/user-events")
 async def get_user_events():
-    conn = None
-    cursor = None
-    try:
-        conn = pymysql.connect(**DB_CONFIG)
-        cursor = conn.cursor(DictCursor)
+    """获取用户事件 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        conn = None
+        cursor = None
+        try:
+            conn = pymysql.connect(**DB_CONFIG)
+            cursor = conn.cursor(DictCursor)
 
-        query = """
-        SELECT 
-            DATE_FORMAT(event_time, '%Y-%m-%d %H:%i:%s') as time,
-            username,
-            ip,
-            location,
-            botnet_type,
-            command
-        FROM user_events
-        ORDER BY event_time DESC
-        LIMIT 20
-        """
-        cursor.execute(query)
-        results = cursor.fetchall()
-        return results
-    except Exception as e:
-        logger.error(f"Error fetching user events: {e}")
-        return []  # 返回空数组而不是抛出异常
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+            query = """
+            SELECT 
+                DATE_FORMAT(event_time, '%Y-%m-%d %H:%i:%s') as time,
+                username,
+                ip,
+                location,
+                botnet_type,
+                command
+            FROM user_events
+            ORDER BY event_time DESC
+            LIMIT 20
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching user events: {e}")
+            return []  # 返回空数组而不是抛出异常
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query_database)
 
 
 # 添加异常报告模型
@@ -596,40 +619,45 @@ class AnomalyReport(BaseModel):
 
 @app.get("/api/anomaly-reports")
 async def get_anomaly_reports():
-    conn = None
-    cursor = None
-    try:
-        # 查询数据库中的异常报告
-        conn = pymysql.connect(**DB_CONFIG)
-        cursor = conn.cursor(DictCursor)
-
-        # 尝试查询异常报告表
+    """获取异常报告 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        conn = None
+        cursor = None
         try:
-            query = """
-            SELECT 
-                id, ip, location, 
-                DATE_FORMAT(report_time, '%Y/%m/%d %H:%i') as time,
-                description, severity
-            FROM anomaly_reports
-            ORDER BY report_time DESC
-            LIMIT 20
-            """
-            cursor.execute(query)
-            results = cursor.fetchall()
+            # 查询数据库中的异常报告
+            conn = pymysql.connect(**DB_CONFIG)
+            cursor = conn.cursor(DictCursor)
+
+            # 尝试查询异常报告表
+            try:
+                query = """
+                SELECT 
+                    id, ip, location, 
+                    DATE_FORMAT(report_time, '%Y/%m/%d %H:%i') as time,
+                    description, severity
+                FROM anomaly_reports
+                ORDER BY report_time DESC
+                LIMIT 20
+                """
+                cursor.execute(query)
+                results = cursor.fetchall()
+            except Exception as e:
+                # 如果表不存在，返回模拟数据
+                logger.warning(f"异常报告表查询失败: {e}")
+                results = []
+            return results
         except Exception as e:
-            # 如果表不存在，返回模拟数据
-            logger.warning(f"异常报告表查询失败: {e}")
-            results = []
-        return results
-    except Exception as e:
-        logger.error(f"Error fetching anomaly reports: {e}")
-        # 发生错误时返回空数组
-        return []
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+            logger.error(f"Error fetching anomaly reports: {e}")
+            # 发生错误时返回空数组
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query_database)
 
 
 class IPLocationRequest(BaseModel):
