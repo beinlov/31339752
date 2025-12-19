@@ -110,6 +110,9 @@ async def get_servers(
         
         servers = list(cursor.fetchall())
         
+        # 准备节点总数缓存，减少重复查询
+        node_counts: Dict[str, Optional[int]] = {}
+
         # 处理datetime格式和字段名转换
         for server in servers:
             if isinstance(server['created_at'], datetime):
@@ -119,6 +122,20 @@ async def get_servers(
             # 将Botnet_Name转换为botnet_name以匹配前端
             if 'Botnet_Name' in server:
                 server['botnet_name'] = server.pop('Botnet_Name')
+            
+            botnet_name = server.get('botnet_name')
+            if botnet_name:
+                if botnet_name not in node_counts:
+                    table_name = f"botnet_nodes_{botnet_name}"
+                    try:
+                        cursor.execute(f"SELECT COUNT(*) as total FROM `{table_name}`")
+                        node_counts[botnet_name] = cursor.fetchone()['total']
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch node count for {table_name}: {e}")
+                        node_counts[botnet_name] = None
+                server['node_count'] = node_counts.get(botnet_name)
+            else:
+                server['node_count'] = None
         
         response_data = {
             "status": "success",
@@ -166,6 +183,18 @@ async def get_server(server_id: int):
         # 将Botnet_Name转换为botnet_name以匹配前端
         if 'Botnet_Name' in server:
             server['botnet_name'] = server.pop('Botnet_Name')
+        
+        botnet_name = server.get('botnet_name')
+        if botnet_name:
+            table_name = f"botnet_nodes_{botnet_name}"
+            try:
+                cursor.execute(f"SELECT COUNT(*) as total FROM `{table_name}`")
+                server['node_count'] = cursor.fetchone()['total']
+            except Exception as e:
+                logger.warning(f"Failed to fetch node count for {table_name}: {e}")
+                server['node_count'] = None
+        else:
+            server['node_count'] = None
         
         return {
             "status": "success",
