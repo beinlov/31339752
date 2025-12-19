@@ -115,6 +115,12 @@ const ServerManagement = () => {
       render: (botnet_name) => botnet_name || '-',
     },
     {
+      title: '节点总数统计',
+      dataIndex: 'node_count',
+      key: 'node_count',
+      render: (count) => (count === null || count === undefined ? 'Null' : count),
+    },
+    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
