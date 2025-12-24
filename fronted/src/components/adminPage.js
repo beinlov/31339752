@@ -357,7 +357,7 @@ const AdminPage = ({ history }) => {
       },
       {
         id: 'server',
-        name: '服务器管理',
+        name: 'C2管理',
         component: ServerManagement,
         icon: '💻' // 服务器图标 (电脑符号)
       },
@@ -381,7 +381,7 @@ const AdminPage = ({ history }) => {
       return [
         {
           id: 'clear',
-          name: '抑制阻断',
+          name: '节点监控与清除',
           component: NodeManagement,
           icon: '&#xe88e;' // monitoring icon
         },
@@ -392,7 +392,7 @@ const AdminPage = ({ history }) => {
       return [
         {
           id: 'clear',
-          name: '清除',
+          name: '节点监控与清除',
           component: NodeManagement,
           icon: '&#xe88f;' // clear icon
         },
@@ -409,7 +409,7 @@ const AdminPage = ({ history }) => {
       return [
         {
           id: 'clear',
-          name: '清除',
+          name: '节点监控与清除',
           component: NodeManagement,
           icon: '&#xe88f;' // diagnose icon
         },
