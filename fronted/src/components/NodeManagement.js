@@ -200,7 +200,7 @@ const LocationInfo = styled.div`
 
   .location-primary {
     font-weight: 500;
-    color: #333;
+    color: #f5f9ff;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -208,13 +208,13 @@ const LocationInfo = styled.div`
 
   .location-secondary {
     font-size: 0.85em;
-    color: #666;
+    color: rgba(255, 255, 255, 0.8);
     margin-left: 22px;
   }
 
   .coordinates {
     font-size: 0.75em;
-    color: #888;
+    color: rgba(255, 255, 255, 0.7);
     margin-left: 22px;
     font-family: monospace;
   }
@@ -227,12 +227,13 @@ const TimeInfo = styled.div`
 
   .time-absolute {
     font-size: 0.9em;
-    color: #333;
+    color: #f5f9ff;
+    font-weight: 500;
   }
 
   .time-relative {
     font-size: 0.8em;
-    color: #666;
+    color: rgba(255, 255, 255, 0.75);
   }
 `;
 
@@ -968,7 +969,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
             <div>选择</div>
             <div>IP地址</div>
             <div>地理位置</div>
-            <div>最后活动</div>
+            <div>最近活跃时间</div>
           </TableHeader>
           {displayedNodes.map(node => (
             <TableRow key={node.id} disabled={node.status === '下线'}>
