@@ -307,7 +307,7 @@ const StatsContainer = styled.div`
 
 const ChartsContainer = styled.div`
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 20px;
 `;
@@ -665,37 +665,57 @@ const UserContent = () => {
     };
   };
 
-  // 新增：用户操作统计表格
-  const renderUserOperationsTable = () => {
+  // 新增：用户操作统计表格（作为卡片样式）
+  const renderUserOperationsCard = () => {
     if (!operationStats.user_operations || operationStats.user_operations.length === 0) {
-      return null;
+      return (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(100, 181, 246, 0.2)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#64b5f6', fontWeight: '600', fontSize: '16px' }}>用户操作统计</h3>
+          <p style={{ color: '#8db4d8' }}>暂无数据</p>
+        </div>
+      );
     }
 
     return (
-      <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-        <h3 style={{ marginBottom: '15px', color: '#333', fontWeight: '600' }}>用户操作统计</h3>
-        <Table>
-          <thead>
-            <tr>
-              <Th>用户名</Th>
-              <Th>操作次数</Th>
-              <Th>活跃天数</Th>
-              <Th>操作僵尸网络类型</Th>
-              <Th>最后操作时间</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {operationStats.user_operations.map((op, index) => (
-              <Tr key={index}>
-                <Td>{op.username}</Td>
-                <Td>{op.operation_count}</Td>
-                <Td>{op.active_days}</Td>
-                <Td>{op.botnet_types}</Td>
-                <Td>{op.last_operation}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%)',
+        borderRadius: '12px',
+        padding: '20px',
+        border: '1px solid rgba(100, 181, 246, 0.2)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+        overflow: 'hidden'
+      }}>
+        <h3 style={{ marginBottom: '15px', color: '#64b5f6', fontWeight: '600', fontSize: '16px' }}>用户操作统计</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <Table style={{ marginBottom: 0 }}>
+            <thead>
+              <tr>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>用户名</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>操作次数</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>活跃天数</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>操作僵尸网络类型</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>最后操作时间</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {operationStats.user_operations.map((op, index) => (
+                <Tr key={index}>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.username}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.operation_count}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.active_days}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.botnet_types}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.last_operation}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
       </div>
     );
   };
@@ -758,12 +778,9 @@ const UserContent = () => {
       </StatsContainer>
 
       <ChartsContainer>
-        <ChartCard option={getActivityTrendOption()} height="300px" />
-        <ChartCard option={getRoleDistributionOption()} height="300px" />
         <ChartCard option={getOperationTypeOption()} height="300px" />
+        {renderUserOperationsCard()}
       </ChartsContainer>
-
-      {renderUserOperationsTable()}
 
       <TopBar>
         <Button onClick={() => {

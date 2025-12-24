@@ -17,11 +17,11 @@ const Container = styled.div`
 
 // 左侧面板 - 统计信息和图表
 const LeftPanel = styled.div`
-  width: 380px;
+  width: 480px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow-y: auto;
   padding-right: 10px;
   
@@ -176,8 +176,8 @@ const Table = styled.div`
 
 const TableHeader = styled.div`
   display: grid;
-  grid-template-columns: 50px 150px 1fr 160px 160px;
-  padding: 12px 14px;
+  grid-template-columns: 40px 115px 160px 125px 125px;
+  padding: 10px 8px;
   background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   font-weight: 600;
@@ -186,10 +186,10 @@ const TableHeader = styled.div`
   top: 0;
   z-index: 1;
   box-shadow: 0 2px 10px rgba(26, 115, 232, 0.2);
-  font-size: 13px;
+  font-size: 11px;
 
   > div {
-    padding: 0 8px;
+    padding: 0 4px;
     display: flex;
     align-items: center;
 
@@ -203,14 +203,14 @@ const TableHeader = styled.div`
 
 const TableRow = styled.div`
   display: grid;
-  grid-template-columns: 50px 150px 1fr 160px 160px;
-  padding: 10px 14px;
+  grid-template-columns: 40px 115px 160px 125px 125px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
   opacity: ${props => props.disabled ? 0.5 : 1};
   background: ${props => props.disabled ? 'rgba(26, 115, 232, 0.05)' : 'transparent'};
   color: #e0e0e0;
-  font-size: 13px;
+  font-size: 11px;
 
   &:hover {
     background: ${props => !props.disabled && 'rgba(26, 115, 232, 0.15)'};
@@ -219,37 +219,37 @@ const TableRow = styled.div`
   }
 
   > div {
-    padding: 0 8px;
+    padding: 0 4px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
   }
 `;
 
 const LocationInfo = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 
   .location-primary {
     font-weight: 500;
     color: #f5f9ff;
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 13px;
+    gap: 3px;
+    font-size: 12px;
   }
 
   .location-secondary {
-    font-size: 11px;
+    font-size: 10px;
     color: rgba(255, 255, 255, 0.7);
-    margin-left: 20px;
+    margin-left: 18px;
   }
 
   .coordinates {
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.6);
-    margin-left: 20px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-left: 18px;
     font-family: monospace;
   }
 `;
@@ -257,33 +257,33 @@ const LocationInfo = styled.div`
 const TimeInfo = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0px;
 
   .time-absolute {
-    font-size: 12px;
+    font-size: 11px;
     color: #f5f9ff;
     font-weight: 500;
   }
 
   .time-relative {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.65);
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
   }
 `;
 
 const IpContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 
   .ip-address {
     font-family: monospace;
     font-weight: 500;
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .ip-copy {
-    font-size: 10px;
+    font-size: 9px;
     color: #64b5f6;
     cursor: pointer;
     opacity: 0;
@@ -336,13 +336,13 @@ const PageButton = styled.button`
 const StatsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 `;
 
 const CountryFlag = styled.span`
   display: inline-block;
-  margin-right: 4px;
-  font-size: 1.1em;
+  margin-right: 3px;
+  font-size: 1em;
 `;
 
 // 国家/地区对应的旗帜emoji
@@ -396,8 +396,8 @@ const Spinner = styled.div`
 // 保留 Checkbox 样式组件
 const Checkbox = styled.input.attrs({ type: 'checkbox' })`
   cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: #1a73e8;
   transition: all 0.2s ease;
 
@@ -769,24 +769,27 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       legend: {
         type: 'scroll',
         orient: 'vertical',
-        right: 5,
-        top: 30,
+        right: 15,
+        top: 35,
         bottom: 20,
         data: countryData.map(item => item.name),
         textStyle: {
           color: '#ffffff',
-          fontSize: 11
-        }
+          fontSize: 12
+        },
+        itemWidth: 14,
+        itemHeight: 14,
+        itemGap: 8
       },
       series: [{
         type: 'pie',
-        radius: ['35%', '65%'],
-        center: ['35%', '55%'],
+        radius: ['38%', '68%'],
+        center: ['32%', '55%'],
         avoidLabelOverlap: false,
         itemStyle: {
-          borderRadius: 8,
+          borderRadius: 10,
           borderColor: '#fff',
-          borderWidth: 1
+          borderWidth: 2
         },
         label: {
           show: false,
@@ -795,7 +798,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         emphasis: {
           label: {
             show: true,
-            fontSize: '14',
+            fontSize: '16',
             fontWeight: 'bold'
           }
         },
@@ -830,7 +833,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
         <ChartCard
           option={getLocationChartOption}
-          height="320px"
+          height="400px"
           accentColor="linear-gradient(90deg, #1a237e, #0d47a1)"
         />
       </LeftPanel>
