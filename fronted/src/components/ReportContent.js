@@ -13,61 +13,95 @@ const Container = styled.div`
   box-sizing: border-box;
   margin-top: -1.5%;
   position: relative;
+  color: #e6efff;
 `;
 
 const TopBar = styled.div`
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 15px;
   margin-bottom: 0px;
   padding: 20px;
   flex-shrink: 0;
+  background: rgba(6, 19, 33, 0.92);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(2, 12, 24, 0.55);
 `;
 
 const SearchGroup = styled.div`
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   flex: 1;
 `;
 
+const StyledSelect = styled.select`
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 160, 220, 0.5);
+  width: 140px;
+  background: rgba(12, 27, 45, 0.9);
+  color: #f5f7ff;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 0 0 1px rgba(34, 75, 130, 0.4);
+
+  &:focus {
+    border-color: #4f8dff;
+    box-shadow: 0 0 0 2px rgba(79, 141, 255, 0.25);
+  }
+
+  option {
+    color: #0b1829;
+  }
+`;
+
 const DateRangeGroup = styled.div`
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-right: 20px;
 `;
 
 const Label = styled.span`
-  color: #333;
+  color: #cfdcff;
   white-space: nowrap;
   font-weight: 500;
 `;
 
 const Input = styled.input`
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 10px 14px;
+  border: 1px solid rgba(120, 160, 220, 0.5);
+  border-radius: 10px;
   width: ${props => props.width || '180px'};
   transition: all 0.2s ease;
+  background: rgba(12, 27, 45, 0.9);
+  color: #f5f7ff;
+  box-shadow: inset 0 0 0 1px rgba(34, 75, 130, 0.4);
   
   &:focus {
     outline: none;
-    border-color: #1a237e;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    border-color: #4f8dff;
+    box-shadow: 0 0 0 2px rgba(79, 141, 255, 0.25);
+  }
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.5);
   }
 `;
 
 const SearchInput = styled(Input)`
   width: 200px;
-  margin-left: 10px;
 `;
 
 const SearchButton = styled.button`
-  padding: 10px 16px;
+  padding: 10px 18px;
   border: none;
-  border-radius: 4px;
-  background: #1a237e;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4f8dff 0%, #2f4adf 100%);
   color: white;
   cursor: pointer;
   display: flex;
@@ -76,9 +110,9 @@ const SearchButton = styled.button`
   transition: all 0.2s ease;
   
   &:hover {
-    background: #0d1642;
+    background: linear-gradient(135deg, #5b96ff 0%, #3a57ff 100%);
     transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 24px rgba(47, 74, 223, 0.35);
   }
   
   &:active {
@@ -91,43 +125,45 @@ const TableContainer = styled.div`
   flex: 1;
   overflow-y: auto;
   min-height: 200px;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 20px 45px rgba(1, 8, 20, 0.65);
   margin-bottom: 0;
   position: relative;
   display: flex;
   flex-direction: column;
+  background: rgba(5, 14, 28, 0.95);
 `;
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border-radius: 8px;
+  background: transparent;
+  border-radius: 16px;
   table-layout: fixed;
 `;
 
 const Th = styled.th`
   padding: 14px;
-  background: #f5f5f5;
+  background: rgba(15, 36, 60, 0.95);
   text-align: left;
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid rgba(56, 96, 140, 0.45);
   position: sticky;
   top: 0;
   z-index: 1;
   font-weight: 600;
-  color: #333;
+  color: #dbe5ff;
 `;
 
 const Td = styled.td`
   padding: 14px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid rgba(49, 81, 120, 0.45);
   transition: all 0.2s ease;
+  color: #eef2ff;
 `;
 
 const Tr = styled.tr`
   &:hover {
-    background: #f0f4ff;
+    background: rgba(39, 76, 128, 0.35);
   }
   transition: all 0.2s ease;
 `;
@@ -139,16 +175,17 @@ const Pagination = styled.div`
   gap: 10px;
   padding: 20px;
   flex-shrink: 0;
+  color: #cfdcff;
 `;
 
 const PageButton = styled.button`
   padding: 6px 12px;
-  border: 1px solid #ddd;
-  background: ${props => props.active ? '#1a237e' : 'white'};
-  color: ${props => props.active ? 'white' : '#333'};
+  border: 1px solid rgba(82, 120, 170, 0.6);
+  background: ${props => props.active ? 'linear-gradient(135deg, #4f8dff, #2f4adf)' : 'rgba(10, 25, 41, 0.8)'};
+  color: ${props => props.active ? 'white' : '#cdd8ff'};
   cursor: pointer;
   transition: all 0.2s ease;
-  border-radius: 4px;
+  border-radius: 8px;
   
   &:hover {
     background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
@@ -171,14 +208,56 @@ const StatsContainer = styled.div`
   gap: 20px;
   margin-bottom: 20px;
   flex-shrink: 0;
+  
+  @media (max-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(200px, 1fr));
+  }
+  
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
-const ChartsContainer = styled.div`
-  display: grid;
-  grid-template-columns: 2fr 1fr;
+const ContentRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   margin-bottom: 20px;
+  width: 100%;
+  align-items: flex-start;
+`;
+
+const SeveritySection = styled.div`
+  flex: 0 0 38%;
+  max-width: 520px;
+  min-width: 360px;
   flex-shrink: 0;
+  
+  @media (max-width: 1400px) {
+    flex: 0 0 45%;
+    max-width: none;
+  }
+
+  @media (max-width: 1200px) {
+    flex: 0 0 100%;
+    max-width: none;
+  }
+`;
+
+const ListSection = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  @media (max-width: 1400px) {
+    flex: 1;
+  }
+
+  @media (max-width: 1200px) {
+    width: 100%;
+  }
 `;
 
 const AnomalyBadge = styled.span`
@@ -245,6 +324,19 @@ const SeverityIndicator = styled.div`
   font-weight: 500;
 `;
 
+const normalizeSeverity = (value) => {
+  if (!value) return 'low';
+  const mapping = {
+    '高危': 'high',
+    '高': 'high',
+    '中危': 'medium',
+    '中': 'medium',
+    '低危': 'low',
+    '低': 'low'
+  };
+  return mapping[value] || value;
+};
+
 const ReportContent = () => {
   const [reports, setReports] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -268,7 +360,11 @@ const ReportContent = () => {
       }
       const data = await response.json();
       console.log('获取到的异常报告数据:', data);
-      setReports(data || []);
+      const normalized = (data || []).map(report => ({
+        ...report,
+        severity: normalizeSeverity(report.severity)
+      }));
+      setReports(normalized);
     } catch (error) {
       console.error('Error fetching reports:', error);
       setError('获取异常报告数据失败，请稍后再试');
@@ -423,7 +519,14 @@ const ReportContent = () => {
     },
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
+      formatter: '{b}: {c} ({d}%)',
+      backgroundColor: 'rgba(6, 19, 33, 0.95)',
+      borderColor: '#4f8dff',
+      borderWidth: 1,
+      textStyle: {
+        color: '#f5f8ff'
+      },
+      padding: 12
     },
     legend: {
       type: 'scroll',
@@ -477,23 +580,36 @@ const ReportContent = () => {
         left: 'center',
         textStyle: {
           fontWeight: 'normal',
-          fontSize: 16
+          fontSize: 16,
+          color: '#f5f8ff'
         }
       },
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
+        formatter: '{b}: {c} ({d}%)',
+        backgroundColor: 'rgba(6, 19, 33, 0.95)',
+        borderColor: '#4f8dff',
+        borderWidth: 1,
+        textStyle: {
+          color: '#f5f8ff'
+        },
+        padding: 12
       },
       legend: {
         bottom: 10,
         left: 'center',
-        data: severityData.map(item => item.name)
+        data: severityData.map(item => item.name),
+        textStyle: {
+          color: '#f5f8ff'
+        }
       },
       series: [{
         type: 'pie',
         radius: '70%',
         center: ['50%', '50%'],
         data: severityData,
+        minAngle: 6,
+        avoidLabelOverlap: false,
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -502,7 +618,18 @@ const ReportContent = () => {
           }
         },
         label: {
-          formatter: '{b}: {c} ({d}%)'
+          formatter: '{b}: {c} ({d}%)',
+          color: '#ffffff',
+          fontSize: 14
+        },
+        labelLine: {
+          show: true,
+          smooth: true,
+          length: 15,
+          length2: 10,
+          lineStyle: {
+            color: '#f5f8ff'
+          }
         }
       }]
     };
@@ -541,176 +668,158 @@ const ReportContent = () => {
         />
       </StatsContainer>
 
-      <ChartsContainer>
-        <ChartCard 
-          option={getAnomalyTrendOption()} 
-          height="300px" 
-          loading={isLoading}
-          accentColor="linear-gradient(90deg, #1a237e, #0d47a1)"
-        />
-        <ChartCard 
-          option={getSeverityDistributionOption()} 
-          height="300px" 
-          loading={isLoading}
-          accentColor="linear-gradient(90deg, #c62828, #b71c1c)"
-        />
-      </ChartsContainer>
-      
-      <ChartsContainer>
-        <ChartCard 
-          option={getLocationDistributionOption()} 
-          height="300px" 
-          loading={isLoading}
-          accentColor="linear-gradient(90deg, #2e7d32, #1b5e20)"
-        />
-      </ChartsContainer>
-
-      <TopBar>
-        <DateRangeGroup>
-          <Label>时间范围</Label>
-          <Input
-            type="datetime-local"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+      <ContentRow>
+        <SeveritySection>
+          <ChartCard 
+            option={getSeverityDistributionOption()} 
+            height="480px"
+            loading={isLoading}
+            accentColor="linear-gradient(90deg, #c62828, #b71c1c)"
           />
-          <Label>至</Label>
-          <Input
-            type="datetime-local"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-        </DateRangeGroup>
-        <SearchGroup>
-          <Label>严重程度</Label>
-          <select 
-            style={{
-              padding: '10px 12px',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-              width: '120px'
-            }}
-            value={severityFilter}
-            onChange={(e) => handleSeverityFilter(e.target.value)}
-          >
-            <option value="all">全部</option>
-            <option value="high">高危</option>
-            <option value="medium">中危</option>
-            <option value="low">低危</option>
-          </select>
-          <SearchInput
-            placeholder="请输入所属地或IP"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <SearchButton onClick={handleSearch}>
-            <span>🔍</span>
-            搜索
-          </SearchButton>
-        </SearchGroup>
-      </TopBar>
+        </SeveritySection>
+        <ListSection>
+          <TopBar>
+            <DateRangeGroup>
+              <Label>时间范围</Label>
+              <Input
+                type="datetime-local"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <Label>至</Label>
+              <Input
+                type="datetime-local"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </DateRangeGroup>
+            <SearchGroup>
+              <Label>严重程度</Label>
+              <StyledSelect
+                value={severityFilter}
+                onChange={(e) => handleSeverityFilter(e.target.value)}
+              >
+                <option value="all">全部</option>
+                <option value="high">高危</option>
+                <option value="medium">中危</option>
+                <option value="low">低危</option>
+              </StyledSelect>
+              <SearchInput
+                placeholder="请输入所属地或IP"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <SearchButton onClick={handleSearch}>
+                <span>🔍</span>
+                搜索
+              </SearchButton>
+            </SearchGroup>
+          </TopBar>
 
-      <TableContainer>
-        <Table>
-          <thead>
-            <tr>
-              <Th>IP</Th>
-              <Th>所属地</Th>
-              <Th>异常时间</Th>
-              <Th>严重程度</Th>
-              <Th>异常信息</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <Tr>
-                <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
-                  加载中...
-                </Td>
-              </Tr>
-            ) : error ? (
-              <Tr>
-                <Td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'red' }}>
-                  {error}
-                </Td>
-              </Tr>
-            ) : currentReports.length > 0 ? (
-              currentReports.map(report => (
-                <Tr key={report.id}>
-                  <Td>{report.ip}</Td>
-                  <Td>{report.location}</Td>
-                  <Td>{report.time}</Td>
-                  <Td>
-                    <SeverityIndicator level={report.severity}>
-                      {report.severity === 'high' ? '高危' : 
-                       report.severity === 'medium' ? '中危' : '低危'}
-                    </SeverityIndicator>
-                  </Td>
-                  <Td>
-                    <AnomalyBadge type={report.description}>
-                      {report.description}
-                    </AnomalyBadge>
-                  </Td>
-                </Tr>
-              ))
-            ) : (
-              <Tr>
-                <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
-                  没有找到匹配的记录
-                </Td>
-              </Tr>
-            )}
-          </tbody>
-        </Table>
-      </TableContainer>
+          <TableContainer>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>IP</Th>
+                  <Th>所属地</Th>
+                  <Th>异常时间</Th>
+                  <Th>严重程度</Th>
+                  <Th>异常信息</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <Tr>
+                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
+                      加载中...
+                    </Td>
+                  </Tr>
+                ) : error ? (
+                  <Tr>
+                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'red' }}>
+                      {error}
+                    </Td>
+                  </Tr>
+                ) : currentReports.length > 0 ? (
+                  currentReports.map(report => (
+                    <Tr key={report.id}>
+                      <Td>{report.ip}</Td>
+                      <Td>{report.location}</Td>
+                      <Td>{report.time}</Td>
+                      <Td>
+                        <SeverityIndicator level={report.severity}>
+                          {report.severity === 'high' ? '高危' : 
+                           report.severity === 'medium' ? '中危' : '低危'}
+                        </SeverityIndicator>
+                      </Td>
+                      <Td>
+                        <AnomalyBadge type={report.description}>
+                          {report.description}
+                        </AnomalyBadge>
+                      </Td>
+                    </Tr>
+                  ))
+                ) : (
+                  <Tr>
+                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
+                      没有找到匹配的记录
+                    </Td>
+                  </Tr>
+                )}
+              </tbody>
+            </Table>
+          </TableContainer>
 
-      <Pagination>
-        <PageButton
-          onClick={() => setCurrentPage(1)}
-          disabled={currentPage === 1}
-        >
-          首页
-        </PageButton>
-        <PageButton
-          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-          disabled={currentPage === 1}
-        >
-          上一页
-        </PageButton>
-        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-          // 显示当前页附近的页码
-          let pageToShow;
-          if (totalPages <= 5) {
-            pageToShow = i + 1;
-          } else if (currentPage <= 3) {
-            pageToShow = i + 1;
-          } else if (currentPage >= totalPages - 2) {
-            pageToShow = totalPages - 4 + i;
-          } else {
-            pageToShow = currentPage - 2 + i;
-          }
-          return (
+          <Pagination>
             <PageButton
-              key={pageToShow}
-              active={currentPage === pageToShow}
-              onClick={() => setCurrentPage(pageToShow)}
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
             >
-              {pageToShow}
+              首页
             </PageButton>
-          );
-        })}
-        <PageButton
-          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-          disabled={currentPage === totalPages}
-        >
-          下一页
-        </PageButton>
-        <PageButton
-          onClick={() => setCurrentPage(totalPages)}
-          disabled={currentPage === totalPages}
-        >
-          末页
-        </PageButton>
-      </Pagination>
+            <PageButton
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            >
+              上一页
+            </PageButton>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              // 显示当前页附近的页码
+              let pageToShow;
+              if (totalPages <= 5) {
+                pageToShow = i + 1;
+              } else if (currentPage <= 3) {
+                pageToShow = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageToShow = totalPages - 4 + i;
+              } else {
+                pageToShow = currentPage - 2 + i;
+              }
+              return (
+                <PageButton
+                  key={pageToShow}
+                  active={currentPage === pageToShow}
+                  onClick={() => setCurrentPage(pageToShow)}
+                >
+                  {pageToShow}
+                </PageButton>
+              );
+            })}
+            <PageButton
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+            >
+              下一页
+            </PageButton>
+            <PageButton
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+            >
+              末页
+            </PageButton>
+          </Pagination>
+        </ListSection>
+      </ContentRow>
     </Container>
   );
 };

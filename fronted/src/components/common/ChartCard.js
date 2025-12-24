@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import * as echarts from 'echarts';
 
 const Card = styled.div`
+  width: 100%;
   background: linear-gradient(135deg, rgba(10, 25, 41, 0.95) 0%, rgba(13, 31, 45, 0.95) 100%);
   border-radius: 12px;
   padding: 20px;
