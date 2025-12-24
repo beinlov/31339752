@@ -10,7 +10,6 @@ import AsruexLogViewer from './AsruexLogViewer';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
 import ServerManagement from './ServerManagement';
-import TechControl from './TechControl';
 import axios from 'axios';
 
 // 样式定义
@@ -360,12 +359,6 @@ const AdminPage = ({ history }) => {
         name: 'C2管理',
         component: ServerManagement,
         icon: '💻' // 服务器图标 (电脑符号)
-      },
-      {
-        id: 'tech_control',
-        name: '技术操控',
-        component: TechControl,
-        icon: '⌨️' // 键盘图标，表示终端/命令
       },
       // 扩展与应用菜单项已隐藏
       // {
