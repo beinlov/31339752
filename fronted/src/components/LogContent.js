@@ -15,15 +15,6 @@ const Container = styled.div`
   position: relative;
 `;
 
-const TopBar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 0px;
-  padding: 20px;
-  flex-shrink: 0;
-`;
-
 const SearchGroup = styled.div`
   display: flex;
   gap: 10px;
@@ -33,47 +24,52 @@ const SearchGroup = styled.div`
 `;
 
 const Select = styled.select`
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(100, 181, 246, 0.3);
   width: 150px;
   appearance: none;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%23333"/></svg>');
+  background-color: rgba(26, 115, 232, 0.1);
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%2364b5f6"/></svg>');
   background-repeat: no-repeat;
-  background-position: right 15px center;
-  background-size: 12px;
-  font-size: 14px;
+  background-position: right 12px center;
+  background-size: 10px;
+  font-size: 13px;
+  color: #e0e0e0;
   transition: all 0.3s ease;
   cursor: pointer;
   
   &:focus {
-    border-color: #1a237e;
+    border-color: #64b5f6;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
   }
   
   option {
     padding: 10px;
+    background: #1a2332;
+    color: #e0e0e0;
   }
 `;
 
 const SearchInput = styled.input`
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
   width: 220px;
   transition: all 0.3s ease;
-  font-size: 14px;
+  font-size: 13px;
+  color: #e0e0e0;
   
   &:focus {
-    border-color: #1a237e;
+    border-color: #64b5f6;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
-    width: 250px;
+    box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
   }
   
   &::placeholder {
-    color: #aaa;
+    color: #7a9cc6;
   }
 `;
 
@@ -85,22 +81,24 @@ const DateTimeGroup = styled.div`
 `;
 
 const DateTimeInput = styled.input`
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  width: 200px;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
+  width: 180px;
   transition: all 0.3s ease;
-  font-size: 14px;
+  font-size: 13px;
+  color: #e0e0e0;
   
   &:focus {
-    border-color: #1a237e;
+    border-color: #64b5f6;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
   }
   
   &::placeholder {
-    color: #aaa;
-    font-size: 13px;
+    color: #7a9cc6;
+    font-size: 12px;
   }
 `;
 
@@ -108,8 +106,8 @@ const TableContainer = styled.div`
   flex: 1;
   overflow-y: auto;
   min-height: 200px;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   margin-bottom: 0;
   position: relative;
   display: flex;
@@ -120,39 +118,41 @@ const Table = styled.table`
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
   border-radius: 8px;
   table-layout: fixed;
+  border: 1px solid rgba(100, 181, 246, 0.2);
 `;
 
 const Th = styled.th`
-  padding: 16px;
-  background: #f5f5f5;
+  padding: 14px 16px;
+  background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   text-align: left;
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   position: sticky;
   top: 0;
   z-index: 1;
   font-weight: 600;
-  color: #333;
+  color: #64b5f6;
   transition: background 0.2s ease;
   
   &:hover {
-    background: #e0e0e0;
+    background: rgba(13, 71, 161, 0.4);
   }
 `;
 
 const Td = styled.td`
-  padding: 16px;
-  border-bottom: 1px solid #eee;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
+  color: #e0e0e0;
 `;
 
 const Tr = styled.tr`
   &:hover {
-    background: #f8f9ff;
+    background: rgba(26, 115, 232, 0.15);
     transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 5px rgba(26, 115, 232, 0.2);
   }
   transition: all 0.2s ease;
 `;
@@ -162,28 +162,32 @@ const Pagination = styled.div`
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
-  padding: 20px;
+  padding: 16px 20px;
   flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
+  border-top: 1px solid rgba(100, 181, 246, 0.2);
+  border-radius: 0 0 8px 8px;
 `;
 
 const PageButton = styled.button`
-  padding: 8px 14px;
-  border: 1px solid #ddd;
-  background: ${props => props.active ? '#1a237e' : 'white'};
-  color: ${props => props.active ? 'white' : '#333'};
+  padding: 6px 12px;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
   transition: all 0.25s ease;
   border-radius: 6px;
   font-weight: ${props => props.active ? '600' : '400'};
+  font-size: 13px;
   
   &:hover {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
-    transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(26, 115, 232, 0.3);
   }
   
   &:disabled {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
+    background: rgba(100, 100, 100, 0.2);
     cursor: not-allowed;
     opacity: 0.6;
     transform: none;
@@ -201,39 +205,73 @@ const StatsContainer = styled.div`
 
 const ChartsContainer = styled.div`
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 20px;
   flex-shrink: 0;
 `;
 
+const SearchCard = styled.div`
+  background: linear-gradient(135deg, rgba(10, 25, 41, 0.95) 0%, rgba(13, 31, 45, 0.95) 100%);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid rgba(30, 70, 120, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: 280px;
+  box-sizing: border-box;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(30, 70, 120, 0.6), transparent);
+  }
+`;
+
+const SearchCardTitle = styled.h3`
+  margin: 0 0 5px 0;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+`;
+
 const CommandBadge = styled.span`
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85em;
+  padding: 5px 10px;
+  border-radius: 16px;
+  font-size: 0.8em;
   font-weight: 500;
   background-color: ${props => {
-    if (props.command.includes('clear')) return '#e8f5e9';
-    if (props.command.includes('reuse')) return '#e3f2fd';
-    if (props.command.includes('ddos')) return '#fce4ec';
-    if (props.command.includes('suppress')) return '#fff3e0';
-    return '#f3e5f5';
+    if (props.command.includes('clear')) return 'rgba(76, 175, 80, 0.2)';
+    if (props.command.includes('reuse')) return 'rgba(33, 150, 243, 0.2)';
+    if (props.command.includes('ddos')) return 'rgba(244, 67, 54, 0.2)';
+    if (props.command.includes('suppress')) return 'rgba(255, 152, 0, 0.2)';
+    return 'rgba(156, 39, 176, 0.2)';
   }};
   color: ${props => {
-    if (props.command.includes('clear')) return '#2e7d32';
-    if (props.command.includes('reuse')) return '#1565c0';
-    if (props.command.includes('ddos')) return '#c2185b';
-    if (props.command.includes('suppress')) return '#e65100';
-    return '#6a1b9a';
+    if (props.command.includes('clear')) return '#81c784';
+    if (props.command.includes('reuse')) return '#64b5f6';
+    if (props.command.includes('ddos')) return '#ef5350';
+    if (props.command.includes('suppress')) return '#ffb74d';
+    return '#ba68c8';
   }};
   border: 1px solid ${props => {
-    if (props.command.includes('clear')) return '#a5d6a7';
-    if (props.command.includes('reuse')) return '#90caf9';
-    if (props.command.includes('ddos')) return '#f48fb1';
-    if (props.command.includes('suppress')) return '#ffcc80';
-    return '#ce93d8';
+    if (props.command.includes('clear')) return 'rgba(76, 175, 80, 0.4)';
+    if (props.command.includes('reuse')) return 'rgba(33, 150, 243, 0.4)';
+    if (props.command.includes('ddos')) return 'rgba(244, 67, 54, 0.4)';
+    if (props.command.includes('suppress')) return 'rgba(255, 152, 0, 0.4)';
+    return 'rgba(156, 39, 176, 0.4)';
   }};
   transition: all 0.2s ease;
   
@@ -246,12 +284,12 @@ const CommandBadge = styled.span`
       return '"❓ "';
     }};
     margin-right: 4px;
-    font-size: 1.1em;
+    font-size: 1em;
   }
   
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
   }
 `;
 
@@ -288,13 +326,13 @@ const LoadingContainer = styled.div`
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: #1a237e;
+  color: #64b5f6;
 `;
 
 const Spinner = styled.div`
-  border: 4px solid rgba(26, 35, 126, 0.1);
+  border: 4px solid rgba(100, 181, 246, 0.1);
   border-radius: 50%;
-  border-top: 4px solid #1a237e;
+  border-top: 4px solid #64b5f6;
   width: 40px;
   height: 40px;
   animation: spin 1s linear infinite;
@@ -426,116 +464,6 @@ const LogContent = ({ networkType }) => {
   };
 
   // 准备图表数据
-  const getActivityTrendOption = () => {
-    // 获取唯一的日期
-    const dates = Array.from(new Set(logs.map(log => log.time.split(' ')[0])));
-    
-    // 获取唯一的网络
-    const networks = Array.from(new Set(logs.map(log => log.botnet_type)));
-    const networkColors = {
-      'asruex': '#2e7d32',
-      'andromeda': '#0d47a1',
-      'mozi': '#e65100',
-      'leethozer': '#6a1b9a'
-    };
-    
-    // 为每个网络准备数据
-    const series = networks.map(network => {
-      const data = dates.map(date => 
-        logs.filter(log => 
-          log.time.startsWith(date) && 
-          log.botnet_type === network
-        ).length
-      );
-      
-      return {
-        name: network === 'asruex' ? 'Asruex僵尸网络' : 
-              network === 'andromeda' ? 'Andromeda僵尸网络' : 
-              network === 'mozi' ? 'Mozi僵尸网络' :
-              network === 'leethozer' ? 'LeetHozer僵尸网络' :
-              network,
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: {
-          width: 3,
-          color: networkColors[network] || '#607d8b'
-        },
-        itemStyle: {
-          color: networkColors[network] || '#607d8b'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [{
-              offset: 0, 
-              color: `${networkColors[network] || '#607d8b'}50` // 添加透明度
-            }, {
-              offset: 1, 
-              color: `${networkColors[network] || '#607d8b'}10`
-            }]
-          }
-        },
-        data
-      };
-    });
-
-    return {
-      title: {
-        text: '操作活动趋势',
-        left: 'center',
-        textStyle: {
-          fontWeight: 'normal',
-          fontSize: 16
-        }
-      },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross',
-          label: {
-            backgroundColor: '#6a7985'
-          }
-        }
-      },
-      legend: {
-        data: networks.map(network => 
-          network === 'asruex' ? 'Asruex僵尸网络' : 
-          network === 'andromeda' ? 'Andromeda僵尸网络' : 
-          network === 'mozi' ? 'Mozi僵尸网络' :
-          network === 'leethozer' ? 'LeetHozer僵尸网络' :
-          network
-        ),
-        top: 30
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        containLabel: true,
-        top: 80
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: dates
-      },
-      yAxis: {
-        type: 'value',
-        name: '操作次数',
-        nameTextStyle: {
-          padding: [0, 0, 0, 40]
-        }
-      },
-      series
-    };
-  };
-
   const getCommandTypeOption = () => {
     // 分析命令类型
     const commandTypes = {};
@@ -568,30 +496,44 @@ const LogContent = ({ networkType }) => {
       title: {
         text: '命令类型分布',
         left: 'center',
+        top: '5%',
         textStyle: {
-          fontWeight: 'normal',
-          fontSize: 16
+          fontWeight: 'bold',
+          fontSize: 20,
+          color: '#ffffff'
         }
       },
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
+        formatter: '{b}: {c} ({d}%)',
+        backgroundColor: 'rgba(15, 25, 35, 0.95)',
+        borderColor: 'rgba(100, 181, 246, 0.3)',
+        textStyle: {
+          color: '#ffffff'
+        }
       },
       legend: {
         type: 'scroll',
         orient: 'vertical',
         right: 10,
-        top: 20,
+        top: 40,
         bottom: 20,
+        textStyle: {
+          color: '#ffffff',
+          fontSize: 12
+        },
+        pageTextStyle: {
+          color: '#ffffff'
+        }
       },
       series: [{
         type: 'pie',
         radius: ['40%', '70%'],
-        center: ['40%', '50%'],
+        center: ['35%', '55%'],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
-          borderColor: '#fff',
+          borderColor: 'rgba(15, 25, 35, 0.8)',
           borderWidth: 2
         },
         label: {
@@ -600,8 +542,9 @@ const LogContent = ({ networkType }) => {
         emphasis: {
           label: {
             show: true,
-            fontSize: '18',
-            fontWeight: 'bold'
+            fontSize: '16',
+            fontWeight: 'bold',
+            color: '#ffffff'
           }
         },
         labelLine: {
@@ -610,73 +553,13 @@ const LogContent = ({ networkType }) => {
         data: data.map(item => ({
           ...item,
           itemStyle: {
-            color: item.name === '清除节点' ? '#2e7d32' :
-                  item.name === '节点再利用' ? '#1565c0' :
-                  item.name === 'DDos攻击' ? '#c2185b' :
-                  item.name === '抑制阻断' ? '#e65100' :
-                  '#6a1b9a'
+            color: item.name === '清除节点' ? '#4caf50' :
+                  item.name === '节点再利用' ? '#2196f3' :
+                  item.name === 'DDos攻击' ? '#f44336' :
+                  item.name === '抑制阻断' ? '#ff9800' :
+                  '#9c27b0'
           }
         }))
-      }]
-    };
-  };
-
-  const getLocationHeatOption = () => {
-    // 统计位置数据
-    const locationData = {};
-    logs.forEach(log => {
-      if (!locationData[log.location]) {
-        locationData[log.location] = 1;
-      } else {
-        locationData[log.location]++;
-      }
-    });
-    
-    // 转换为图表数据
-    const data = Object.entries(locationData)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-    
-    return {
-      title: {
-        text: '操作地理分布热力',
-        left: 'center',
-        textStyle: {
-          fontWeight: 'normal',
-          fontSize: 16
-        }
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} 次操作'
-      },
-      visualMap: {
-        min: 0,
-        max: Math.max(...data.map(item => item.value), 1),
-        calculable: true,
-        orient: 'horizontal',
-        left: 'center',
-        bottom: '5%',
-        inRange: {
-          color: ['#e8f5e9', '#c8e6c9', '#a5d6a7', '#81c784', '#66bb6a', '#4caf50', '#43a047', '#388e3c', '#2e7d32', '#1b5e20']
-        }
-      },
-      series: [{
-        type: 'map',
-        map: 'china',
-        roam: true,
-        label: {
-          show: true
-        },
-        emphasis: {
-          label: {
-            show: true
-          },
-          itemStyle: {
-            areaColor: '#2e7d32'
-          }
-        },
-        data
       }]
     };
   };
@@ -716,54 +599,47 @@ const LogContent = ({ networkType }) => {
 
       <ChartsContainer>
         <ChartCard 
-          option={getActivityTrendOption()} 
-          height="300px" 
-          loading={isLoading}
-          accentColor="linear-gradient(90deg, #1a237e, #0d47a1)"
-        />
-        <ChartCard 
           option={getCommandTypeOption()} 
-          height="300px" 
+          height="280px" 
           loading={isLoading}
-          accentColor="linear-gradient(90deg, #c62828, #b71c1c)"
+          accentColor="linear-gradient(90deg, #0d47a1, #1565c0)"
         />
+        <SearchCard>
+          <SearchCardTitle>🔍 日志搜索</SearchCardTitle>
+          <SearchGroup style={{ marginLeft: 0 }}>
+            <Select 
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value)}
+            >
+              <option value="all">全部</option>
+              <option value="account">账户名</option>
+              <option value="location">账户所在地</option>
+              <option value="network">目标僵尸网络</option>
+            </Select>
+            <SearchInput
+              placeholder="请输入关键字"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </SearchGroup>
+          <DateTimeGroup style={{ marginLeft: 0 }}>
+            <span style={{ color: '#8db4d8', fontSize: '13px', whiteSpace: 'nowrap' }}>时间范围</span>
+            <DateTimeInput
+              type="text"
+              placeholder="起始时间 (2024/3/17-11:57)"
+              value={startDateTime}
+              onChange={(e) => setStartDateTime(e.target.value)}
+            />
+            <span style={{ color: '#8db4d8', fontSize: '13px' }}>至</span>
+            <DateTimeInput
+              type="text"
+              placeholder={`结束时间 (${getCurrentDateTime()})`}
+              value={endDateTime}
+              onChange={(e) => setEndDateTime(e.target.value)}
+            />
+          </DateTimeGroup>
+        </SearchCard>
       </ChartsContainer>
-
-      <TopBar>
-        <SearchGroup>
-          <Select 
-            value={searchType}
-            onChange={(e) => setSearchType(e.target.value)}
-          >
-            <option value="all">全部</option>
-            <option value="account">账户名</option>
-            <option value="location">账户所在地</option>
-            <option value="network">目标僵尸网络</option>
-            <option value="command">指令信息</option>
-          </Select>
-          <SearchInput
-            placeholder="请输入关键字"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </SearchGroup>
-        <DateTimeGroup>
-          <span>时间范围</span>
-          <DateTimeInput
-            type="text"
-            placeholder="起始时间 (2024/3/17-11:57)"
-            value={startDateTime}
-            onChange={(e) => setStartDateTime(e.target.value)}
-          />
-          <span>至</span>
-          <DateTimeInput
-            type="text"
-            placeholder={`结束时间 (${getCurrentDateTime()})`}
-            value={endDateTime}
-            onChange={(e) => setEndDateTime(e.target.value)}
-          />
-        </DateTimeGroup>
-      </TopBar>
 
       <TableContainer>
         <Table>
