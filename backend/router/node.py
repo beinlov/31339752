@@ -72,32 +72,73 @@ async def get_node_details(
         if cursor.fetchone()['count'] == 0:
             raise HTTPException(status_code=404, detail=f"Table for botnet type {botnet_type} not found")
         
+        # 检查 active_time 字段是否存在
+        cursor.execute(f"""
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'active_time'
+        """, (DB_CONFIG['database'], table_name))
+        has_active_time = cursor.fetchone() is not None
+        logger.info(f"Table {table_name} has active_time column: {has_active_time}")
+        
         # 构建基础查询：使用子查询确保每个IP只返回最新的一条记录
         # 注意：使用 updated_at（最新响应时间）替代已废弃的 last_active 字段
-        base_query = f"""
-            SELECT 
-                COALESCE(CONCAT(t.id, ''), '') as id,
-                COALESCE(t.ip, '') as ip,
-                COALESCE(t.longitude, 0) as longitude,
-                COALESCE(t.latitude, 0) as latitude,
-                CASE 
-                    WHEN t.status = 'active' THEN 'active'
-                    ELSE 'inactive'
-                END as status,
-                COALESCE(t.updated_at, t.created_time, NOW()) as last_active,
-                %s as botnet_type,
-                COALESCE(t.country, '') as country,
-                COALESCE(t.province, '') as province,
-                COALESCE(t.city, '') as city
-            FROM (
-                SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY ip ORDER BY updated_at DESC, id DESC) as rn
-                FROM {table_name}
-                WHERE longitude IS NOT NULL
-                AND latitude IS NOT NULL
-            ) t
-            WHERE t.rn = 1
-        """
+        # active_time: 最初记录时间（节点首次被记录的时间）- 需要获取每个IP最早的active_time
+        if has_active_time:
+            base_query = f"""
+                SELECT 
+                    COALESCE(CONCAT(t.id, ''), '') as id,
+                    COALESCE(t.ip, '') as ip,
+                    COALESCE(t.longitude, 0) as longitude,
+                    COALESCE(t.latitude, 0) as latitude,
+                    CASE 
+                        WHEN t.status = 'active' THEN 'active'
+                        ELSE 'inactive'
+                    END as status,
+                    COALESCE(t.updated_at, t.created_time, NOW()) as last_active,
+                    COALESCE(t.first_active_time, t.active_time, t.created_time, NOW()) as active_time,
+                    %s as botnet_type,
+                    COALESCE(t.country, '') as country,
+                    COALESCE(t.province, '') as province,
+                    COALESCE(t.city, '') as city
+                FROM (
+                    SELECT n.*,
+                        ROW_NUMBER() OVER (PARTITION BY n.ip ORDER BY n.updated_at DESC, n.id DESC) as rn,
+                        MIN(n.active_time) OVER (PARTITION BY n.ip) as first_active_time
+                    FROM {table_name} n
+                    WHERE n.longitude IS NOT NULL
+                    AND n.latitude IS NOT NULL
+                ) t
+                WHERE t.rn = 1
+            """
+        else:
+            # 如果没有 active_time 字段，使用 created_time 作为替代
+            base_query = f"""
+                SELECT 
+                    COALESCE(CONCAT(t.id, ''), '') as id,
+                    COALESCE(t.ip, '') as ip,
+                    COALESCE(t.longitude, 0) as longitude,
+                    COALESCE(t.latitude, 0) as latitude,
+                    CASE 
+                        WHEN t.status = 'active' THEN 'active'
+                        ELSE 'inactive'
+                    END as status,
+                    COALESCE(t.updated_at, t.created_time, NOW()) as last_active,
+                    COALESCE(t.first_created_time, t.created_time, NOW()) as active_time,
+                    %s as botnet_type,
+                    COALESCE(t.country, '') as country,
+                    COALESCE(t.province, '') as province,
+                    COALESCE(t.city, '') as city
+                FROM (
+                    SELECT n.*,
+                        ROW_NUMBER() OVER (PARTITION BY n.ip ORDER BY n.updated_at DESC, n.id DESC) as rn,
+                        MIN(n.created_time) OVER (PARTITION BY n.ip) as first_created_time
+                    FROM {table_name} n
+                    WHERE n.longitude IS NOT NULL
+                    AND n.latitude IS NOT NULL
+                ) t
+                WHERE t.rn = 1
+            """
         
         # 添加过滤条件
         conditions = []
@@ -133,6 +174,8 @@ async def get_node_details(
         for node in nodes:
             if isinstance(node['last_active'], datetime):
                 node['last_active'] = node['last_active'].strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(node.get('active_time'), datetime):
+                node['active_time'] = node['active_time'].strftime('%Y-%m-%d %H:%M:%S')
         
         # 获取在线/离线节点数量（按 IP 去重）
         status_query = f"""
