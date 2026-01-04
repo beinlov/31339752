@@ -16,13 +16,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import (
     BOTNET_CONFIG, DB_CONFIG, DB_BATCH_SIZE, 
     DB_COMMIT_INTERVAL, POSITION_STATE_FILE,
-    LOG_PROCESSOR_LOG_FILE
+    LOG_PROCESSOR_LOG_FILE, C2_ENDPOINTS, ENABLE_REMOTE_PULLING
 )
 from log_processor.parser import LogParser
 from log_processor.enricher import IPEnricher
 from log_processor.db_writer import BotnetDBWriter
 from log_processor.performance_monitor import create_monitored_writer
 from log_processor.watcher import BotnetLogWatcher
+from log_processor.remote_puller import RemotePuller
 from typing import List, Dict
 
 # 配置日志
@@ -47,6 +48,8 @@ class BotnetLogProcessor:
         self.writers = {}
         self.monitors = {}  # 性能监控器
         self.watcher = None
+        self.remote_puller = None  # 远程拉取器
+        self.remote_puller_task = None  # 拉取任务
         self.running = False
         
         # 统计信息
@@ -85,6 +88,17 @@ class BotnetLogProcessor:
                     )
                 
         logger.info(f"Initialized processors for {len(self.parsers)} botnet types")
+        
+        # 初始化远程拉取器（如果启用）
+        if ENABLE_REMOTE_PULLING:
+            try:
+                self.remote_puller = RemotePuller(C2_ENDPOINTS, self)
+                logger.info(f"[OK] 远程拉取器已初始化（{len([c for c in C2_ENDPOINTS if c.get('enabled')])} 个C2端点）")
+            except Exception as e:
+                logger.error(f"远程拉取器初始化失败: {e}")
+                self.remote_puller = None
+        else:
+            logger.info("远程拉取功能未启用")
         
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """
@@ -160,12 +174,12 @@ class BotnetLogProcessor:
             elapsed_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(
-                f"✅ [{botnet_type}] API数据处理完成: "
+                f"[OK] [{botnet_type}] API数据处理完成: "
                 f"成功 {processed_count}, 失败 {error_count}, "
                 f"用时 {elapsed_time:.2f}秒 ({processed_count/elapsed_time:.0f} IP/秒)"
             )
         except Exception as e:
-            logger.error(f"❌ [{botnet_type}] 数据库刷新失败: {e}")
+            logger.error(f"[ERROR] [{botnet_type}] 数据库刷新失败: {e}")
 
     async def process_log_line(self, botnet_type: str, line: str):
         """
@@ -244,6 +258,13 @@ class BotnetLogProcessor:
         # 打印IP增强器统计
         enricher_stats = self.enricher.get_stats()
         logger.info(f"IP查询: {enricher_stats['total_queries']}, 缓存命中率: {enricher_stats['cache_hit_rate']}")
+        
+        # 打印远程拉取器统计（如果启用）
+        if self.remote_puller:
+            puller_stats = self.remote_puller.get_stats()
+            logger.info(f"远程拉取: 总计 {puller_stats['total_pulled']}, 已保存 {puller_stats['total_saved']}, 错误 {puller_stats['error_count']}")
+            if puller_stats['last_pull_time']:
+                logger.info(f"最后拉取: {puller_stats['last_pull_time']}")
     
     def generate_performance_reports(self):
         """生成所有写入器的性能报告"""
@@ -298,6 +319,12 @@ class BotnetLogProcessor:
             # 启动定期刷新任务
             loop.create_task(self._periodic_flush())
             
+            # 启动远程拉取任务（如果启用）
+            if self.remote_puller:
+                logger.info("正在启动远程拉取任务...")
+                self.remote_puller_task = loop.create_task(self.remote_puller.run())
+                logger.info("[OK] 远程拉取任务已启动")
+            
             logger.info("Botnet Log Processor is running. Press Ctrl+C to stop.")
             
             # 保持运行
@@ -314,6 +341,16 @@ class BotnetLogProcessor:
         logger.info("Stopping Botnet Log Processor...")
         
         self.running = False
+        
+        # 停止远程拉取任务
+        if self.remote_puller_task and not self.remote_puller_task.done():
+            logger.info("正在停止远程拉取任务...")
+            self.remote_puller_task.cancel()
+            try:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(self.remote_puller_task)
+            except asyncio.CancelledError:
+                logger.info("远程拉取任务已停止")
         
         # 停止监控
         if self.watcher:

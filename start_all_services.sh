@@ -7,8 +7,11 @@ echo "============================================================"
 echo
 echo "本脚本将启动以下服务："
 echo "  1. FastAPI 后端服务 (端口 8000)"
-echo "  2. 日志处理器"
+echo "  2. 日志处理器 (含远程数据拉取器)"
 echo "  3. 统计数据聚合器 (每30分钟)"
+echo
+echo "注意: 日志处理器现已集成远程拉取功能"
+echo "      如需启用，请在 backend/config.py 中配置 C2_ENDPOINTS"
 echo
 echo "按 Enter 开始启动，或按 Ctrl+C 取消..."
 read
@@ -58,8 +61,11 @@ echo
 echo "服务列表："
 echo "  • 后端服务 (PID: $BACKEND_PID):     http://localhost:8000"
 echo "  • API文档:                          http://localhost:8000/docs"
-echo "  • 日志处理器 (PID: $PROCESSOR_PID): 实时监控 backend/logs/ 目录"
+echo "  • 日志处理器 (PID: $PROCESSOR_PID): 实时监控 + 远程拉取"
 echo "  • 统计聚合器 (PID: $AGGREGATOR_PID): 每30分钟聚合一次数据"
+echo
+echo "📡 远程拉取状态："
+echo "  查看日志: tail -f $LOG_DIR/log_processor.log | grep '拉取'"
 echo
 echo "进程ID已保存到: $ROOT_DIR/pids.txt"
 echo "$BACKEND_PID" > "$ROOT_DIR/pids.txt"

@@ -21,7 +21,7 @@ DB_CONFIG = {
 
 # JWT密钥（用于生成和验证token）
 # 生产环境必须修改为强密钥（建议至少32个字符）
-SECRET_KEY = "your-secret-key-here"
+SECRET_KEY = "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"
 
 # JWT算法
 ALGORITHM = "HS256"
@@ -222,3 +222,35 @@ LOG_PROCESSOR_LOG_FILE = os.path.join(APP_LOGS_DIR, 'log_processor.log')
 STATS_AGGREGATOR_LOG_FILE = os.path.join(APP_LOGS_DIR, 'stats_aggregator.log')
 REMOTE_UPLOADER_LOG_FILE = os.path.join(APP_LOGS_DIR, 'remote_uploader.log')
 MAIN_APP_LOG_FILE = os.path.join(APP_LOGS_DIR, 'main_app.log')
+
+# ============================================================
+# 远程数据拉取配置（Remote Data Pulling Configuration）
+# ============================================================
+
+# C2端点配置（用于从远程C2服务器拉取数据）
+# 注意：API密钥应该从环境变量读取，这里仅作示例
+C2_ENDPOINTS = [
+    # 示例配置1
+    {
+         'name': 'C2-Ramnit-1',
+         'url': os.environ.get('C2_ENDPOINT_1', 'http://101.32.11.139:8888'),
+         'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
+         'enabled': True,
+         'pull_interval': 60,  # 拉取间隔（秒）
+         'batch_size': 1000,   # 每次拉取数量
+         'timeout': 30,        # 请求超时（秒）
+     },
+    # 示例配置2
+    # {
+    #     'name': 'C2-Zeus-1',
+    #     'url': os.environ.get('C2_ENDPOINT_2', 'http://c2-server-2.example.com:8888'),
+    #     'api_key': os.environ.get('C2_API_KEY_2', 'your-api-key-here'),
+    #     'enabled': True,
+    #     'pull_interval': 60,
+    #     'batch_size': 1000,
+    #     'timeout': 30,
+    # },
+]
+
+# 是否启用远程拉取功能
+ENABLE_REMOTE_PULLING = len(C2_ENDPOINTS) > 0 and any(c.get('enabled') for c in C2_ENDPOINTS)
