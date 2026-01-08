@@ -65,7 +65,7 @@ class CleanBotnetRequest(BaseModel):
 
 # Helper functions
 async def ensure_botnet_table_exists(bot_name: str):
-    """确保僵尸网络数据表存在，如果不存在则创建"""
+    """确保僵尸网络数据表存在，如果不存在则创建（双表设计）"""
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -73,6 +73,7 @@ async def ensure_botnet_table_exists(bot_name: str):
         china_table = f"china_botnet_{bot_name}"
         global_table = f"global_botnet_{bot_name}"
         node_table = f"botnet_nodes_{bot_name}"
+        communication_table = f"botnet_communications_{bot_name}"  # 新增通信记录表
 
         # 检查表是否存在
         cursor.execute("""
@@ -82,7 +83,7 @@ async def ensure_botnet_table_exists(bot_name: str):
         """, (DB_CONFIG['database'], china_table))
         
         if cursor.fetchone()[0] == 0:
-            logger.info(f"Table {china_table} does not exist, creating...")
+            logger.info(f"Tables for {bot_name} do not exist, creating...")
             
             # 创建中国区域的僵尸网络表
             cursor.execute(f"""
@@ -90,12 +91,14 @@ async def ensure_botnet_table_exists(bot_name: str):
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     province VARCHAR(50) NOT NULL,
                     municipality VARCHAR(50) NOT NULL,
-                    infected_num INT DEFAULT 0 COMMENT '感染数量',
+                    infected_num INT DEFAULT 0 COMMENT '感染数量（节点数）',
+                    communication_count INT DEFAULT 0 COMMENT '通信总次数',
                     created_at TIMESTAMP NULL DEFAULT NULL COMMENT '该地区第一个节点的创建时间',
                     updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '该地区最新节点的更新时间',
                     UNIQUE KEY idx_location (province, municipality),
                     INDEX idx_province (province),
                     INDEX idx_infected_num (infected_num),
+                    INDEX idx_communication_count (communication_count),
                     INDEX idx_created_at (created_at),
                     INDEX idx_updated_at (updated_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
@@ -107,51 +110,84 @@ async def ensure_botnet_table_exists(bot_name: str):
                 CREATE TABLE {global_table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     country VARCHAR(100) NOT NULL,
-                    infected_num INT DEFAULT 0 COMMENT '感染数量',
+                    infected_num INT DEFAULT 0 COMMENT '感染数量（节点数）',
+                    communication_count INT DEFAULT 0 COMMENT '通信总次数',
                     created_at TIMESTAMP NULL DEFAULT NULL COMMENT '该国家第一个节点的创建时间',
                     updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '该国家最新节点的更新时间',
                     UNIQUE KEY idx_country (country),
                     INDEX idx_infected_num (infected_num),
+                    INDEX idx_communication_count (communication_count),
                     INDEX idx_created_at (created_at),
                     INDEX idx_updated_at (updated_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
                 COMMENT='全球僵尸网络统计表(按国家)'
             """)
             
-
-            # Create botnet_nodes table with proper schema
-            # 使用新的三字段时间架构：active_time, created_time, updated_at
+            # 创建节点表（双表设计 - 汇总信息）
             cursor.execute(f"""
                 CREATE TABLE {node_table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    ip VARCHAR(15) NOT NULL,
-                    longitude FLOAT,
-                    latitude FLOAT,
-                    country VARCHAR(50),
-                    province VARCHAR(50),
-                    city VARCHAR(50),
-                    continent VARCHAR(50),
-                    isp VARCHAR(255),
-                    asn VARCHAR(50),
-                    status ENUM('active', 'inactive') DEFAULT 'active',
-                    active_time TIMESTAMP NULL DEFAULT NULL COMMENT '节点激活时间（日志中的时间）',
-                    created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '节点首次写入数据库的时间',
-                    updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '节点最新一次响应时间（日志中的时间）',
-                    is_china BOOLEAN DEFAULT FALSE,
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
+                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
+                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
+                    communication_count INT DEFAULT 0 COMMENT '通信次数',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
                     INDEX idx_ip (ip),
                     INDEX idx_location (country, province, city),
                     INDEX idx_status (status),
-                    INDEX idx_active_time (active_time),
-                    INDEX idx_created_time (created_time),
-                    INDEX idx_updated_at (updated_at),
+                    INDEX idx_first_seen (first_seen),
+                    INDEX idx_last_seen (last_seen),
+                    INDEX idx_communication_count (communication_count),
                     INDEX idx_is_china (is_china),
                     UNIQUE KEY idx_unique_ip (ip)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点原始数据表'
+                COMMENT='僵尸网络节点基本信息表（汇总）'
+            """)
+            
+            # 创建通信记录表（双表设计 - 详细历史）
+            cursor.execute(f"""
+                CREATE TABLE {communication_table} (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    node_id INT NOT NULL COMMENT '关联的节点ID',
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
+                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    event_type VARCHAR(50) COMMENT '事件类型',
+                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
+                    INDEX idx_node_id (node_id),
+                    INDEX idx_ip (ip),
+                    INDEX idx_communication_time (communication_time),
+                    INDEX idx_received_at (received_at),
+                    INDEX idx_location (country, province, city),
+                    INDEX idx_is_china (is_china),
+                    INDEX idx_composite (ip, communication_time),
+                    FOREIGN KEY (node_id) REFERENCES {node_table}(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点通信记录表'
             """)
             
             conn.commit()
-            logger.info(f"Tables {china_table} and {global_table} created and populated with template data successfully")
+            logger.info(f"All tables for {bot_name} created successfully: {china_table}, {global_table}, {node_table}, {communication_table}")
             
     except Exception as e:
         logger.error(f"Error ensuring table exists: {e}")
