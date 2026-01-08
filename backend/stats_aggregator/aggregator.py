@@ -194,15 +194,26 @@ class StatsAggregator:
             
         except Exception as e:
             logger.error(f"[{botnet_type}] 聚合失败: {e}")
+            # 安全地进行rollback，避免连接已断开时再次出错
             if conn:
-                conn.rollback()
+                try:
+                    conn.rollback()
+                except Exception as rollback_error:
+                    logger.warning(f"[{botnet_type}] Rollback失败（可能连接已断开）: {rollback_error}")
             return {'success': False, 'error': str(e)}
             
         finally:
+            # 安全地关闭资源
             if cursor:
-                cursor.close()
+                try:
+                    cursor.close()
+                except:
+                    pass
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except:
+                    pass
                 
     def _ensure_stats_tables_exist(self, cursor, botnet_type):
         """
@@ -251,8 +262,8 @@ class StatsAggregator:
             COMMENT='全球僵尸网络统计表(按国家)'
         """)
         
-    def aggregate_all(self):
-        """聚合所有僵尸网络的统计数据"""
+    def aggregate_all(self, max_retries=3):
+        """聚合所有僵尸网络的统计数据（支持重试）"""
         logger.info("=" * 60)
         logger.info("开始全量聚合统计数据")
         logger.info("=" * 60)
@@ -261,8 +272,24 @@ class StatsAggregator:
         results = {}
         
         for botnet_type in self.BOTNET_TYPES:
-            result = self.aggregate_botnet_stats(botnet_type)
-            results[botnet_type] = result
+            retry_count = 0
+            while retry_count < max_retries:
+                result = self.aggregate_botnet_stats(botnet_type)
+                
+                # 如果成功或跳过，跳出重试循环
+                if result.get('success') or result.get('skipped'):
+                    results[botnet_type] = result
+                    break
+                
+                # 失败则重试
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = 5 * retry_count  # 递增等待时间
+                    logger.warning(f"[{botnet_type}] 聚合失败，{wait_time}秒后重试 ({retry_count}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"[{botnet_type}] 聚合失败，已达到最大重试次数")
+                    results[botnet_type] = result
             
         elapsed = time.time() - start_time
         

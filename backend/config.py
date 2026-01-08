@@ -7,12 +7,12 @@ DB_CONFIG = {
     "password": "123456",
     "database": "botnet",
     "charset": "utf8mb4",
-    # 连接超时设置（秒）
-    "connect_timeout": 30,  # 建立连接超时
-    "read_timeout": 60,     # 读取超时
-    "write_timeout": 60,    # 写入超时
+    # 连接超时设置（秒）- 增加超时时间以应对高并发写入
+    "connect_timeout": 60,   # 建立连接超时（增加到60秒）
+    "read_timeout": 300,     # 读取超时（增加到5分钟）
+    "write_timeout": 300,    # 写入超时（增加到5分钟）
     # 自动重连和保持连接活跃
-    "autocommit": True,     # 自动提交（对于连接池更安全）
+    "autocommit": True,      # 自动提交（对于连接池更安全）
 }
 
 # ============================================================
@@ -56,7 +56,8 @@ ALLOWED_BOTNET_TYPES = [
     'andromeda',
     'moobot',
     'ramnit',
-    'leethozer'
+    'leethozer',
+    'test'
 ]
 
 # ============================================================
@@ -156,6 +157,12 @@ BOTNET_CONFIG = {
         'important_events': ['scan', 'exploit', 'infection', 'beacon'],
         'enabled': True,
         'description': 'Leethozer僵尸网络'
+    },
+    'test': {
+        'log_dir': os.path.join(LOGS_DIR, 'test'),
+        'important_events': [],
+        'enabled': True,
+        'description': 'Test僵尸网络'
     }
 }
 
@@ -164,7 +171,7 @@ IP_CACHE_SIZE = 10000  # 缓存最多10000个IP信息
 IP_CACHE_TTL = 86400   # 缓存24小时
 
 # 数据库批量写入配置
-DB_BATCH_SIZE = 500           # 批量写入大小（增加到500以提高性能）
+DB_BATCH_SIZE = 200           # 批量写入大小（减小以降低锁表时间）
 DB_COMMIT_INTERVAL = 60       # 提交间隔（秒）
 DB_STATISTICS_INTERVAL = 300  # 统计更新间隔（秒）
 
@@ -230,10 +237,10 @@ MAIN_APP_LOG_FILE = os.path.join(APP_LOGS_DIR, 'main_app.log')
 # C2端点配置（用于从远程C2服务器拉取数据）
 # 注意：API密钥应该从环境变量读取，这里仅作示例
 C2_ENDPOINTS = [
-    # 示例配置1
+    # 示例配置1 - 改为本地测试
     {
-         'name': 'C2-Ramnit-1',
-         'url': os.environ.get('C2_ENDPOINT_1', 'http://101.32.11.139:8888'),
+         'name': 'C2-test-local',
+         'url': os.environ.get('C2_ENDPOINT_1', 'http://localhost:8888'),  # 改为localhost
          'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
          'enabled': True,
          'pull_interval': 60,  # 拉取间隔（秒）

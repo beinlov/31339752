@@ -52,7 +52,7 @@ def get_cached_node_count(botnet_type: str) -> int:
 async def get_node_details(
     botnet_type: str,
     page: int = Query(1, ge=1),
-    page_size: int = Query(1000, ge=100, le=100000),
+    page_size: int = Query(1000, ge=10, le=100000),
     status: Optional[str] = None,
     country: Optional[str] = None
 ):
@@ -72,95 +72,61 @@ async def get_node_details(
         if cursor.fetchone()['count'] == 0:
             raise HTTPException(status_code=404, detail=f"Table for botnet type {botnet_type} not found")
         
-        # 检查 active_time 字段是否存在
-        cursor.execute(f"""
-            SELECT COLUMN_NAME 
-            FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'active_time'
-        """, (DB_CONFIG['database'], table_name))
-        has_active_time = cursor.fetchone() is not None
-        logger.info(f"Table {table_name} has active_time column: {has_active_time}")
-        
-        # 构建基础查询：使用子查询确保每个IP只返回最新的一条记录
-        # 注意：使用 updated_at（最新响应时间）替代已废弃的 last_active 字段
-        # active_time: 最初记录时间（节点首次被记录的时间）- 需要获取每个IP最早的active_time
-        if has_active_time:
-            base_query = f"""
-                SELECT 
-                    COALESCE(CONCAT(t.id, ''), '') as id,
-                    COALESCE(t.ip, '') as ip,
-                    COALESCE(t.longitude, 0) as longitude,
-                    COALESCE(t.latitude, 0) as latitude,
-                    CASE 
-                        WHEN t.status = 'active' THEN 'active'
-                        ELSE 'inactive'
-                    END as status,
-                    COALESCE(t.updated_at, t.created_time, NOW()) as last_active,
-                    COALESCE(t.first_active_time, t.active_time, t.created_time, NOW()) as active_time,
-                    %s as botnet_type,
-                    COALESCE(t.country, '') as country,
-                    COALESCE(t.province, '') as province,
-                    COALESCE(t.city, '') as city
-                FROM (
-                    SELECT n.*,
-                        ROW_NUMBER() OVER (PARTITION BY n.ip ORDER BY n.updated_at DESC, n.id DESC) as rn,
-                        MIN(n.active_time) OVER (PARTITION BY n.ip) as first_active_time
-                    FROM {table_name} n
-                    WHERE n.longitude IS NOT NULL
-                    AND n.latitude IS NOT NULL
-                ) t
-                WHERE t.rn = 1
-            """
-        else:
-            # 如果没有 active_time 字段，使用 created_time 作为替代
-            base_query = f"""
-                SELECT 
-                    COALESCE(CONCAT(t.id, ''), '') as id,
-                    COALESCE(t.ip, '') as ip,
-                    COALESCE(t.longitude, 0) as longitude,
-                    COALESCE(t.latitude, 0) as latitude,
-                    CASE 
-                        WHEN t.status = 'active' THEN 'active'
-                        ELSE 'inactive'
-                    END as status,
-                    COALESCE(t.updated_at, t.created_time, NOW()) as last_active,
-                    COALESCE(t.first_created_time, t.created_time, NOW()) as active_time,
-                    %s as botnet_type,
-                    COALESCE(t.country, '') as country,
-                    COALESCE(t.province, '') as province,
-                    COALESCE(t.city, '') as city
-                FROM (
-                    SELECT n.*,
-                        ROW_NUMBER() OVER (PARTITION BY n.ip ORDER BY n.updated_at DESC, n.id DESC) as rn,
-                        MIN(n.created_time) OVER (PARTITION BY n.ip) as first_created_time
-                    FROM {table_name} n
-                    WHERE n.longitude IS NOT NULL
-                    AND n.latitude IS NOT NULL
-                ) t
-                WHERE t.rn = 1
-            """
+        # 构建基础查询：使用新字段名（first_seen, last_seen）
+        # 但在SELECT中映射为旧字段名（active_time, last_active）以保持API兼容性
+        base_query = f"""
+            SELECT 
+                COALESCE(CONCAT(n.id, ''), '') as id,
+                COALESCE(n.ip, '') as ip,
+                COALESCE(n.longitude, 0) as longitude,
+                COALESCE(n.latitude, 0) as latitude,
+                CASE 
+                    WHEN n.status = 'active' THEN 'active'
+                    ELSE 'inactive'
+                END as status,
+                COALESCE(n.last_seen, n.created_time, NOW()) as last_active,
+                COALESCE(n.first_seen, n.created_time, NOW()) as active_time,
+                %s as botnet_type,
+                COALESCE(n.country, '') as country,
+                COALESCE(n.province, '') as province,
+                COALESCE(n.city, '') as city
+            FROM {table_name} n
+            WHERE n.longitude IS NOT NULL
+            AND n.latitude IS NOT NULL
+        """
         
         # 添加过滤条件
         conditions = []
         params = [botnet_type]
         
+        # 构建WHERE条件
+        where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL"]
+        
         if status:
             if status == 'active':
-                conditions.append("status = 'active'")
+                where_conditions.append("n.status = 'active'")
             elif status == 'inactive':
-                conditions.append("status = 'inactive'")
+                where_conditions.append("n.status = 'inactive'")
                 
         if country:
-            conditions.append("country = %s")
+            where_conditions.append("n.country = %s")
             params.append(country)
-            
-        if conditions:
-            base_query += " AND " + " AND ".join(conditions)
-            
-        # 获取总记录数（已经在子查询中去重）
-        count_query = f"SELECT COUNT(*) as total FROM ({base_query}) as t"
-        cursor.execute(count_query, tuple(params))
+        
+        # 优化后的count查询（直接计数，不使用子查询）
+        count_query = f"""
+            SELECT COUNT(*) as total 
+            FROM {table_name} n
+            WHERE {" AND ".join(where_conditions)}
+        """
+        count_params = params[1:] if len(params) > 1 else []  # 排除botnet_type参数
+        cursor.execute(count_query, tuple(count_params))
         total_count = cursor.fetchone()['total']
+        
+        # 将额外的过滤条件添加到base_query
+        if status:
+            base_query += f" AND n.status = '{status}'"
+        if country:
+            base_query += " AND n.country = %s"
             
         # 添加分页
         base_query += " LIMIT %s OFFSET %s"
@@ -335,3 +301,203 @@ async def get_node_stats(botnet_type: str):
         if 'conn' in locals():
             conn.close()
 
+
+@router.get("/node-communications")
+async def get_node_communications(
+    botnet_type: str,
+    ip: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=10, le=1000)
+):
+    """
+    获取节点的通信记录详情
+    
+    Args:
+        botnet_type: 僵尸网络类型
+        ip: 过滤特定IP（可选）
+        start_time: 开始时间（可选，格式：YYYY-MM-DD HH:MM:SS）
+        end_time: 结束时间（可选，格式：YYYY-MM-DD HH:MM:SS）
+        page: 页码
+        page_size: 每页数量
+    """
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        table_name = f"botnet_communications_{botnet_type}"
+        
+        # 检查表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count 
+            FROM information_schema.tables 
+            WHERE table_schema = %s AND table_name = %s
+        """, (DB_CONFIG['database'], table_name))
+        
+        if cursor.fetchone()['count'] == 0:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Communication table for {botnet_type} not found"
+            )
+        
+        # 构建查询条件
+        where_clauses = []
+        params = []
+        
+        if ip:
+            where_clauses.append("ip = %s")
+            params.append(ip)
+        
+        if start_time:
+            where_clauses.append("communication_time >= %s")
+            params.append(start_time)
+        
+        if end_time:
+            where_clauses.append("communication_time <= %s")
+            params.append(end_time)
+        
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        # 查询总数
+        count_sql = f"SELECT COUNT(*) as total FROM {table_name} WHERE {where_sql}"
+        cursor.execute(count_sql, params)
+        total = cursor.fetchone()['total']
+        
+        # 查询数据
+        offset = (page - 1) * page_size
+        data_sql = f"""
+            SELECT 
+                id,
+                node_id,
+                ip,
+                communication_time,
+                received_at,
+                country,
+                province,
+                city,
+                longitude,
+                latitude,
+                isp,
+                asn,
+                event_type,
+                status,
+                is_china
+            FROM {table_name}
+            WHERE {where_sql}
+            ORDER BY communication_time DESC
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(data_sql, params + [page_size, offset])
+        communications = cursor.fetchall()
+        
+        # 格式化时间字段
+        for comm in communications:
+            if comm['communication_time']:
+                comm['communication_time'] = comm['communication_time'].strftime('%Y-%m-%d %H:%M:%S')
+            if comm['received_at']:
+                comm['received_at'] = comm['received_at'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        response_data = {
+            "status": "success",
+            "data": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size,
+                "communications": communications
+            }
+        }
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching communications: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+
+@router.get("/node-communication-stats")
+async def get_node_communication_stats(
+    botnet_type: str,
+    ip: str
+):
+    """
+    获取单个节点的通信统计信息
+    
+    Returns:
+        节点通信统计数据
+    """
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        table_name = f"botnet_communications_{botnet_type}"
+        
+        # 基本统计
+        cursor.execute(f"""
+            SELECT 
+                COUNT(*) as total_communications,
+                MIN(communication_time) as first_seen,
+                MAX(communication_time) as last_seen
+            FROM {table_name}
+            WHERE ip = %s
+        """, (ip,))
+        
+        stats = cursor.fetchone()
+        
+        if stats['total_communications'] == 0:
+            raise HTTPException(status_code=404, detail=f"No communications found for IP {ip}")
+        
+        # 按天统计
+        cursor.execute(f"""
+            SELECT 
+                DATE(communication_time) as date,
+                COUNT(*) as count
+            FROM {table_name}
+            WHERE ip = %s
+            GROUP BY DATE(communication_time)
+            ORDER BY date
+        """, (ip,))
+        
+        timeline = cursor.fetchall()
+        
+        # 格式化时间
+        if stats['first_seen']:
+            stats['first_seen'] = stats['first_seen'].strftime('%Y-%m-%d %H:%M:%S')
+        if stats['last_seen']:
+            stats['last_seen'] = stats['last_seen'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        for item in timeline:
+            if item['date']:
+                item['date'] = item['date'].strftime('%Y-%m-%d')
+        
+        response_data = {
+            "status": "success",
+            "data": {
+                "ip": ip,
+                "total_communications": stats['total_communications'],
+                "first_seen": stats['first_seen'],
+                "last_seen": stats['last_seen'],
+                "communication_timeline": timeline
+            }
+        }
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching communication stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()

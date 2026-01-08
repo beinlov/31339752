@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
+import CommunicationModal from './CommunicationModal';
 
 // 样式定义
 const Container = styled.div`
@@ -211,6 +212,7 @@ const TableRow = styled.div`
   background: ${props => props.disabled ? 'rgba(26, 115, 232, 0.05)' : 'transparent'};
   color: #e0e0e0;
   font-size: 11px;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
 
   &:hover {
     background: ${props => !props.disabled && 'rgba(26, 115, 232, 0.15)'};
@@ -479,6 +481,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     countryDistribution: {},
     statusDistribution: {}
   });
+
+  // 通信记录弹窗相关状态
+  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [selectedIp, setSelectedIp] = useState(null);
 
   // 当从 props 接收到新的 networkType 时更新本地状态
   useEffect(() => {
@@ -874,8 +880,18 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
               <div>最近活跃时间</div>
             </TableHeader>
             {displayedNodes.map(node => (
-              <TableRow key={node.id} disabled={node.status === '下线'}>
-                <div>
+              <TableRow 
+                key={node.id} 
+                disabled={node.status === '下线'}
+                onClick={(e) => {
+                  // 避免点击复选框时触发
+                  if (!e.target.closest('input[type="checkbox"]') && !e.target.closest('.ip-copy')) {
+                    setSelectedIp(node.ip);
+                    setShowCommunicationModal(true);
+                  }
+                }}
+              >
+                <div onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={selectedNodes.includes(node.id)}
                     onChange={() => handleNodeSelect(node.id)}
@@ -887,7 +903,8 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
                     <span className="ip-address">{node.ip}</span>
                     <span
                       className="ip-copy"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         navigator.clipboard.writeText(node.ip);
                         alert('IP已复制到剪贴板');
                       }}
@@ -1019,6 +1036,18 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           <span style={{ fontSize: '18px' }}>⚠️</span>
           {error}
         </div>
+      )}
+
+      {/* 通信记录弹窗 */}
+      {showCommunicationModal && selectedIp && (
+        <CommunicationModal
+          ip={selectedIp}
+          botnetType={networkType}
+          onClose={() => {
+            setShowCommunicationModal(false);
+            setSelectedIp(null);
+          }}
+        />
       )}
     </Container>
   );

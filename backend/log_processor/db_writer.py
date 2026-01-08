@@ -133,6 +133,7 @@ class BotnetDBWriter:
 
         # 表名
         self.node_table = f"botnet_nodes_{botnet_type}"
+        self.communication_table = f"botnet_communications_{botnet_type}"  # 新增通信记录表
 
         # 表创建状态缓存
         self.table_created = False
@@ -171,28 +172,19 @@ class BotnetDBWriter:
         
     def add_node(self, log_data: Dict, ip_info: Dict) -> bool:
         """
-        添加节点数据到缓冲区（带去重检查）
+        添加节点数据到缓冲区（不再去重，记录所有通信）
         
         Args:
             log_data: 日志数据
             ip_info: IP信息
             
         Returns:
-            bool: True=成功添加, False=重复跳过
+            bool: True=成功添加, False=添加失败
         """
         try:
             self.received_count += 1
             
-            # 生成记录唯一标识（用于去重）
-            record_key = f"{log_data['ip']}|{log_data['timestamp']}|{log_data.get('event_type', '')}"
-            
-            # 检查是否已处理过（应用层去重）
-            if record_key in self.processed_records:
-                self.duplicate_count += 1
-                logger.debug(f"[{self.botnet_type}] Skipping duplicate: {record_key}")
-                return False
-            
-            # 构建节点数据
+            # 构建节点数据（移除去重逻辑）
             node_data = {
                 'ip': log_data['ip'],
                 'timestamp': log_data['timestamp'],
@@ -213,8 +205,6 @@ class BotnetDBWriter:
             with self.buffer_lock:
                 self.node_buffer.append(node_data)
             
-            # 记录已处理
-            self.processed_records.add(record_key)
             self.processed_count += 1
             
             # 更新统计
@@ -447,45 +437,78 @@ class BotnetDBWriter:
                         pass
                 
     async def _ensure_tables_exist(self, cursor):
-        """确保数据表存在并升级表结构"""
+        """确保数据表存在（双表设计：节点表+通信记录表）"""
         try:
-            # 首先创建表（如果不存在）
+            # 1. 创建节点表（汇总信息）
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self.node_table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    ip VARCHAR(15) NOT NULL,
-                    longitude FLOAT,
-                    latitude FLOAT,
-                    country VARCHAR(50),
-                    province VARCHAR(50),
-                    city VARCHAR(50),
-                    continent VARCHAR(50),
-                    isp VARCHAR(255),
-                    asn VARCHAR(50),
-                    status ENUM('active', 'inactive') DEFAULT 'active',
-                    active_time TIMESTAMP NULL DEFAULT NULL COMMENT '节点激活时间（日志中的时间）',
-                    created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '节点首次写入数据库的时间',
-                    updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '节点最新一次响应时间（日志中的时间）',
-                    is_china BOOLEAN DEFAULT FALSE,
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
+                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
+                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
+                    communication_count INT DEFAULT 0 COMMENT '通信次数',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
                     INDEX idx_ip (ip),
                     INDEX idx_location (country, province, city),
                     INDEX idx_status (status),
-                    INDEX idx_active_time (active_time),
-                    INDEX idx_created_time (created_time),
-                    INDEX idx_updated_at (updated_at),
+                    INDEX idx_first_seen (first_seen),
+                    INDEX idx_last_seen (last_seen),
+                    INDEX idx_communication_count (communication_count),
                     INDEX idx_is_china (is_china),
                     UNIQUE KEY idx_unique_ip (ip)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点原始数据表'
+                COMMENT='僵尸网络节点基本信息表（汇总）'
             """)
             
-            # 检查并添加log_time字段（表结构升级）
+            # 2. 创建通信记录表（详细历史）
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.communication_table} (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    node_id INT NOT NULL COMMENT '关联的节点ID',
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
+                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    event_type VARCHAR(50) COMMENT '事件类型',
+                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
+                    INDEX idx_node_id (node_id),
+                    INDEX idx_ip (ip),
+                    INDEX idx_communication_time (communication_time),
+                    INDEX idx_received_at (received_at),
+                    INDEX idx_location (country, province, city),
+                    INDEX idx_is_china (is_china),
+                    INDEX idx_composite (ip, communication_time)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点通信记录表'
+            """)
+            
+            # 3. 升级表结构（处理旧表迁移）
             await self._upgrade_table_structure(cursor)
             
-            logger.info(f"[{self.botnet_type}] Table {self.node_table} ensured with latest structure")
+            logger.info(f"[{self.botnet_type}] Tables ensured: {self.node_table}, {self.communication_table}")
             
         except Exception as e:
             logger.error(f"[{self.botnet_type}] Error ensuring tables exist: {e}")
+            raise
     
     async def _upgrade_table_structure(self, cursor):
         """升级表结构，重命名和添加字段"""
@@ -570,142 +593,13 @@ class BotnetDBWriter:
             
     async def _insert_nodes(self, cursor, nodes: List[Dict]):
         """
-        批量插入节点数据
-        使用 INSERT ... ON DUPLICATE KEY UPDATE 支持重复IP的更新
+        批量插入节点数据（双表设计）
+        委托给 _insert_nodes_batch 方法
         
-        时间字段逻辑:
-        - active_time: 节点激活时间（日志中的时间）
-        - created_time: 首次写入数据库时间，重复时保持不变
-        - updated_at: 最新一次响应时间（日志中的时间）
-        
-        Returns:
-            int: 实际新插入的记录数量
+        保留此方法以向后兼容
         """
-        if not nodes:
-            return 0
-            
-        try:
-            # 使用 INSERT ... ON DUPLICATE KEY UPDATE 
-            # 如果IP已存在(基于 UNIQUE KEY)则更新,否则插入
-            sql = f"""
-                INSERT INTO {self.node_table} 
-                (ip, longitude, latitude, country, province, city, continent, isp, asn, 
-                 status, active_time, is_china, created_time, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
-                ON DUPLICATE KEY UPDATE
-                    longitude = VALUES(longitude),
-                    latitude = VALUES(latitude),
-                    country = VALUES(country),
-                    province = VALUES(province),
-                    city = VALUES(city),
-                    continent = VALUES(continent),
-                    isp = VALUES(isp),
-                    asn = VALUES(asn),
-                    status = VALUES(status),
-                    active_time = CASE 
-                        WHEN VALUES(active_time) IS NOT NULL THEN VALUES(active_time)
-                        ELSE active_time
-                    END,
-                    is_china = VALUES(is_china),
-                    updated_at = VALUES(updated_at)
-            """
-            
-            values = []
-            current_time = datetime.now()
-            
-            for node in nodes:
-                # 解析日志中的时间戳
-                log_time = None
-                timestamp_str = node.get('timestamp', '')
-                
-                if timestamp_str:
-                    try:
-                        if isinstance(timestamp_str, str):
-                            # 支持多种时间格式
-                            formats = [
-                                '%Y-%m-%d %H:%M:%S',
-                                '%Y/%m/%d %H:%M:%S',
-                                '%Y-%m-%dT%H:%M:%S',  # ISO格式（无时区）
-                            ]
-                            
-                            for fmt in formats:
-                                try:
-                                    log_time = datetime.strptime(timestamp_str, fmt)
-                                    logger.debug(f"[{self.botnet_type}] Parsed '{timestamp_str}' as {log_time}")
-                                    break
-                                except ValueError:
-                                    continue
-                            
-                            # 如果还没解析成功，尝试处理ISO格式（带时区或毫秒）
-                            if not log_time and 'T' in timestamp_str:
-                                try:
-                                    # 移除时区信息（+08:00）和毫秒
-                                    clean_ts = timestamp_str.split('+')[0].split('Z')[0].split('.')[0]
-                                    log_time = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S')
-                                    logger.debug(f"[{self.botnet_type}] Parsed ISO '{timestamp_str}' -> {log_time}")
-                                except Exception as e:
-                                    logger.debug(f"[{self.botnet_type}] Failed ISO parse: {e}")
-                        
-                        elif isinstance(timestamp_str, datetime):
-                            log_time = timestamp_str
-                            logger.debug(f"[{self.botnet_type}] Timestamp is datetime: {log_time}")
-                    
-                    except Exception as e:
-                        logger.warning(f"[{self.botnet_type}] Failed to parse timestamp '{timestamp_str}': {e}")
-                
-                # 如果没有解析到时间，使用当前时间并记录警告
-                if not log_time:
-                    logger.warning(f"[{self.botnet_type}] No valid timestamp for IP {node['ip']}, using current time. Original: '{timestamp_str}'")
-                    log_time = current_time
-                else:
-                    logger.debug(f"[{self.botnet_type}] IP {node['ip']} active_time: {log_time}")
-                
-                values.append((
-                    node['ip'],
-                    node['longitude'],
-                    node['latitude'],
-                    node['country'],
-                    node['province'],
-                    node['city'],
-                    node['continent'],
-                    node['isp'],
-                    node['asn'],
-                    node['status'],
-                    log_time,  # active_time: 日志中的激活时间
-                    node['is_china'],
-                    log_time  # updated_at: 初次写入时也使用日志时间，更新时使用最新日志时间
-                ))
-                
-            cursor.executemany(sql, values)
-            
-            # 注意: ON DUPLICATE KEY UPDATE 会让 rowcount 返回:
-            # 1 = 新插入, 2 = 更新, 0 = 没变化
-            rows_affected = cursor.rowcount
-            
-            # 计算实际新插入的记录数
-            # 对于 ON DUPLICATE KEY UPDATE:
-            # - 新插入: rowcount = 1
-            # - 更新现有记录: rowcount = 2  
-            # - 没有变化: rowcount = 0
-            
-            # 估算新插入的记录数（保守估计）
-            if rows_affected <= len(nodes):
-                # 大部分是新插入
-                actual_new_records = rows_affected
-            else:
-                # 有更新发生，估算新插入数量
-                # rowcount = 新插入数 + 2 * 更新数
-                # 假设更新数 = (rowcount - len(nodes)) / 1 (保守估计)
-                estimated_updates = min(rows_affected - len(nodes), len(nodes))
-                actual_new_records = max(0, rows_affected - estimated_updates)
-            
-            logger.debug(f"[{self.botnet_type}] Batch insert: {len(nodes)} attempted, {rows_affected} affected, ~{actual_new_records} new")
-            
-            return actual_new_records
-            
-        except Exception as e:
-            logger.error(f"[{self.botnet_type}] Error inserting nodes: {e}")
-            raise
+        await self._insert_nodes_batch(cursor, nodes)
+        return len(nodes)
             
     async def _update_china_stats(self, cursor):
         """更新中国统计表"""
@@ -780,19 +674,35 @@ class BotnetDBWriter:
     
     async def _insert_nodes_batch(self, cursor, nodes: List[Dict]):
         """
-        批量插入节点数据（优化版本）
-        使用 INSERT ... ON DUPLICATE KEY UPDATE 支持跨日期去重策略
+        批量插入节点数据（双表设计）
+        1. 插入/更新节点表（维护节点汇总信息）
+        2. 插入通信记录表（记录每次通信）
         """
         if not nodes:
             return
 
         try:
-            # 使用 INSERT ... ON DUPLICATE KEY UPDATE
-            sql = f"""
+            current_time = datetime.now()
+            
+            # ========================================
+            # Step 1: 准备数据并解析时间戳
+            # ========================================
+            prepared_nodes = []
+            for node in nodes:
+                log_time = self._parse_timestamp(node.get('timestamp', ''), current_time)
+                prepared_nodes.append({
+                    'node': node,
+                    'log_time': log_time
+                })
+            
+            # ========================================
+            # Step 2: 插入/更新节点表
+            # ========================================
+            node_sql = f"""
                 INSERT INTO {self.node_table} 
                 (ip, longitude, latitude, country, province, city, continent, isp, asn, 
-                 status, active_time, is_china, created_time, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+                 status, first_seen, last_seen, communication_count, is_china)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
                 ON DUPLICATE KEY UPDATE
                     longitude = VALUES(longitude),
                     latitude = VALUES(latitude),
@@ -803,65 +713,21 @@ class BotnetDBWriter:
                     isp = VALUES(isp),
                     asn = VALUES(asn),
                     status = VALUES(status),
-                    active_time = CASE 
-                        WHEN VALUES(active_time) IS NOT NULL THEN VALUES(active_time)
-                        ELSE active_time
+                    last_seen = CASE 
+                        WHEN VALUES(last_seen) > last_seen OR last_seen IS NULL 
+                        THEN VALUES(last_seen)
+                        ELSE last_seen
                     END,
-                    is_china = VALUES(is_china),
-                    updated_at = VALUES(updated_at)
+                    communication_count = communication_count + 1,
+                    is_china = VALUES(is_china)
             """
-
-            values = []
-            current_time = datetime.now()
-
-            for node in nodes:
-                # 解析日志中的时间戳
-                log_time = None
-                timestamp_str = node.get('timestamp', '')
+            
+            node_values = []
+            for item in prepared_nodes:
+                node = item['node']
+                log_time = item['log_time']
                 
-                if timestamp_str:
-                    try:
-                        if isinstance(timestamp_str, str):
-                            # 支持多种时间格式
-                            formats = [
-                                '%Y-%m-%d %H:%M:%S',
-                                '%Y/%m/%d %H:%M:%S',
-                                '%Y-%m-%dT%H:%M:%S',  # ISO格式（无时区）
-                            ]
-                            
-                            for fmt in formats:
-                                try:
-                                    log_time = datetime.strptime(timestamp_str, fmt)
-                                    logger.debug(f"[{self.botnet_type}] Parsed '{timestamp_str}' as {log_time}")
-                                    break
-                                except ValueError:
-                                    continue
-                            
-                            # 如果还没解析成功，尝试处理ISO格式（带时区或毫秒）
-                            if not log_time and 'T' in timestamp_str:
-                                try:
-                                    # 移除时区信息（+08:00）和毫秒
-                                    clean_ts = timestamp_str.split('+')[0].split('Z')[0].split('.')[0]
-                                    log_time = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S')
-                                    logger.debug(f"[{self.botnet_type}] Parsed ISO '{timestamp_str}' -> {log_time}")
-                                except Exception as e:
-                                    logger.debug(f"[{self.botnet_type}] Failed ISO parse: {e}")
-                        
-                        elif isinstance(timestamp_str, datetime):
-                            log_time = timestamp_str
-                            logger.debug(f"[{self.botnet_type}] Timestamp is datetime: {log_time}")
-                    
-                    except Exception as e:
-                        logger.warning(f"[{self.botnet_type}] Failed to parse timestamp '{timestamp_str}': {e}")
-                
-                # 如果没有解析到时间，使用当前时间并记录警告
-                if not log_time:
-                    logger.warning(f"[{self.botnet_type}] No valid timestamp for IP {node['ip']}, using current time. Original: '{timestamp_str}'")
-                    log_time = current_time
-                else:
-                    logger.debug(f"[{self.botnet_type}] IP {node['ip']} active_time: {log_time}")
-
-                values.append((
+                node_values.append((
                     node['ip'],
                     node['longitude'],
                     node['latitude'],
@@ -872,20 +738,108 @@ class BotnetDBWriter:
                     node['isp'],
                     node['asn'],
                     node['status'],
-                    log_time,  # active_time: 日志中的激活时间
-                    node['is_china'],
-                    log_time  # updated_at: 初次写入时也使用日志时间，更新时使用最新日志时间
+                    log_time,  # first_seen
+                    log_time,  # last_seen
+                    node['is_china']
                 ))
-
-            # 批量执行
-            cursor.executemany(sql, values)
-
-            rows_affected = cursor.rowcount
-            logger.debug(f"[{self.botnet_type}] Batch insert affected {rows_affected} rows")
-
+            
+            cursor.executemany(node_sql, node_values)
+            logger.debug(f"[{self.botnet_type}] Node table updated: {len(node_values)} records")
+            
+            # ========================================
+            # Step 3: 获取node_id（通过IP查询）
+            # ========================================
+            ip_list = [item['node']['ip'] for item in prepared_nodes]
+            placeholders = ','.join(['%s'] * len(ip_list))
+            cursor.execute(
+                f"SELECT id, ip FROM {self.node_table} WHERE ip IN ({placeholders})",
+                ip_list
+            )
+            ip_to_node_id = {row[1]: row[0] for row in cursor.fetchall()}
+            
+            # ========================================
+            # Step 4: 插入通信记录表
+            # ========================================
+            comm_sql = f"""
+                INSERT INTO {self.communication_table}
+                (node_id, ip, communication_time, longitude, latitude, country, province, 
+                 city, continent, isp, asn, event_type, status, is_china)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            
+            comm_values = []
+            for item in prepared_nodes:
+                node = item['node']
+                log_time = item['log_time']
+                node_id = ip_to_node_id.get(node['ip'])
+                
+                if node_id is None:
+                    logger.error(f"[{self.botnet_type}] Cannot find node_id for IP: {node['ip']}")
+                    continue
+                
+                comm_values.append((
+                    node_id,
+                    node['ip'],
+                    log_time,
+                    node['longitude'],
+                    node['latitude'],
+                    node['country'],
+                    node['province'],
+                    node['city'],
+                    node['continent'],
+                    node['isp'],
+                    node['asn'],
+                    node.get('event_type', ''),
+                    node['status'],
+                    node['is_china']
+                ))
+            
+            if comm_values:
+                cursor.executemany(comm_sql, comm_values)
+                rows_inserted = cursor.rowcount
+                logger.debug(f"[{self.botnet_type}] Inserted {rows_inserted} communication records")
+            
         except Exception as e:
             logger.error(f"[{self.botnet_type}] Error in batch insert: {e}")
             raise
+    
+    def _parse_timestamp(self, timestamp_str, current_time):
+        """解析时间戳字符串"""
+        log_time = None
+        
+        if timestamp_str:
+            try:
+                if isinstance(timestamp_str, str):
+                    formats = [
+                        '%Y-%m-%d %H:%M:%S',
+                        '%Y/%m/%d %H:%M:%S',
+                        '%Y-%m-%dT%H:%M:%S',
+                    ]
+                    
+                    for fmt in formats:
+                        try:
+                            log_time = datetime.strptime(timestamp_str, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not log_time and 'T' in timestamp_str:
+                        try:
+                            clean_ts = timestamp_str.split('+')[0].split('Z')[0].split('.')[0]
+                            log_time = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S')
+                        except Exception:
+                            pass
+                
+                elif isinstance(timestamp_str, datetime):
+                    log_time = timestamp_str
+            
+            except Exception as e:
+                logger.warning(f"[{self.botnet_type}] Failed to parse timestamp '{timestamp_str}': {e}")
+        
+        if not log_time:
+            log_time = current_time
+        
+        return log_time
     
     def get_stats(self):
         """获取统计信息"""
