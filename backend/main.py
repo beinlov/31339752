@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ip_location'))
-from fastapi import FastAPI, HTTPException, Request, Header
+from fastapi import FastAPI, HTTPException, Request, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pymysql
@@ -183,10 +183,71 @@ class LogUploadResponse(BaseModel):
     timestamp: str
 
 
+# 后台处理函数：异步处理IP数据（不阻塞Web请求）
+async def process_ip_data_background(botnet_type: str, ip_data: List, client_ip: str):
+    """后台任务：处理IP数据并写入数据库"""
+    try:
+        from log_processor.enricher import IPEnricher
+        from log_processor.db_writer import BotnetDBWriter
+        
+        logger.info(f"[后台任务] 开始处理 {len(ip_data)} 个IP，类型: {botnet_type}")
+        
+        # 获取处理器
+        enricher = IPEnricher(
+            cache_size=10000,
+            cache_ttl=86400,
+            max_concurrent=20
+        )
+        writer = BotnetDBWriter(
+            botnet_type, 
+            DB_CONFIG, 
+            batch_size=100,
+            use_connection_pool=True,
+            enable_monitoring=True
+        )
+        
+        # 记录批次开始
+        writer.start_batch(client_ip, len(ip_data))
+        
+        # 处理每个IP数据
+        for ip_item in ip_data:
+            try:
+                # 构造parsed_data格式
+                parsed_data = {
+                    'ip': ip_item.ip,
+                    'timestamp': datetime.fromisoformat(ip_item.timestamp.replace('Z', '+00:00')),
+                    'event_type': 'remote_upload',
+                    'source': 'remote_uploader',
+                    'date': ip_item.date,
+                    'botnet_type': ip_item.botnet_type
+                }
+                
+                # IP地理位置增强
+                ip_info = await enricher.enrich(ip_item.ip)
+                
+                # 写入数据库
+                writer.add_node(parsed_data, ip_info)
+                    
+            except Exception as e:
+                logger.error(f"[后台任务] 处理IP数据失败 {ip_item.ip}: {e}")
+        
+        # 强制刷新写入器
+        await writer.flush(force=True)
+        
+        logger.info(
+            f"[后台任务] 完成处理: 成功 {writer.processed_count}, "
+            f"重复 {writer.duplicate_count}, 写入 {writer.total_written}"
+        )
+        
+    except Exception as e:
+        logger.error(f"[后台任务] IP数据处理失败: {e}", exc_info=True)
+
+
 @app.post("/api/upload-logs", response_model=LogUploadResponse)
 async def upload_logs(
     request: LogUploadRequest, 
     client_request: Request,
+    background_tasks: BackgroundTasks,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key")
 ):
     """
@@ -225,60 +286,55 @@ async def upload_logs(
         
         # 处理IP数据
         if request.ip_data:
-            # 新格式：结构化IP数据，直接处理入库
-            try:
-                from log_processor.enricher import IPEnricher
-                from log_processor.db_writer import BotnetDBWriter
+            # 方案选择：根据配置选择后台任务或Redis队列
+            USE_REDIS_QUEUE = True  # ✅ 已启用Redis队列
+            
+            if USE_REDIS_QUEUE:
+                # 方案2：推送到Redis队列（需要独立Worker进程）
+                try:
+                    from task_queue import task_queue
+                    
+                    task_id = task_queue.push_task(
+                        request.botnet_type,
+                        [ip.__dict__ for ip in request.ip_data],  # 转为dict
+                        client_ip
+                    )
+                    
+                    queue_length = task_queue.get_queue_length()
+                    
+                    logger.info(f"任务已入队: {task_id}, 队列长度: {queue_length}")
+                    
+                    return LogUploadResponse(
+                        status="queued",
+                        message=f"已接收 {len(request.ip_data)} 个IP，任务ID: {task_id}，队列中有 {queue_length} 个任务",
+                        received_count=len(request.ip_data),
+                        saved_to="redis_queue",
+                        timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    )
+                except Exception as e:
+                    logger.error(f"推送到队列失败: {e}")
+                    raise HTTPException(status_code=500, detail=f"任务队列错误: {str(e)}")
+            
+            else:
+                # 方案1：FastAPI后台任务（默认）
+                logger.info(f"接收到 {len(request.ip_data)} 个IP数据，类型: {request.botnet_type}，已提交后台处理")
                 
-                # 获取处理器
-                enricher = IPEnricher()
-                writer = BotnetDBWriter(
-                    request.botnet_type, 
-                    DB_CONFIG, 
-                    batch_size=100,
-                    use_connection_pool=True,
-                    enable_monitoring=True
+                # 添加后台任务
+                background_tasks.add_task(
+                    process_ip_data_background,
+                    request.botnet_type,
+                    request.ip_data,
+                    client_ip
                 )
                 
-                # 记录批次开始（由 db_writer 输出日志）
-                writer.start_batch(client_ip, len(request.ip_data))
-                
-                # 处理每个IP数据
-                for ip_item in request.ip_data:
-                    try:
-                        # 构造parsed_data格式
-                        parsed_data = {
-                            'ip': ip_item.ip,
-                            'timestamp': datetime.fromisoformat(ip_item.timestamp.replace('Z', '+00:00')),
-                            'event_type': 'remote_upload',
-                            'source': 'remote_uploader',
-                            'date': ip_item.date,
-                            'botnet_type': ip_item.botnet_type
-                        }
-                        
-                        # IP地理位置增强
-                        ip_info = await enricher.enrich(ip_item.ip)
-                        
-                        # 写入数据库（add_node 现在会自动统计）
-                        writer.add_node(parsed_data, ip_info)
-                            
-                    except Exception as e:
-                        logger.error(f"处理IP数据失败 {ip_item.ip}: {e}")
-                
-                # 强制刷新写入器（会输出批量写入日志）
-                await writer.flush(force=True)
-                
+                # 立即返回响应（不等待处理完成）
                 return LogUploadResponse(
-                    status="success",
-                    message=f"成功处理 {writer.processed_count} 个IP，重复 {writer.duplicate_count} 个，写入 {writer.total_written} 条",
-                    received_count=writer.received_count,
-                    saved_to="database",
+                    status="accepted",
+                    message=f"已接收 {len(request.ip_data)} 个IP，正在后台处理中...",
+                    received_count=len(request.ip_data),
+                    saved_to="background_task",
                     timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 )
-                
-            except Exception as e:
-                logger.error(f"IP数据处理失败: {e}")
-                raise HTTPException(status_code=500, detail=f"IP数据处理失败: {str(e)}")
         
         elif request.logs:
             # 旧格式：原始日志行，保存到文件

@@ -30,10 +30,7 @@ class RightPage extends PureComponent {
               <span>接管僵尸节点数量</span>
             </ModuleTitle>
             <div className='right-top-content'>
-              <DataDisplay
-                nationalData={4704}
-                globalData={4704}
-              />
+              <DataDisplay />
               <img
                 alt='地球'
                 src={earthRotateGif}

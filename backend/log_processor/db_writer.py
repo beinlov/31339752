@@ -6,6 +6,7 @@
 import pymysql
 import asyncio
 import logging
+import sys
 from datetime import datetime
 from typing import Dict, List
 from collections import defaultdict, deque
@@ -13,6 +14,10 @@ from pymysql.cursors import DictCursor
 import threading
 import queue
 import time
+
+# Python 版本兼容性检查
+PYTHON_VERSION = sys.version_info
+HAS_TO_THREAD = PYTHON_VERSION >= (3, 9)
 
 # 可选的性能监控依赖
 try:
@@ -269,8 +274,6 @@ class BotnetDBWriter:
         Args:
             force: 是否强制刷新（忽略batch_size检查）
         """
-        flush_start_time = time.time()
-        
         # 获取当前缓冲区数据
         with self.buffer_lock:
             if not force and len(self.node_buffer) < self.batch_size:
@@ -283,6 +286,19 @@ class BotnetDBWriter:
             nodes_to_write = self.node_buffer.copy()
             self.node_buffer.clear()
         
+        # 将整个 flush 操作放到后台线程执行，避免阻塞事件循环
+        if HAS_TO_THREAD:
+            await asyncio.to_thread(self._do_flush_sync, nodes_to_write, force)
+        else:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._do_flush_sync, nodes_to_write, force)
+    
+    def _do_flush_sync(self, nodes_to_write: List[Dict], force: bool):
+        """
+        同步执行 flush 操作（在后台线程中运行）
+        """
+        logger.info(f"[{self.botnet_type}] _do_flush_sync 开始: {len(nodes_to_write)} 条数据, force={force}")
+        flush_start_time = time.time()
         conn = None
         try:
             # 从连接池获取连接或创建新连接
@@ -298,12 +314,15 @@ class BotnetDBWriter:
             
             # 确保表存在（只在第一次时检查）
             if not self.table_created:
-                await self._ensure_tables_exist(cursor)
+                self._ensure_tables_exist_sync(cursor)
                 self.table_created = True
             
-            # 批量插入节点数据
+            # 批量插入节点数据（同步执行，因为整个 flush 已经在后台运行）
             insert_start_time = time.time()
-            await self._insert_nodes_batch(cursor, nodes_to_write)
+            
+            # 直接同步调用，不使用后台线程（因为连接和游标不是线程安全的）
+            self._do_insert_nodes_batch_sync(cursor, nodes_to_write)
+            
             insert_duration = time.time() - insert_start_time
             self._record_performance('insert', insert_duration)
             
@@ -336,8 +355,10 @@ class BotnetDBWriter:
             flush_duration = time.time() - flush_start_time
             self._record_performance('flush', flush_duration)
             
+            logger.info(f"[{self.botnet_type}] _do_flush_sync 完成: 耗时 {flush_duration:.2f}秒")
+            
         except Exception as e:
-            logger.error(f"[{self.botnet_type}] Error flushing to database: {e}")
+            logger.error(f"[{self.botnet_type}] Error flushing to database: {e}", exc_info=True)
             if conn:
                 conn.rollback()
             # 如果写入失败，将数据重新放回缓冲区
@@ -436,6 +457,173 @@ class BotnetDBWriter:
                     except:
                         pass
                 
+    def _ensure_tables_exist_sync(self, cursor):
+        """确保数据表存在（双表设计：节点表+通信记录表）- 同步版本"""
+        try:
+            # 1. 创建节点表（汇总信息）
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.node_table} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
+                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
+                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
+                    communication_count INT DEFAULT 0 COMMENT '通信次数',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
+                    INDEX idx_ip (ip),
+                    INDEX idx_location (country, province, city),
+                    INDEX idx_status (status),
+                    INDEX idx_first_seen (first_seen),
+                    INDEX idx_last_seen (last_seen),
+                    INDEX idx_communication_count (communication_count),
+                    INDEX idx_is_china (is_china),
+                    UNIQUE KEY idx_unique_ip (ip)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点基本信息表（汇总）'
+            """)
+            
+            # 2. 创建通信记录表（详细历史）
+            cursor.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.communication_table} (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    node_id INT NOT NULL COMMENT '关联的节点ID',
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
+                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    event_type VARCHAR(50) COMMENT '事件类型',
+                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
+                    INDEX idx_node_id (node_id),
+                    INDEX idx_ip (ip),
+                    INDEX idx_communication_time (communication_time),
+                    INDEX idx_received_at (received_at),
+                    INDEX idx_location (country, province, city),
+                    INDEX idx_is_china (is_china),
+                    INDEX idx_composite (ip, communication_time)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点通信记录表'
+            """)
+            
+            # 3. 升级表结构（处理旧表迁移）
+            self._upgrade_table_structure_sync(cursor)
+            
+            logger.info(f"[{self.botnet_type}] Tables ensured: {self.node_table}, {self.communication_table}")
+            
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] Error ensuring tables exist: {e}")
+            raise
+    
+    def _upgrade_table_structure_sync(self, cursor):
+        """升级表结构，重命名和添加字段（仅在必要时执行）- 同步版本"""
+        try:
+            # 检查字段存在性和定义
+            cursor.execute(f"""
+                SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_COMMENT, EXTRA
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = '{self.node_table}'
+            """)
+            
+            columns_info = {row[0]: {'type': row[1], 'comment': row[2], 'extra': row[3]} 
+                           for row in cursor.fetchall()}
+            existing_columns = set(columns_info.keys())
+            
+            # 如果表结构已经是最新的，直接跳过
+            if ('active_time' in existing_columns and 
+                'created_time' in existing_columns and 
+                'updated_at' in existing_columns and
+                'log_time' not in existing_columns and
+                'created_at' not in existing_columns and
+                'last_active' not in existing_columns):
+                # 表结构已是最新，跳过升级
+                return
+            
+            # 旧字段到新字段的映射
+            migrations = []
+            
+            # log_time -> active_time
+            if 'log_time' in existing_columns and 'active_time' not in existing_columns:
+                migrations.append(('log_time', 'active_time', "节点激活时间（日志中的时间）"))
+            elif 'active_time' not in existing_columns:
+                logger.info(f"[{self.botnet_type}] Adding active_time field")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    ADD COLUMN active_time TIMESTAMP NULL DEFAULT NULL 
+                    COMMENT '节点激活时间（日志中的时间）' 
+                    AFTER status
+                """)
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    ADD INDEX idx_active_time (active_time)
+                """)
+            
+            # created_at -> created_time
+            if 'created_at' in existing_columns and 'created_time' not in existing_columns:
+                migrations.append(('created_at', 'created_time', "节点首次写入数据库的时间"))
+            elif 'created_time' not in existing_columns:
+                logger.info(f"[{self.botnet_type}] Adding created_time field")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    ADD COLUMN created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
+                    COMMENT '节点首次写入数据库的时间'
+                """)
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    ADD INDEX idx_created_time (created_time)
+                """)
+            
+            # 执行字段重命名
+            for old_col, new_col, comment in migrations:
+                logger.info(f"[{self.botnet_type}] Renaming {old_col} to {new_col}")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    CHANGE COLUMN {old_col} {new_col} TIMESTAMP NULL DEFAULT NULL 
+                    COMMENT '{comment}'
+                """)
+            
+            # 确保updated_at存在并且类型正确（仅在需要时修改）
+            if 'updated_at' in existing_columns:
+                updated_at_info = columns_info.get('updated_at', {})
+                if 'on update' in updated_at_info.get('extra', '').lower():
+                    logger.info(f"[{self.botnet_type}] Modifying updated_at field")
+                    cursor.execute(f"""
+                        ALTER TABLE {self.node_table} 
+                        MODIFY COLUMN updated_at TIMESTAMP NULL DEFAULT NULL 
+                        COMMENT '节点最新一次响应时间（日志中的时间）'
+                    """)
+            
+            # 删除旧的last_active字段（如果存在）
+            if 'last_active' in existing_columns:
+                logger.info(f"[{self.botnet_type}] Dropping last_active field")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table} 
+                    DROP COLUMN last_active
+                """)
+            
+            logger.info(f"[{self.botnet_type}] Table structure upgrade completed")
+                
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] Error upgrading table structure: {e}")
+            raise
+    
     async def _ensure_tables_exist(self, cursor):
         """确保数据表存在（双表设计：节点表+通信记录表）"""
         try:
@@ -511,17 +699,29 @@ class BotnetDBWriter:
             raise
     
     async def _upgrade_table_structure(self, cursor):
-        """升级表结构，重命名和添加字段"""
+        """升级表结构，重命名和添加字段（仅在必要时执行）"""
         try:
-            # 检查字段存在性
+            # 检查字段存在性和定义
             cursor.execute(f"""
-                SELECT COLUMN_NAME 
+                SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_COMMENT, EXTRA
                 FROM INFORMATION_SCHEMA.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE() 
                 AND TABLE_NAME = '{self.node_table}'
             """)
             
-            existing_columns = {row[0] for row in cursor.fetchall()}
+            columns_info = {row[0]: {'type': row[1], 'comment': row[2], 'extra': row[3]} 
+                           for row in cursor.fetchall()}
+            existing_columns = set(columns_info.keys())
+            
+            # 如果表结构已经是最新的，直接跳过
+            if ('active_time' in existing_columns and 
+                'created_time' in existing_columns and 
+                'updated_at' in existing_columns and
+                'log_time' not in existing_columns and
+                'created_at' not in existing_columns and
+                'last_active' not in existing_columns):
+                # 表结构已是最新，跳过升级
+                return
             
             # 旧字段到新字段的映射
             migrations = []
@@ -567,15 +767,17 @@ class BotnetDBWriter:
                     COMMENT '{comment}'
                 """)
             
-            # 确保updated_at存在并且类型正确
+            # 确保updated_at存在并且类型正确（仅在需要时修改）
             if 'updated_at' in existing_columns:
-                # 修改updated_at的定义，移除ON UPDATE CURRENT_TIMESTAMP
-                logger.info(f"[{self.botnet_type}] Modifying updated_at field")
-                cursor.execute(f"""
-                    ALTER TABLE {self.node_table} 
-                    MODIFY COLUMN updated_at TIMESTAMP NULL DEFAULT NULL 
-                    COMMENT '节点最新一次响应时间（日志中的时间）'
-                """)
+                updated_at_info = columns_info.get('updated_at', {})
+                # 只有当 updated_at 有 ON UPDATE 触发器时才需要修改
+                if 'on update' in updated_at_info.get('extra', '').lower():
+                    logger.info(f"[{self.botnet_type}] Modifying updated_at field")
+                    cursor.execute(f"""
+                        ALTER TABLE {self.node_table} 
+                        MODIFY COLUMN updated_at TIMESTAMP NULL DEFAULT NULL 
+                        COMMENT '节点最新一次响应时间（日志中的时间）'
+                    """)
             
             # 删除旧的last_active字段（如果存在）
             if 'last_active' in existing_columns:
@@ -672,21 +874,18 @@ class BotnetDBWriter:
             logger.error(f"[{self.botnet_type}] Error getting accurate stats: {e}")
             return self.get_stats()  # 回退到基本统计
     
-    async def _insert_nodes_batch(self, cursor, nodes: List[Dict]):
+    def _do_insert_nodes_batch_sync(self, cursor, nodes: List[Dict]):
         """
-        批量插入节点数据（双表设计）
-        1. 插入/更新节点表（维护节点汇总信息）
-        2. 插入通信记录表（记录每次通信）
+        同步执行批量插入（在后台线程中运行）
         """
-        if not nodes:
-            return
-
         try:
+            logger.info(f"[{self.botnet_type}] 开始批量插入 {len(nodes)} 条数据...")
             current_time = datetime.now()
             
             # ========================================
             # Step 1: 准备数据并解析时间戳
             # ========================================
+            logger.debug(f"[{self.botnet_type}] Step 1: 准备数据...")
             prepared_nodes = []
             for node in nodes:
                 log_time = self._parse_timestamp(node.get('timestamp', ''), current_time)
@@ -694,61 +893,120 @@ class BotnetDBWriter:
                     'node': node,
                     'log_time': log_time
                 })
+            logger.debug(f"[{self.botnet_type}] 数据准备完成: {len(prepared_nodes)} 条")
             
             # ========================================
-            # Step 2: 插入/更新节点表
+            # Step 2: 优化插入/更新节点表（分离INSERT和UPDATE）
             # ========================================
-            node_sql = f"""
-                INSERT INTO {self.node_table} 
-                (ip, longitude, latitude, country, province, city, continent, isp, asn, 
-                 status, first_seen, last_seen, communication_count, is_china)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
-                ON DUPLICATE KEY UPDATE
-                    longitude = VALUES(longitude),
-                    latitude = VALUES(latitude),
-                    country = VALUES(country),
-                    province = VALUES(province),
-                    city = VALUES(city),
-                    continent = VALUES(continent),
-                    isp = VALUES(isp),
-                    asn = VALUES(asn),
-                    status = VALUES(status),
-                    last_seen = CASE 
-                        WHEN VALUES(last_seen) > last_seen OR last_seen IS NULL 
-                        THEN VALUES(last_seen)
-                        ELSE last_seen
-                    END,
-                    communication_count = communication_count + 1,
-                    is_china = VALUES(is_china)
-            """
+            logger.info(f"[{self.botnet_type}] Step 2: 优化插入节点表...")
             
-            node_values = []
+            # Step 2.1: 批量查询哪些IP已存在
+            check_start = time.time()
+            ip_list = [item['node']['ip'] for item in prepared_nodes]
+            placeholders = ','.join(['%s'] * len(ip_list))
+            cursor.execute(
+                f"SELECT ip FROM {self.node_table} WHERE ip IN ({placeholders})",
+                ip_list
+            )
+            existing_ips = {row[0] for row in cursor.fetchall()}
+            check_time = time.time() - check_start
+            logger.info(f"[{self.botnet_type}] IP检查完成: {len(existing_ips)}/{len(ip_list)} 已存在, 耗时 {check_time:.2f}秒")
+            
+            # Step 2.2: 分离新IP和旧IP
+            new_nodes = []
+            update_nodes = []
             for item in prepared_nodes:
-                node = item['node']
-                log_time = item['log_time']
-                
-                node_values.append((
-                    node['ip'],
-                    node['longitude'],
-                    node['latitude'],
-                    node['country'],
-                    node['province'],
-                    node['city'],
-                    node['continent'],
-                    node['isp'],
-                    node['asn'],
-                    node['status'],
-                    log_time,  # first_seen
-                    log_time,  # last_seen
-                    node['is_china']
-                ))
+                if item['node']['ip'] in existing_ips:
+                    update_nodes.append(item)
+                else:
+                    new_nodes.append(item)
             
-            cursor.executemany(node_sql, node_values)
-            logger.debug(f"[{self.botnet_type}] Node table updated: {len(node_values)} records")
+            logger.info(f"[{self.botnet_type}] 分离数据: {len(new_nodes)} 新增, {len(update_nodes)} 更新")
+            
+            # Step 2.3: 批量插入新IP（使用真正的批量INSERT）
+            if new_nodes:
+                insert_start = time.time()
+                
+                # 使用真正的批量INSERT（多个VALUES）而不是executemany
+                # executemany在pymysql中是逐条执行的，非常慢！
+                insert_values = []
+                for item in new_nodes:
+                    node = item['node']
+                    log_time = item['log_time']
+                    insert_values.append((
+                        node['ip'], node['longitude'], node['latitude'],
+                        node['country'], node['province'], node['city'],
+                        node['continent'], node['isp'], node['asn'],
+                        node['status'], log_time, log_time, node['is_china']
+                    ))
+                
+                # 分批插入，每批500条
+                batch_size = 500
+                total_inserted = 0
+                
+                for i in range(0, len(insert_values), batch_size):
+                    batch = insert_values[i:i+batch_size]
+                    
+                    # 构建真正的批量INSERT语句
+                    placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s)'] * len(batch))
+                    insert_sql = f"""
+                        INSERT INTO {self.node_table} 
+                        (ip, longitude, latitude, country, province, city, continent, isp, asn, 
+                         status, first_seen, last_seen, communication_count, is_china)
+                        VALUES {placeholders}
+                    """
+                    
+                    # 展平参数列表
+                    flat_params = []
+                    for values in batch:
+                        flat_params.extend(values)
+                    
+                    cursor.execute(insert_sql, flat_params)
+                    total_inserted += len(batch)
+                
+                insert_time = time.time() - insert_start
+                logger.info(f"[{self.botnet_type}] 插入新节点: {len(new_nodes)} 条, 耗时 {insert_time:.2f}秒 ({len(new_nodes)/insert_time:.0f} 条/秒)")
+            
+            # Step 2.4: 批量更新旧IP（使用UPDATE，比ON DUPLICATE KEY快）
+            if update_nodes:
+                update_start = time.time()
+                update_sql = f"""
+                    UPDATE {self.node_table} SET
+                        longitude = %s,
+                        latitude = %s,
+                        country = %s,
+                        province = %s,
+                        city = %s,
+                        continent = %s,
+                        isp = %s,
+                        asn = %s,
+                        status = %s,
+                        last_seen = GREATEST(last_seen, %s),
+                        communication_count = communication_count + 1,
+                        is_china = %s
+                    WHERE ip = %s
+                """
+                
+                update_values = []
+                for item in update_nodes:
+                    node = item['node']
+                    log_time = item['log_time']
+                    update_values.append((
+                        node['longitude'], node['latitude'],
+                        node['country'], node['province'], node['city'],
+                        node['continent'], node['isp'], node['asn'],
+                        node['status'], log_time, node['is_china'],
+                        node['ip']  # WHERE条件
+                    ))
+                
+                cursor.executemany(update_sql, update_values)
+                update_time = time.time() - update_start
+                logger.info(f"[{self.botnet_type}] 更新旧节点: {len(update_nodes)} 条, 耗时 {update_time:.2f}秒")
             
             # ========================================
             # Step 3: 获取node_id（通过IP查询）
             # ========================================
+            logger.info(f"[{self.botnet_type}] Step 3: 查询node_id...")
             ip_list = [item['node']['ip'] for item in prepared_nodes]
             placeholders = ','.join(['%s'] * len(ip_list))
             cursor.execute(
@@ -795,12 +1053,40 @@ class BotnetDBWriter:
                 ))
             
             if comm_values:
-                cursor.executemany(comm_sql, comm_values)
-                rows_inserted = cursor.rowcount
-                logger.debug(f"[{self.botnet_type}] Inserted {rows_inserted} communication records")
+                logger.info(f"[{self.botnet_type}] Step 4: 插入通信记录表 {len(comm_values)} 条...")
+                comm_start = time.time()
+                
+                # 使用真正的批量INSERT（多个VALUES）
+                batch_size = 500
+                total_comm_inserted = 0
+                
+                for i in range(0, len(comm_values), batch_size):
+                    batch = comm_values[i:i+batch_size]
+                    
+                    # 构建批量INSERT语句（14个字段）
+                    placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'] * len(batch))
+                    comm_sql_batch = f"""
+                        INSERT INTO {self.communication_table}
+                        (node_id, ip, communication_time, longitude, latitude, country, province, 
+                         city, continent, isp, asn, event_type, status, is_china)
+                        VALUES {placeholders}
+                    """
+                    
+                    # 展平参数
+                    flat_params = []
+                    for values in batch:
+                        flat_params.extend(values)
+                    
+                    cursor.execute(comm_sql_batch, flat_params)
+                    total_comm_inserted += len(batch)
+                
+                comm_time = time.time() - comm_start
+                logger.info(f"[{self.botnet_type}] 通信记录插入完成: {total_comm_inserted} 条, 耗时 {comm_time:.2f}秒 ({total_comm_inserted/comm_time:.0f} 条/秒)")
+            
+            logger.info(f"[{self.botnet_type}] 批量插入全部完成!")
             
         except Exception as e:
-            logger.error(f"[{self.botnet_type}] Error in batch insert: {e}")
+            logger.error(f"[{self.botnet_type}] Error in batch insert: {e}", exc_info=True)
             raise
     
     def _parse_timestamp(self, timestamp_str, current_time):
@@ -969,10 +1255,10 @@ class BotnetDBWriter:
 
     def close(self):
         """关闭写入器"""
-        # 最后刷新一次
-        if self.node_buffer:
-            asyncio.run(self.flush(force=True))
-
+        # 注意：不在这里刷新，因为close()通常在事件循环外调用
+        # 刷新应该在程序优雅关闭时由主程序调用
+        logger.info(f"[{self.botnet_type}] DB Writer closing, buffer size: {len(self.node_buffer)}")
+        
         # 关闭连接池
         if self.use_connection_pool and self.connection_pool:
             self.connection_pool.close_all()

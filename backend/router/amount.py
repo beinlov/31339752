@@ -36,30 +36,36 @@ async def get_botnet_distribution():
         for botnet in botnet_types:
             botnet_name = botnet['name']
             
-            # 计算中国总量
-            china_query = f"""
-                SELECT COALESCE(SUM(infected_num), 0) as china_total
-                FROM china_botnet_{botnet_name}
-            """
-            cursor.execute(china_query)
-            china_total = cursor.fetchone()['china_total']
+            try:
+                # 计算中国总量
+                china_query = f"""
+                    SELECT COALESCE(SUM(infected_num), 0) as china_total
+                    FROM china_botnet_{botnet_name}
+                """
+                cursor.execute(china_query)
+                china_total = cursor.fetchone()['china_total']
+                
+                # 计算全球总量
+                global_query = f"""
+                    SELECT COALESCE(SUM(infected_num), 0) as global_total
+                    FROM global_botnet_{botnet_name}
+                """
+                cursor.execute(global_query)
+                global_total = cursor.fetchone()['global_total']
+                
+                # 添加到响应数据
+                response_data.append({
+                    "name": botnet_name,
+                    "china_amount": int(china_total),
+                    "global_amount": int(global_total)
+                })
+                
+                logger.info(f"Botnet {botnet_name} stats - China: {china_total}, Global: {global_total}")
             
-            # 计算全球总量
-            global_query = f"""
-                SELECT COALESCE(SUM(infected_num), 0) as global_total
-                FROM global_botnet_{botnet_name}
-            """
-            cursor.execute(global_query)
-            global_total = cursor.fetchone()['global_total']
-            
-            # 添加到响应数据
-            response_data.append({
-                "name": botnet_name,
-                "china_amount": int(china_total),
-                "global_amount": int(global_total)
-            })
-            
-            logger.info(f"Botnet {botnet_name} stats - China: {china_total}, Global: {global_total}")
+            except Exception as e:
+                # 如果表不存在或查询失败，跳过该僵尸网络并记录警告
+                logger.warning(f"Skipping botnet {botnet_name} due to error: {str(e)}")
+                continue
         
         logger.info(f"Final response data: {response_data}")
         return response_data
