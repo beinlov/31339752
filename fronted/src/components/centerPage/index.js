@@ -335,7 +335,7 @@ class index extends PureComponent {
           <div style={{
             position: 'absolute',
             left: '90%',
-            top: '50%',
+            top: '73%',
             zIndex: 999,
           }}>
             <Takeover />

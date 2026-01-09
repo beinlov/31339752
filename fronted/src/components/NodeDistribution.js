@@ -186,10 +186,11 @@ class NodeDistribution extends PureComponent {
     // 仅更新节点大小和位置
     const option = this.chart.getOption();
     const { zoomLevel } = this.state;
+    const sizeFactor = this.getPointSizeFactor();
     
     // 简化点大小计算
-    const activeSymbolSize = Math.min(3 * zoomLevel, 8);
-    const inactiveSymbolSize = Math.min(2 * zoomLevel, 6);
+    const activeSymbolSize = Math.min(3 * zoomLevel * sizeFactor, 10);
+    const inactiveSymbolSize = Math.min(2 * zoomLevel * sizeFactor, 8);
     
     if (option.series[1]) {
       option.series[1].symbolSize = activeSymbolSize;
@@ -222,7 +223,8 @@ class NodeDistribution extends PureComponent {
       const params = new URLSearchParams({
         botnet_type: this.props.networkType,
         page: 1,
-        page_size: 100000 // 使用较大的页面大小以获取足够的数据点
+        // 降低单次获取量以加快首屏渲染，后续可按需分页扩展
+        page_size: 20000
       });
       
       const response = await request(`http://localhost:8000/api/node-details?${params.toString()}`);
@@ -400,6 +402,19 @@ class NodeDistribution extends PureComponent {
     });
   };
 
+  getPointSizeFactor = () => {
+    const { pointSize } = this.state;
+    switch (pointSize) {
+      case 'small':
+        return 0.7;
+      case 'large':
+        return 1.4;
+      case 'medium':
+      default:
+        return 1;
+    }
+  };
+
   updateChart = () => {
     if (!this.chart || !this.state.nodeData || !this.state.mapLoaded) {
       console.warn('Chart or data not ready');
@@ -407,6 +422,7 @@ class NodeDistribution extends PureComponent {
     }
 
     const { mapType, displayMode, zoomLevel } = this.state;
+    const sizeFactor = this.getPointSizeFactor();
     
     // 验证地图是否已注册
     if (!echarts.getMap(mapType)) {
@@ -479,8 +495,8 @@ class NodeDistribution extends PureComponent {
     let activeNodesData = [];
     let inactiveNodesData = [];
     
-    // 移除节点数量限制，渲染所有节点
-    const maxPointsPerType = Infinity; // 不限制节点数量
+    // 渲染所有节点，不做数量限制
+    const maxPointsPerType = Infinity;
 
     if (displayMode === 'all' || displayMode === 'active') {
       activeNodesData = this.sampleData(this.allNodesData.active, maxPointsPerType);
@@ -507,7 +523,7 @@ class NodeDistribution extends PureComponent {
       progressiveThreshold: 10000,
       title: {
         text: `${this.props.networkType.toUpperCase()} 僵尸网络节点分布`,
-        subtext: `总节点数: ${mapType === 'world' ? this.state.globalTotalNodes : this.state.chinaTotalNodes} | 活跃节点: ${mapType === 'world' ? this.state.globalActiveNodes : this.state.chinaActiveNodes} | 当前视图: ${mapType === 'world' ? '全球' : '中国'}`,
+        subtext: `总节点数: ${mapType === 'world' ? this.state.globalTotalNodes : this.state.chinaTotalNodes} | 当前视图: ${mapType === 'world' ? '全球' : '中国'}`,
         left: 'center',
         top: 10,
         textStyle: {
@@ -714,10 +730,7 @@ class NodeDistribution extends PureComponent {
         </h3>
         <div style={{ marginBottom: '10px', fontSize: '14px', color: '#aaa' }}>
           <div>总节点数: {totalNodes}</div>
-          <div>活跃节点总数: {activeNodes}</div>
-          <div style={{ color: '#ffeb3b' }}>当前渲染活跃节点: {renderedActiveNodes}</div>
-          <div style={{ color: '#ff5252' }}>当前渲染非活跃节点: {renderedInactiveNodes}</div>
-          <div style={{ color: '#00a8ff' }}>当前总渲染节点: {renderedActiveNodes + renderedInactiveNodes}</div>
+          <div style={{ color: '#00a8ff' }}>当前总渲染节点: {totalNodes}</div>
         </div>
         <h3 style={{ margin: '10px 0', fontSize: '16px', borderBottom: '1px solid #3a5998' }}>
           国家/地区分布 (Top 10)
@@ -770,10 +783,7 @@ class NodeDistribution extends PureComponent {
         </h3>
         <div style={{ marginBottom: '10px', fontSize: '14px', color: '#aaa' }}>
           <div>总节点数: {totalNodes}</div>
-          <div>活跃节点总数: {activeNodes}</div>
-          <div style={{ color: '#ffeb3b' }}>当前渲染活跃节点: {renderedActiveNodes}</div>
-          <div style={{ color: '#ff5252' }}>当前渲染非活跃节点: {renderedInactiveNodes}</div>
-          <div style={{ color: '#00a8ff' }}>当前总渲染节点: {renderedActiveNodes + renderedInactiveNodes}</div>
+          <div style={{ color: '#00a8ff' }}>当前总渲染节点: {totalNodes}</div>
         </div>
         <h3 style={{ margin: '10px 0', fontSize: '16px', borderBottom: '1px solid #3a5998' }}>
           中国省份分布 (Top 10)
@@ -801,8 +811,8 @@ class NodeDistribution extends PureComponent {
     return (
       <div style={{
         position: 'absolute',
-        bottom: '20px',
-        left: '20px',
+        bottom: '120px',
+        left: '60px',
         background: 'rgba(10, 30, 70, 0.9)', // 更深的背景色
         padding: '15px',
         borderRadius: '8px',
@@ -813,56 +823,7 @@ class NodeDistribution extends PureComponent {
         gap: '10px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.3)' // 添加阴影
       }}>
-        <div style={{ fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>节点显示:</div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            onClick={() => this.toggleDisplayMode('all')}
-            style={{
-              padding: '8px 12px',
-              background: displayMode === 'all' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: displayMode === 'all' ? 'bold' : 'normal',
-              boxShadow: displayMode === 'all' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            全部节点
-          </button>
-          <button 
-            onClick={() => this.toggleDisplayMode('active')}
-            style={{
-              padding: '8px 12px',
-              background: displayMode === 'active' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: displayMode === 'active' ? 'bold' : 'normal',
-              boxShadow: displayMode === 'active' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            仅活跃节点
-          </button>
-          <button 
-            onClick={() => this.toggleDisplayMode('inactive')}
-            style={{
-              padding: '8px 12px',
-              background: displayMode === 'inactive' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: displayMode === 'inactive' ? 'bold' : 'normal',
-              boxShadow: displayMode === 'inactive' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            仅非活跃节点
-          </button>
-        </div>
-        
-        <div style={{ fontSize: '14px', marginBottom: '5px', marginTop: '5px', fontWeight: 'bold' }}>节点大小:</div>
+        <div style={{ fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>节点大小:</div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button 
             onClick={() => this.setPointSize('small')}
