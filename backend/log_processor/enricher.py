@@ -20,23 +20,26 @@ logger = logging.getLogger(__name__)
 class IPEnricher:
     """IP信息增强器"""
     
-    def __init__(self, cache_size: int = 10000, cache_ttl: int = 86400):
+    def __init__(self, cache_size: int = 10000, cache_ttl: int = 86400, max_concurrent: int = 50):
         """
         初始化IP信息增强器
         
         Args:
             cache_size: 缓存大小
             cache_ttl: 缓存过期时间（秒）
+            max_concurrent: 最大并发查询数（防止并发风暴）
         """
         self.cache = {}  # {ip: {'info': dict, 'timestamp': datetime}}
         self.cache_size = cache_size
         self.cache_ttl = cache_ttl
         self.query_count = 0
         self.cache_hit_count = 0
+        self.max_concurrent = max_concurrent
+        self.semaphore = asyncio.Semaphore(max_concurrent)  # 并发控制
         
     async def enrich(self, ip: str) -> Optional[Dict]:
         """
-        增强单个IP的信息
+        增强单个IP的信息（带并发控制）
         
         Args:
             ip: IP地址
@@ -52,9 +55,17 @@ class IPEnricher:
                 logger.debug(f"Cache hit for IP: {ip}")
                 return cached
                 
-            # 查询IP信息
-            self.query_count += 1
-            ip_info = await ip_query(ip)
+            # 并发控制：防止并发风暴
+            async with self.semaphore:
+                # 再次检查缓存（其他并发任务可能已查询）
+                cached = self._get_from_cache(ip)
+                if cached:
+                    self.cache_hit_count += 1
+                    return cached
+                
+                # 查询IP信息
+                self.query_count += 1
+                ip_info = await ip_query(ip)
             
             if not ip_info:
                 logger.warning(f"Failed to query IP info for: {ip}")

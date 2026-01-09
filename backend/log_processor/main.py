@@ -37,6 +37,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 导入Redis队列（用于解耦数据处理）
+try:
+    from task_queue import task_queue
+    USE_QUEUE_FOR_PULLING = True  # 日志处理器也使用队列
+    logger.info("[配置] 日志处理器将使用Redis队列进行异步处理")
+except ImportError:
+    task_queue = None
+    USE_QUEUE_FOR_PULLING = False
+    logger.warning("[配置] task_queue未找到，将直接处理数据（可能影响前端性能）")
+
 
 class BotnetLogProcessor:
     """僵尸网络日志处理器"""
@@ -44,7 +54,11 @@ class BotnetLogProcessor:
     def __init__(self):
         """初始化日志处理器"""
         self.parsers = {}
-        self.enricher = IPEnricher()
+        self.enricher = IPEnricher(
+            cache_size=10000,
+            cache_ttl=86400,
+            max_concurrent=20  # 限制并发为20，防止数据库连接耗尽
+        )
         self.writers = {}
         self.monitors = {}  # 性能监控器
         self.watcher = None
@@ -102,7 +116,7 @@ class BotnetLogProcessor:
         
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """
-        处理来自API的结构化IP数据（异步非阻塞）
+        处理来自API的结构化IP数据（支持队列模式和直接处理模式）
         
         Args:
             botnet_type: 僵尸网络类型
@@ -111,23 +125,51 @@ class BotnetLogProcessor:
         if botnet_type not in self.writers:
             logger.warning(f"Unknown botnet type: {botnet_type}")
             return
-            
-        writer = self.writers[botnet_type]
         
-        logger.info(f"[{botnet_type}] 收到 {len(ip_data)} 个IP，开始处理...")
+        # ===== 模式1: 使用Redis队列（推荐，不阻塞） =====
+        if USE_QUEUE_FOR_PULLING and task_queue:
+            try:
+                task_id = task_queue.push_task(
+                    botnet_type=botnet_type,
+                    ip_data=ip_data,
+                    client_ip='log_processor'  # 标识来源
+                )
+                queue_len = task_queue.get_queue_length()
+                logger.info(
+                    f"[{botnet_type}] 已推送 {len(ip_data)} 条数据到队列，"
+                    f"任务ID: {task_id}, 队列长度: {queue_len}"
+                )
+                return  # 立即返回，由Worker异步处理
+            except Exception as e:
+                logger.error(f"[{botnet_type}] 推送到队列失败: {e}，降级为直接处理")
+                # 降级到直接处理模式
+        
+        # ===== 模式2: 直接处理（会占用资源，可能影响前端） =====
+        writer = self.writers[botnet_type]
+        logger.info(f"[{botnet_type}] 收到 {len(ip_data)} 个IP，开始直接处理...")
         
         # 批量处理IP查询和数据库写入
         processed_count = 0
         error_count = 0
         start_time = datetime.now()
         
-        # 使用gather并发查询IP信息（提高效率）
+        # === 性能监控：IP增强阶段 ===
+        enrich_start = datetime.now()
+        
+        # 使用gather并发查询IP信息（已有Semaphore控制并发上限）
         ip_query_tasks = []
         for ip_item in ip_data:
             ip_query_tasks.append(self.enricher.enrich(ip_item['ip']))
         
         # 并发查询所有IP的地理位置信息
         ip_infos = await asyncio.gather(*ip_query_tasks, return_exceptions=True)
+        
+        enrich_time = (datetime.now() - enrich_start).total_seconds()
+        enrich_stats = self.enricher.get_stats()
+        logger.info(
+            f"[{botnet_type}] IP增强完成: {len(ip_data)}条 用时{enrich_time:.2f}秒 ({len(ip_data)/enrich_time:.0f} IP/秒) "
+            f"缓存命中率{enrich_stats['cache_hit_rate']}"
+        )
         
         # 将查询结果与IP数据配对并写入
         for ip_item, ip_info in zip(ip_data, ip_infos):
@@ -168,15 +210,22 @@ class BotnetLogProcessor:
                 error_count += 1
                 self.stats['errors'] += 1
         
+        # === 性能监控：数据库写入阶段 ===
+        db_start = datetime.now()
+        
         # 批量刷新到数据库（提高效率）
         try:
             await writer.flush(force=True)
-            elapsed_time = (datetime.now() - start_time).total_seconds()
+            
+            db_time = (datetime.now() - db_start).total_seconds()
+            total_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(
                 f"[OK] [{botnet_type}] API数据处理完成: "
                 f"成功 {processed_count}, 失败 {error_count}, "
-                f"用时 {elapsed_time:.2f}秒 ({processed_count/elapsed_time:.0f} IP/秒)"
+                f"总用时 {total_time:.2f}秒 ({processed_count/total_time:.0f} IP/秒) | "
+                f"IP增强 {enrich_time:.2f}秒({enrich_time/total_time*100:.1f}%) "
+                f"DB写入 {db_time:.2f}秒({db_time/total_time*100:.1f}%)"
             )
         except Exception as e:
             logger.error(f"[ERROR] [{botnet_type}] 数据库刷新失败: {e}")
@@ -332,12 +381,15 @@ class BotnetLogProcessor:
             
         except KeyboardInterrupt:
             logger.info("Received interrupt signal, shutting down...")
+            # 执行异步停止
+            if self.running:
+                loop.run_until_complete(self._async_stop())
         finally:
-            self.stop()
-            loop.close()
+            if not loop.is_closed():
+                loop.close()
             
-    def stop(self):
-        """停止服务"""
+    async def _async_stop(self):
+        """异步停止服务"""
         logger.info("Stopping Botnet Log Processor...")
         
         self.running = False
@@ -347,8 +399,7 @@ class BotnetLogProcessor:
             logger.info("正在停止远程拉取任务...")
             self.remote_puller_task.cancel()
             try:
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.remote_puller_task)
+                await self.remote_puller_task
             except asyncio.CancelledError:
                 logger.info("远程拉取任务已停止")
         
@@ -357,13 +408,32 @@ class BotnetLogProcessor:
             self.watcher.stop()
             
         # 最后刷新一次
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self._flush_all_writers())
+        await self._flush_all_writers()
         
         # 打印最终统计
         self._print_stats()
         
         logger.info("Botnet Log Processor stopped")
+    
+    def stop(self):
+        """停止服务（同步版本，仅设置标志）"""
+        logger.info("Stop signal received, setting flag...")
+        self.running = False
+        
+        # 停止监控（立即）
+        if self.watcher:
+            self.watcher.stop()
+        
+        # 停止事件循环
+        try:
+            loop = asyncio.get_event_loop()
+            if loop and loop.is_running():
+                # 在事件循环中安排异步停止
+                asyncio.ensure_future(self._async_stop())
+                # 延迟停止事件循环，让 _async_stop 有时间执行
+                loop.call_later(0.5, loop.stop)
+        except Exception as e:
+            logger.error(f"Error stopping loop: {e}")
 
 
 # 全局处理器实例（用于API调用）
@@ -378,15 +448,21 @@ def get_processor():
 
 def signal_handler(sig, frame):
     """信号处理器"""
-    logger.info("Signal received, stopping...")
+    logger.info("Signal received, initiating graceful shutdown...")
     global _global_processor
     if _global_processor:
         _global_processor.stop()
-    sys.exit(0)
+    # 不立即 sys.exit，让事件循环优雅关闭
 
 
 def main():
     """主函数"""
+    # 输出 Python 版本信息
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    logger.info(f"Python 版本: {python_version}")
+    if sys.version_info < (3, 9):
+        logger.warning("检测到 Python < 3.9，使用 run_in_executor 代替 asyncio.to_thread")
+    
     # 注册信号处理器
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

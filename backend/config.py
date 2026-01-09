@@ -91,7 +91,7 @@ SYNC_CONFIG = {
     
     # API密钥（集成平台调用同步接口时需要提供）
     # 生产环境请修改为强密钥（至少32个字符）
-    "api_key": "your-sync-api-key-here-change-in-production",
+    "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
     
     # 是否启用IP白名单验证
     "enable_ip_whitelist": True,  # 开发环境可设为False，生产环境建议True
@@ -171,8 +171,8 @@ IP_CACHE_SIZE = 10000  # 缓存最多10000个IP信息
 IP_CACHE_TTL = 86400   # 缓存24小时
 
 # 数据库批量写入配置
-DB_BATCH_SIZE = 200           # 批量写入大小（减小以降低锁表时间）
-DB_COMMIT_INTERVAL = 60       # 提交间隔（秒）
+DB_BATCH_SIZE = 100  # 批量写入大小（平衡性能和锁表时间）
+DB_COMMIT_INTERVAL = 10  # 提交间隔（秒）
 DB_STATISTICS_INTERVAL = 300  # 统计更新间隔（秒）
 
 # 日志处理配置
@@ -186,7 +186,7 @@ POSITION_STATE_FILE = os.path.join(BASE_DIR, 'log_processor', '.file_positions.j
 
 # 性能优化配置
 PERFORMANCE_MONITORING = True  # 启用性能监控
-CONNECTION_POOL_SIZE = 3       # 数据库连接池大小
+CONNECTION_POOL_SIZE = 10      # 数据库连接池大小（平衡处理和Web服务）
 
 # 性能阈值配置
 SLOW_FLUSH_THRESHOLD = 2.0     # 慢flush阈值（秒）
