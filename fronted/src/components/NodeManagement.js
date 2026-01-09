@@ -18,7 +18,8 @@ const Container = styled.div`
 
 // 左侧面板 - 统计信息和图表
 const LeftPanel = styled.div`
-  width: 480px;
+  width: 38%;
+  min-width: 540px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -44,6 +45,7 @@ const LeftPanel = styled.div`
 // 右侧面板 - 搜索和表格
 const RightPanel = styled.div`
   flex: 1;
+  padding-left: 10px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -338,7 +340,17 @@ const PageButton = styled.button`
 const StatsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  flex: 0 0 35%;
+
+  > * {
+    flex: 1;
+  }
+`;
+
+const ChartSection = styled.div`
+  flex: 1;
+  display: flex;
 `;
 
 const CountryFlag = styled.span`
@@ -732,28 +744,33 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       .sort((a, b) => b.value - a.value); // 按数量排序
 
     // 如果没有数据，返回空状态配置
-    if (countryData.length === 0) {
-      return {
-        title: {
-          text: '节点地理分布',
-          left: 'center',
-          textStyle: {
-            fontWeight: 'normal',
-            fontSize: 14,
-            color: '#ffffff'
-          }
-        },
-        graphic: {
-          type: 'text',
-          left: 'center',
-          top: 'middle',
-          style: {
-            text: '暂无数据',
-            fontSize: 14,
-            fill: '#999'
-          }
+    const buildEmptyState = () => ({
+      title: {
+        text: '节点地理分布',
+        left: 'center',
+        textStyle: {
+          fontWeight: 'normal',
+          fontSize: 16,
+          color: '#ffffff'
         }
-      };
+      },
+      legend: {
+        show: false
+      },
+      graphic: {
+        type: 'text',
+        left: 'center',
+        top: 'middle',
+        style: {
+          text: '暂无数据',
+          fontSize: 16,
+          fill: '#999'
+        }
+      }
+    });
+
+    if (countryData.length === 0) {
+      return buildEmptyState();
     }
 
     return {
@@ -774,10 +791,9 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       },
       legend: {
         type: 'scroll',
-        orient: 'vertical',
-        right: 15,
-        top: 35,
-        bottom: 20,
+        orient: 'horizontal',
+        bottom: 0,
+        left: 'center',
         data: countryData.map(item => item.name),
         textStyle: {
           color: '#ffffff',
@@ -785,12 +801,13 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         },
         itemWidth: 14,
         itemHeight: 14,
-        itemGap: 8
+        itemGap: 10,
+        icon: 'circle'
       },
       series: [{
         type: 'pie',
-        radius: ['38%', '68%'],
-        center: ['32%', '55%'],
+        radius: ['45%', '70%'],
+        center: ['50%', '45%'],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
