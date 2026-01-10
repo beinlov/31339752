@@ -344,7 +344,7 @@ const AdminPage = ({ history }) => {
       },
       {
         id: 'report',
-        name: '异常报告',
+        name: '受控节点可控情况分析',
         component: ReportContent,
         icon: '&#xe86e;' // early-warning icon
       },

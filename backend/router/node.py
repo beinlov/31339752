@@ -54,7 +54,12 @@ async def get_node_details(
     page: int = Query(1, ge=1),
     page_size: int = Query(1000, ge=10, le=100000),
     status: Optional[str] = None,
-    country: Optional[str] = None
+    country: Optional[str] = None,
+    ip_start: Optional[str] = None,
+    ip_end: Optional[str] = None,
+    time_start: Optional[str] = None,
+    time_end: Optional[str] = None,
+    ids_only: bool = False
 ):
     """获取僵尸网络节点的详细信息，支持分页和过滤"""
     try:
@@ -96,8 +101,7 @@ async def get_node_details(
         """
         
         # 添加过滤条件
-        conditions = []
-        params = [botnet_type]
+        condition_params = []
         
         # 构建WHERE条件
         where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL"]
@@ -110,30 +114,85 @@ async def get_node_details(
                 
         if country:
             where_conditions.append("n.country = %s")
-            params.append(country)
+            condition_params.append(country)
+        
+        if ip_start and ip_end:
+            where_conditions.append("INET_ATON(n.ip) BETWEEN INET_ATON(%s) AND INET_ATON(%s)")
+            condition_params.append(ip_start)
+            condition_params.append(ip_end)
+        elif ip_start:
+            where_conditions.append("INET_ATON(n.ip) >= INET_ATON(%s)")
+            condition_params.append(ip_start)
+        elif ip_end:
+            where_conditions.append("INET_ATON(n.ip) <= INET_ATON(%s)")
+            condition_params.append(ip_end)
+        
+        if time_start:
+            where_conditions.append("n.last_seen >= %s")
+            condition_params.append(time_start)
+        
+        if time_end:
+            where_conditions.append("n.last_seen <= %s")
+            condition_params.append(time_end)
+        
+        where_sql = " AND ".join(where_conditions)
         
         # 优化后的count查询（直接计数，不使用子查询）
         count_query = f"""
             SELECT COUNT(*) as total 
             FROM {table_name} n
-            WHERE {" AND ".join(where_conditions)}
+            WHERE {where_sql}
         """
-        count_params = params[1:] if len(params) > 1 else []  # 排除botnet_type参数
-        cursor.execute(count_query, tuple(count_params))
+        cursor.execute(count_query, tuple(condition_params))
         total_count = cursor.fetchone()['total']
         
-        # 将额外的过滤条件添加到base_query
-        if status:
-            base_query += f" AND n.status = '{status}'"
-        if country:
-            base_query += " AND n.country = %s"
+        base_query += f" AND {' AND '.join(where_conditions[2:])}" if len(where_conditions) > 2 else ""
+        base_params = [botnet_type, *condition_params]
+        
+        if ids_only:
+            ids_query = f"""
+                SELECT COALESCE(CONCAT(n.id, ''), '') as id
+                FROM {table_name} n
+                WHERE {where_sql}
+            """
+            cursor.execute(ids_query, tuple(condition_params))
+            node_ids = [row['id'] for row in cursor.fetchall()]
+            
+            response_data = {
+                "status": "success",
+                "data": {
+                    "node_ids": node_ids,
+                    "total_count": total_count
+                }
+            }
+            
+            return JSONResponse(content=response_data)
             
         # 添加分页
+        base_query = f"""
+            SELECT 
+                COALESCE(CONCAT(n.id, ''), '') as id,
+                COALESCE(n.ip, '') as ip,
+                COALESCE(n.longitude, 0) as longitude,
+                COALESCE(n.latitude, 0) as latitude,
+                CASE 
+                    WHEN n.status = 'active' THEN 'active'
+                    ELSE 'inactive'
+                END as status,
+                COALESCE(n.last_seen, n.created_time, NOW()) as last_active,
+                COALESCE(n.first_seen, n.created_time, NOW()) as active_time,
+                %s as botnet_type,
+                COALESCE(n.country, '') as country,
+                COALESCE(n.province, '') as province,
+                COALESCE(n.city, '') as city
+            FROM {table_name} n
+            WHERE {where_sql}
+        """
         base_query += " LIMIT %s OFFSET %s"
-        params.extend([page_size, (page - 1) * page_size])
+        base_params.extend([page_size, (page - 1) * page_size])
         
         # 执行主查询
-        cursor.execute(base_query, tuple(params))
+        cursor.execute(base_query, tuple(base_params))
         nodes = list(cursor.fetchall())
         
         # 处理datetime格式
