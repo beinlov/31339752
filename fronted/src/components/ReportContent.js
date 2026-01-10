@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import StatCard from './common/StatCard';
-import ChartCard from './common/ChartCard';
 
 // 样式定义
 const Container = styled.div`
@@ -35,27 +33,6 @@ const SearchGroup = styled.div`
   gap: 10px;
   align-items: center;
   flex: 1;
-`;
-
-const StyledSelect = styled.select`
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(120, 160, 220, 0.5);
-  width: 140px;
-  background: rgba(12, 27, 45, 0.9);
-  color: #f5f7ff;
-  outline: none;
-  transition: all 0.2s ease;
-  box-shadow: inset 0 0 0 1px rgba(34, 75, 130, 0.4);
-
-  &:focus {
-    border-color: #4f8dff;
-    box-shadow: 0 0 0 2px rgba(79, 141, 255, 0.25);
-  }
-
-  option {
-    color: #0b1829;
-  }
 `;
 
 const DateRangeGroup = styled.div`
@@ -227,23 +204,6 @@ const ContentRow = styled.div`
   align-items: flex-start;
 `;
 
-const SeveritySection = styled.div`
-  flex: 0 0 38%;
-  max-width: 520px;
-  min-width: 360px;
-  flex-shrink: 0;
-  
-  @media (max-width: 1400px) {
-    flex: 0 0 45%;
-    max-width: none;
-  }
-
-  @media (max-width: 1200px) {
-    flex: 0 0 100%;
-    max-width: none;
-  }
-`;
-
 const ListSection = styled.div`
   flex: 1;
   min-width: 0;
@@ -292,51 +252,6 @@ const AnomalyBadge = styled.span`
   }};
 `;
 
-const SeverityIndicator = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  
-  &::before {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: ${props => {
-      switch (props.level) {
-        case 'high': return '#c62828';
-        case 'medium': return '#f57c00';
-        case 'low': return '#2e7d32';
-        default: return '#757575';
-      }
-    }};
-  }
-  
-  color: ${props => {
-    switch (props.level) {
-      case 'high': return '#c62828';
-      case 'medium': return '#f57c00';
-      case 'low': return '#2e7d32';
-      default: return '#757575';
-    }
-  }};
-  font-weight: 500;
-`;
-
-const normalizeSeverity = (value) => {
-  if (!value) return 'low';
-  const mapping = {
-    '高危': 'high',
-    '高': 'high',
-    '中危': 'medium',
-    '中': 'medium',
-    '低危': 'low',
-    '低': 'low'
-  };
-  return mapping[value] || value;
-};
-
 const ReportContent = () => {
   const [reports, setReports] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -344,7 +259,6 @@ const ReportContent = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [severityFilter, setSeverityFilter] = useState('all'); // 'all', 'high', 'medium', 'low'
   const [error, setError] = useState(null);
 
   const itemsPerPage = 14;
@@ -360,11 +274,7 @@ const ReportContent = () => {
       }
       const data = await response.json();
       console.log('获取到的异常报告数据:', data);
-      const normalized = (data || []).map(report => ({
-        ...report,
-        severity: normalizeSeverity(report.severity)
-      }));
-      setReports(normalized);
+      setReports(data || []);
     } catch (error) {
       console.error('Error fetching reports:', error);
       setError('获取异常报告数据失败，请稍后再试');
@@ -393,10 +303,7 @@ const ReportContent = () => {
     const end = endDate ? new Date(endDate) : null;
     const matchesDateRange = (!start || reportDate >= start) && (!end || reportDate <= end);
     
-    // 严重程度过滤
-    const matchesSeverity = severityFilter === 'all' || report.severity === severityFilter;
-    
-    return matchesSearch && matchesDateRange && matchesSeverity;
+    return matchesSearch && matchesDateRange;
   });
 
   const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
@@ -410,24 +317,6 @@ const ReportContent = () => {
     // 实际应用中这里可能需要调用API
   };
   
-  const handleSeverityFilter = (severity) => {
-    setSeverityFilter(severity);
-    setCurrentPage(1);
-  };
-
-  // 计算统计数据
-  const stats = {
-    totalReports: reports.length,
-    highSeverity: reports.filter(report => report.severity === 'high').length,
-    mediumSeverity: reports.filter(report => report.severity === 'medium').length,
-    lowSeverity: reports.filter(report => report.severity === 'low').length,
-    ddosAttacks: reports.filter(report => report.description.includes('DDoS')).length,
-    malwareReports: reports.filter(report => report.description.includes('恶意软件')).length,
-    dataLeaks: reports.filter(report => report.description.includes('数据泄露')).length,
-    unauthorizedAccess: reports.filter(report => report.description.includes('未授权')).length,
-    trafficAnomaly: reports.filter(report => report.description.includes('流量')).length
-  };
-
   // 准备图表数据
   const getAnomalyTrendOption = () => {
     // 获取最近几天的日期
@@ -567,116 +456,9 @@ const ReportContent = () => {
     }]
   });
   
-  const getSeverityDistributionOption = () => {
-    const severityData = [
-      { name: '高危', value: stats.highSeverity, itemStyle: { color: '#c62828' } },
-      { name: '中危', value: stats.mediumSeverity, itemStyle: { color: '#f57c00' } },
-      { name: '低危', value: stats.lowSeverity, itemStyle: { color: '#2e7d32' } }
-    ];
-    
-    return {
-      title: {
-        text: '异常严重程度分布',
-        left: 'center',
-        textStyle: {
-          fontWeight: 'normal',
-          fontSize: 16,
-          color: '#f5f8ff'
-        }
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} ({d}%)',
-        backgroundColor: 'rgba(6, 19, 33, 0.95)',
-        borderColor: '#4f8dff',
-        borderWidth: 1,
-        textStyle: {
-          color: '#f5f8ff'
-        },
-        padding: 12
-      },
-      legend: {
-        bottom: 10,
-        left: 'center',
-        data: severityData.map(item => item.name),
-        textStyle: {
-          color: '#f5f8ff'
-        }
-      },
-      series: [{
-        type: 'pie',
-        radius: '70%',
-        center: ['50%', '50%'],
-        data: severityData,
-        minAngle: 6,
-        avoidLabelOverlap: false,
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        },
-        label: {
-          formatter: '{b}: {c} ({d}%)',
-          color: '#ffffff',
-          fontSize: 14
-        },
-        labelLine: {
-          show: true,
-          smooth: true,
-          length: 15,
-          length2: 10,
-          lineStyle: {
-            color: '#f5f8ff'
-          }
-        }
-      }]
-    };
-  };
-
   return (
     <Container>
-      <StatsContainer>
-        <StatCard
-          title="总异常数"
-          value={stats.totalReports}
-          trend="全部异常报告"
-          background="linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)"
-          titleIcon="🔔"
-        />
-        <StatCard
-          title="高危异常"
-          value={stats.highSeverity}
-          trend={`${((stats.highSeverity / stats.totalReports) * 100).toFixed(1)}% 占比`}
-          background="linear-gradient(135deg, #c62828 0%, #b71c1c 100%)"
-          titleIcon="⚠️"
-        />
-        <StatCard
-          title="DDoS攻击"
-          value={stats.ddosAttacks}
-          trend={`${((stats.ddosAttacks / stats.totalReports) * 100).toFixed(1)}% 占比`}
-          background="linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%)"
-          titleIcon="🛡️"
-        />
-        <StatCard
-          title="恶意软件"
-          value={stats.malwareReports}
-          trend={`${((stats.malwareReports / stats.totalReports) * 100).toFixed(1)}% 占比`}
-          background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
-          titleIcon="🦠"
-        />
-      </StatsContainer>
-
       <ContentRow>
-        <SeveritySection>
-          <ChartCard 
-            option={getSeverityDistributionOption()} 
-            height="480px"
-            loading={isLoading}
-            accentColor="linear-gradient(90deg, #c62828, #b71c1c)"
-          />
-        </SeveritySection>
         <ListSection>
           <TopBar>
             <DateRangeGroup>
@@ -694,16 +476,6 @@ const ReportContent = () => {
               />
             </DateRangeGroup>
             <SearchGroup>
-              <Label>严重程度</Label>
-              <StyledSelect
-                value={severityFilter}
-                onChange={(e) => handleSeverityFilter(e.target.value)}
-              >
-                <option value="all">全部</option>
-                <option value="high">高危</option>
-                <option value="medium">中危</option>
-                <option value="low">低危</option>
-              </StyledSelect>
               <SearchInput
                 placeholder="请输入所属地或IP"
                 value={searchTerm}
@@ -723,20 +495,19 @@ const ReportContent = () => {
                   <Th>IP</Th>
                   <Th>所属地</Th>
                   <Th>异常时间</Th>
-                  <Th>严重程度</Th>
                   <Th>异常信息</Th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <Tr>
-                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
+                    <Td colSpan={4} style={{ textAlign: 'center', padding: '30px' }}>
                       加载中...
                     </Td>
                   </Tr>
                 ) : error ? (
                   <Tr>
-                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'red' }}>
+                    <Td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'red' }}>
                       {error}
                     </Td>
                   </Tr>
@@ -747,12 +518,6 @@ const ReportContent = () => {
                       <Td>{report.location}</Td>
                       <Td>{report.time}</Td>
                       <Td>
-                        <SeverityIndicator level={report.severity}>
-                          {report.severity === 'high' ? '高危' : 
-                           report.severity === 'medium' ? '中危' : '低危'}
-                        </SeverityIndicator>
-                      </Td>
-                      <Td>
                         <AnomalyBadge type={report.description}>
                           {report.description}
                         </AnomalyBadge>
@@ -761,7 +526,7 @@ const ReportContent = () => {
                   ))
                 ) : (
                   <Tr>
-                    <Td colSpan={5} style={{ textAlign: 'center', padding: '30px' }}>
+                    <Td colSpan={4} style={{ textAlign: 'center', padding: '30px' }}>
                       没有找到匹配的记录
                     </Td>
                   </Tr>

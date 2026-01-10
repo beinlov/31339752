@@ -470,7 +470,12 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState(''); // 筛选方式: 'ip', 'country', 'last_active'
+  const [ipRangeStart, setIpRangeStart] = useState(''); // IP段起始
+  const [ipRangeEnd, setIpRangeEnd] = useState(''); // IP段结束
+  const [timeRangeStart, setTimeRangeStart] = useState(''); // 时间范围开始
+  const [timeRangeEnd, setTimeRangeEnd] = useState(''); // 时间范围结束
   const [isSelectAllActive, setIsSelectAllActive] = useState(false);
+  const [isSelectAllLoading, setIsSelectAllLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [networkType, setNetworkType] = useState(propNetworkType || 'asruex');
   const [error, setError] = useState(null);
@@ -518,7 +523,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}`);
       fetchNodesData();
     }
-  }, [networkType, currentPage, pageSize]); // 依赖项包含所有会触发重新获取的状态
+  }, [networkType, currentPage, pageSize, ipRangeStart, ipRangeEnd, timeRangeStart, timeRangeEnd]); // 依赖项包含所有会触发重新获取的状态
 
   // 获取完整的图表统计数据
   const fetchChartStats = async () => {
@@ -570,6 +575,22 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       // 如果有搜索词且看起来是国家名，添加country过滤
       if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
         params.append('country', searchTerm);
+      }
+
+      // 添加IP段筛选
+      if (ipRangeStart) {
+        params.append('ip_start', ipRangeStart);
+      }
+      if (ipRangeEnd) {
+        params.append('ip_end', ipRangeEnd);
+      }
+
+      // 添加时间范围筛选
+      if (timeRangeStart) {
+        params.append('time_start', timeRangeStart);
+      }
+      if (timeRangeEnd) {
+        params.append('time_end', timeRangeEnd);
       }
 
       const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
@@ -709,22 +730,71 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
   // 处理节点选择
   const handleNodeSelect = (nodeId) => {
-    if (selectedNodes.includes(nodeId)) {
-      setSelectedNodes(selectedNodes.filter(id => id !== nodeId));
-    } else {
-      setSelectedNodes([...selectedNodes, nodeId]);
-    }
+    setSelectedNodes(prev => {
+      if (prev.includes(nodeId)) {
+        return prev.filter(id => id !== nodeId);
+      }
+      return [...prev, nodeId];
+    });
+    setIsSelectAllActive(false);
   };
 
   // 处理全选
-  const handleSelectAll = () => {
-    const availableNodes = nodes.filter(node => node.status === '在线').map(node => node.id);
-    if (selectedNodes.length === availableNodes.length) {
+  const handleSelectAll = async () => {
+    if (isSelectAllActive) {
       setSelectedNodes([]);
       setIsSelectAllActive(false);
-    } else {
-      setSelectedNodes(availableNodes);
+      return;
+    }
+
+    if (!networkType) return;
+
+    setIsSelectAllLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        botnet_type: networkType,
+        ids_only: 'true',
+        status: 'active'
+      });
+
+      if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
+        params.append('country', searchTerm);
+      }
+      if (ipRangeStart) {
+        params.append('ip_start', ipRangeStart);
+      }
+      if (ipRangeEnd) {
+        params.append('ip_end', ipRangeEnd);
+      }
+      if (timeRangeStart) {
+        params.append('time_start', timeRangeStart);
+      }
+      if (timeRangeEnd) {
+        params.append('time_end', timeRangeEnd);
+      }
+
+      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
+      const response = await fetch(endpoint);
+
+      if (!response.ok) {
+        throw new Error(`批量选择失败: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const ids = result.data?.node_ids || [];
+      setSelectedNodes(ids);
       setIsSelectAllActive(true);
+      setNodeStats(prev => ({
+        ...prev,
+        selectedCount: ids.length
+      }));
+    } catch (err) {
+      console.error('批量勾选失败:', err);
+      setError(err.message || '批量勾选失败，请稍后重试');
+    } finally {
+      setIsSelectAllLoading(false);
     }
   };
 
@@ -872,8 +942,15 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           <Button
             active={isSelectAllActive}
             onClick={handleSelectAll}
+            disabled={isLoading || isSelectAllLoading}
           >
-            <span>✓</span> 一键勾选
+            {isSelectAllLoading ? (
+              '处理中...'
+            ) : (
+              <>
+                <span>✓</span> {isSelectAllActive ? '取消全选' : '一键勾选'}
+              </>
+            )}
           </Button>
           <Select
             value={sortBy}
@@ -885,6 +962,48 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
             <option value="country">国家</option>
             <option value="last_active">最后活跃时间</option>
           </Select>
+        </TopBar>
+        
+        <TopBar>
+          <SearchInput
+            placeholder="起始IP，例如：192.168.1.1"
+            value={ipRangeStart}
+            onChange={(e) => setIpRangeStart(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <span style={{ color: '#7a9cc6' }}>~</span>
+          <SearchInput
+            placeholder="结束IP，例如：192.168.1.254"
+            value={ipRangeEnd}
+            onChange={(e) => setIpRangeEnd(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <SearchInput
+            type="date"
+            placeholder="开始日期"
+            value={timeRangeStart}
+            onChange={(e) => setTimeRangeStart(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <span style={{ color: '#7a9cc6' }}>至</span>
+          <SearchInput
+            type="date"
+            placeholder="结束日期"
+            value={timeRangeEnd}
+            onChange={(e) => setTimeRangeEnd(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <Button
+            onClick={() => {
+              setIpRangeStart('');
+              setIpRangeEnd('');
+              setTimeRangeStart('');
+              setTimeRangeEnd('');
+            }}
+            style={{ background: 'linear-gradient(135deg, #f57c00 0%, #ef6c00 100%)' }}
+          >
+            清除筛选
+          </Button>
         </TopBar>
 
         <TableContainer>

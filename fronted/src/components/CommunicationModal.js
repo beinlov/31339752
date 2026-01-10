@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 
+const API_BASE_URL = 'http://localhost:8000';
+
 // Modal 遮罩层
 const ModalOverlay = styled.div`
   position: fixed;
@@ -356,6 +358,12 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
+  const formatDateTimeForQuery = (value) => {
+    if (!value) return '';
+    const normalized = value.replace('T', ' ');
+    return normalized.length === 16 ? `${normalized}:00` : normalized;
+  };
+
   const fetchCommunications = async () => {
     setLoading(true);
     setError(null);
@@ -368,10 +376,13 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
         page_size: pageSize
       };
 
-      if (startTime) params.start_time = startTime;
-      if (endTime) params.end_time = endTime;
+      const startQuery = formatDateTimeForQuery(startTime);
+      const endQuery = formatDateTimeForQuery(endTime);
 
-      const response = await axios.get('/api/node-communications', { params });
+      if (startQuery) params.start_time = startQuery;
+      if (endQuery) params.end_time = endQuery;
+
+      const response = await axios.get(`${API_BASE_URL}/api/node-communications`, { params });
       
       if (response.data.status === 'success') {
         setCommunications(response.data.data.communications || []);

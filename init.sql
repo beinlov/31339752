@@ -67,7 +67,6 @@ CREATE TABLE IF NOT EXISTS `anomaly_reports` (
   `botnet_type` varchar(50) NOT NULL,
   `anomaly_type` varchar(100) NOT NULL,
   `description` text,
-  `severity` varchar(20) DEFAULT 'medium',
   `status` varchar(20) DEFAULT 'pending',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

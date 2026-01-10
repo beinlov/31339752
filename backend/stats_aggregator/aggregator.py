@@ -67,6 +67,11 @@ class StatsAggregator:
             conn = pymysql.connect(**config)
             cursor = conn.cursor()
             
+            # 统一连接字符集与排序规则，避免不同表/会话的 collation 冲突
+            cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci")
+            cursor.execute("SET collation_connection = 'utf8mb4_general_ci'")
+            cursor.execute("SET collation_server = 'utf8mb4_general_ci'")
+            
             # 设置会话级别的查询超时（5分钟）
             cursor.execute("SET SESSION max_execution_time = 300000")
             
@@ -138,27 +143,35 @@ class StatsAggregator:
             cursor.execute(f"""
                 INSERT INTO {temp_table} (province, municipality, infected_num, created_at, updated_at)
                 SELECT 
-                    COALESCE(
-                        TRIM(TRAILING '省' FROM 
-                        TRIM(TRAILING '市' FROM 
-                        REPLACE(REPLACE(REPLACE(
-                            province, 
-                            '壮族自治区', ''), 
-                            '回族自治区', ''), 
-                            '维吾尔自治区', '')
-                        )), 
-                        '未知'
-                    ) as province,
-                    COALESCE(
-                        TRIM(TRAILING '市' FROM city),
-                        '未知'
-                    ) as municipality,
-                    COUNT(DISTINCT ip) as infected_num,
-                    MIN(created_time) as created_at,
-                    MAX(updated_at) as updated_at
-                FROM {node_table}
-                WHERE country = '中国'
-                GROUP BY province, city
+                    t.province,
+                    t.municipality,
+                    COUNT(DISTINCT t.ip) as infected_num,
+                    MIN(t.created_time) as created_at,
+                    MAX(t.updated_at) as updated_at
+                FROM (
+                    SELECT 
+                        COALESCE(
+                            TRIM(TRAILING '省' FROM 
+                            TRIM(TRAILING '市' FROM 
+                            REPLACE(REPLACE(REPLACE(
+                                province, 
+                                '壮族自治区', ''), 
+                                '回族自治区', ''), 
+                                '维吾尔自治区', '')
+                            )), 
+                            '未知'
+                        ) as province,
+                        COALESCE(
+                            TRIM(TRAILING '市' FROM city),
+                            '未知'
+                        ) as municipality,
+                        ip,
+                        created_time,
+                        updated_at
+                    FROM {node_table}
+                    WHERE country = '中国'
+                ) AS t
+                GROUP BY t.province, t.municipality
             """)
             temp_count = cursor.rowcount
             elapsed = time.time() - start_time

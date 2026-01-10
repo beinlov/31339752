@@ -736,17 +736,21 @@ class NodeDistribution extends PureComponent {
           国家/地区分布 (Top 10)
         </h3>
         <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-          {sortedCountries.map(country => (
-            <div key={country} style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              padding: '5px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <span>{country}</span>
-              <span>{countryDistribution[country]} 个节点</span>
-            </div>
-          ))}
+          {sortedCountries.map(country => {
+            const nodeCount = countryDistribution[country];
+            const percent = totalNodes ? ((nodeCount / totalNodes) * 100).toFixed(2) : '0.00';
+            return (
+              <div key={country} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                padding: '5px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <span>{country}</span>
+                <span>{nodeCount} 个节点 ({percent}%)</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -789,91 +793,21 @@ class NodeDistribution extends PureComponent {
           中国省份分布 (Top 10)
         </h3>
         <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-          {sortedProvinces.map(province => (
-            <div key={province} style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              padding: '5px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <span>{province}</span>
-              <span>{provinceDistribution[province]} 个节点</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  renderControls = () => {
-    const { displayMode, pointSize } = this.state;
-    
-    return (
-      <div style={{
-        position: 'absolute',
-        bottom: '120px',
-        left: '60px',
-        background: 'rgba(10, 30, 70, 0.9)', // 更深的背景色
-        padding: '15px',
-        borderRadius: '8px',
-        color: '#fff',
-        zIndex: 100,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)' // 添加阴影
-      }}>
-        <div style={{ fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>节点大小:</div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            onClick={() => this.setPointSize('small')}
-            style={{
-              padding: '8px 12px',
-              background: pointSize === 'small' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: pointSize === 'small' ? 'bold' : 'normal',
-              boxShadow: pointSize === 'small' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            小
-          </button>
-          <button 
-            onClick={() => this.setPointSize('medium')}
-            style={{
-              padding: '8px 12px',
-              background: pointSize === 'medium' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: pointSize === 'medium' ? 'bold' : 'normal',
-              boxShadow: pointSize === 'medium' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            中
-          </button>
-          <button 
-            onClick={() => this.setPointSize('large')}
-            style={{
-              padding: '8px 12px',
-              background: pointSize === 'large' ? '#00a8ff' : 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: pointSize === 'large' ? 'bold' : 'normal',
-              boxShadow: pointSize === 'large' ? '0 0 8px #00a8ff' : 'none' // 添加发光效果
-            }}
-          >
-            大
-          </button>
-        </div>
-        
-        <div style={{ fontSize: '12px', color: '#a3d8ff', marginTop: '5px' }}>
-          提示: 放大地图可查看更多节点细节
+          {sortedProvinces.map(province => {
+            const nodeCount = provinceDistribution[province];
+            const percent = totalNodes ? ((nodeCount / totalNodes) * 100).toFixed(2) : '0.00';
+            return (
+              <div key={province} style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                padding: '5px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                <span>{province}</span>
+                <span>{nodeCount} 个节点 ({percent}%)</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -947,7 +881,6 @@ class NodeDistribution extends PureComponent {
         </button>
         {nodeData && mapType === 'world' && this.renderStats()}
         {nodeData && mapType === 'china' && this.renderProvinceStats()}
-        {nodeData && this.renderControls()}
         <div
           ref={this.chartRef}
           style={{

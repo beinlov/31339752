@@ -674,7 +674,6 @@ class AnomalyReport(BaseModel):
     location: str
     time: str
     description: str
-    severity: str
 
 
 @app.get("/api/anomaly-reports")
@@ -694,7 +693,7 @@ async def get_anomaly_reports():
                 SELECT 
                     id, ip, location, 
                     DATE_FORMAT(report_time, '%Y/%m/%d %H:%i') as time,
-                    description, severity
+                    description
                 FROM anomaly_reports
                 ORDER BY report_time DESC
                 LIMIT 20
