@@ -198,6 +198,79 @@ async def ensure_botnet_table_exists(bot_name: str):
         if 'conn' in locals():
             conn.close()
 
+@router.get("/botnet-rankings")
+async def get_botnet_rankings(mode: str = "global"):
+    """
+    获取僵尸网络排序
+    mode:
+      - global: 按全球节点数量排序
+      - china:  按中国节点感染数量排序（country='中国'）
+    """
+    if mode not in ("global", "china"):
+        raise HTTPException(status_code=400, detail="mode must be 'global' or 'china'")
+
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+
+        cursor.execute("SELECT name, display_name FROM botnet_types")
+        botnets = cursor.fetchall()
+
+        results = []
+        for bot in botnets:
+            name = bot["name"]
+            display_name = bot.get("display_name") or name
+
+            # 计算全球节点数量
+            global_count = 0
+            node_table = f"botnet_nodes_{name}"
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], node_table))
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute(f"SELECT COUNT(*) AS total FROM {node_table}")
+                global_count = cursor.fetchone()["total"] or 0
+
+            # 计算中国影响程度（global表的中国 infected_num）
+            china_count = 0
+            global_table = f"global_botnet_{name}"
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], global_table))
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute(f"""
+                    SELECT infected_num FROM {global_table}
+                    WHERE country = %s
+                    LIMIT 1
+                """, ("中国",))
+                row = cursor.fetchone()
+                if row:
+                    china_count = row.get("infected_num") or 0
+
+            results.append({
+                "name": name,
+                "display_name": display_name,
+                "global_count": global_count,
+                "china_count": china_count
+            })
+
+        if mode == "china":
+            results.sort(key=lambda x: x["china_count"], reverse=True)
+        else:
+            results.sort(key=lambda x: x["global_count"], reverse=True)
+
+        return {"status": "success", "data": results}
+    except Exception as e:
+        logger.error(f"Error fetching botnet rankings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
 async def ensure_botnet_type_exists(botnet_name: str, table_name: str):
     """确保僵尸网络类型存在于botnet_types表中，如果不存在则创建"""
     try:
