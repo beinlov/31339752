@@ -13,55 +13,65 @@ import styled, { createGlobalStyle } from 'styled-components';
 
 const { Option } = Select;
 
-// 科技风格下拉框容器
-const StyledSelectWrapper = styled.div`
-  .ant-select {
-    width: 100%;
-    
-    .ant-select-selector {
-      background: linear-gradient(135deg, rgba(26, 35, 126, 0.3) 0%, rgba(15, 19, 37, 0.5) 100%) !important;
-      border: 1px solid rgba(91, 192, 222, 0.5) !important;
-      border-radius: 4px !important;
-      box-shadow: 0 0 15px rgba(91, 192, 222, 0.2), inset 0 0 10px rgba(91, 192, 222, 0.1) !important;
-      backdrop-filter: blur(5px);
-      transition: all 0.3s ease;
-      height: 36px !important;
-      padding: 0 12px !important;
-      
-      &:hover {
-        border-color: rgba(91, 192, 222, 0.8) !important;
-        box-shadow: 0 0 20px rgba(91, 192, 222, 0.4), inset 0 0 15px rgba(91, 192, 222, 0.15) !important;
-      }
-    }
-    
-    &.ant-select-focused .ant-select-selector {
-      border-color: rgba(91, 192, 222, 1) !important;
-      box-shadow: 0 0 25px rgba(91, 192, 222, 0.6), inset 0 0 20px rgba(91, 192, 222, 0.2) !important;
-    }
-    
-    .ant-select-selection-item {
-      color: #BCDCFF !important;
-      font-weight: 500;
-      text-shadow: 0 0 5px rgba(188, 220, 255, 0.5);
-      line-height: 34px !important;
-    }
-    
-    .ant-select-selection-placeholder {
-      color: rgba(188, 220, 255, 0.5) !important;
-      line-height: 34px !important;
-    }
-    
-    .ant-select-arrow {
-      color: rgba(91, 192, 222, 0.8) !important;
-      
-      .anticon {
-        transition: all 0.3s ease;
-      }
-    }
-    
-    &.ant-select-open .ant-select-arrow .anticon {
-      transform: rotate(180deg);
-    }
+const StyledSelectWrapper = styled.div``;
+
+const TechDropdownTrigger = styled.div`
+  width: 220px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(91, 192, 222, 0.6);
+  background: linear-gradient(135deg, rgba(12, 32, 64, 0.95), rgba(22, 58, 120, 0.75));
+  color: #d9f0ff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 0 18px rgba(91, 192, 222, 0.35), inset 0 0 20px rgba(4, 10, 24, 0.8);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  letter-spacing: 0.5px;
+
+  &:before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: 12px;
+    border: 1px solid rgba(91, 192, 222, 0.2);
+    pointer-events: none;
+  }
+
+  &:after {
+    content: '';
+    position: absolute;
+    width: 120%;
+    height: 60%;
+    top: -40%;
+    left: -10%;
+    background: radial-gradient(circle, rgba(91, 192, 222, 0.35), transparent 60%);
+    opacity: 0.6;
+    pointer-events: none;
+    transform: rotate(6deg);
+  }
+
+  &:hover {
+    border-color: rgba(123, 220, 255, 0.9);
+    box-shadow: 0 0 25px rgba(91, 192, 222, 0.45), inset 0 0 25px rgba(4, 12, 30, 0.9);
+    color: #ffffff;
+  }
+
+  .label {
+    font-weight: 600;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    text-shadow: 0 0 8px rgba(91, 192, 222, 0.6);
+  }
+
+  .icon {
+    font-size: 12px;
+    color: rgba(91, 192, 222, 0.9);
+    text-shadow: 0 0 10px rgba(91, 192, 222, 0.7);
   }
 `;
 
@@ -219,28 +229,37 @@ const GlobalSelectStyle = createGlobalStyle`
 class index extends PureComponent {
   state = {
     selectedNetwork: 'ramnit',  // 默认选择
-    networkTypes: [],  // 存储从后端获取的网络类型
+    rankings: { global: [], china: [] },
+    activeRanking: null,
+    dropdownOpen: false,
     loading: true
   };
 
 
 
   componentDidMount() {
-    this.fetchNetworkTypes();
+    this.fetchRankings();
   }
 
-  fetchNetworkTypes = async () => {
+  fetchRankings = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/botnet-types');
-      if (response.data.status === 'success') {
+      const [globalRes, chinaRes] = await Promise.all([
+        axios.get('http://localhost:8000/api/botnet-rankings', { params: { mode: 'global' } }),
+        axios.get('http://localhost:8000/api/botnet-rankings', { params: { mode: 'china' } }),
+      ]);
+
+      if (globalRes.data.status === 'success' && chinaRes.data.status === 'success') {
         this.setState({
-          networkTypes: response.data.data,
+          rankings: {
+            global: globalRes.data.data || [],
+            china: chinaRes.data.data || [],
+          },
           loading: false
         });
       }
       this.handleNetworkChange("ramnit")
     } catch (error) {
-      console.error('Error fetching network types:', error);
+      console.error('Error fetching botnet rankings:', error);
       this.setState({ loading: false });
     }
   };
@@ -249,7 +268,8 @@ class index extends PureComponent {
     const { dispatch } = this.props;
 
     this.setState({
-      selectedNetwork: value
+      selectedNetwork: value,
+      dropdownOpen: false
     });
 
     // 更新全局状态
@@ -269,7 +289,11 @@ class index extends PureComponent {
       onSwitchMap
     } = this.props;
 
-    const { networkTypes, loading } = this.state;
+    const { rankings, activeRanking, dropdownOpen, loading } = this.state;
+
+    const activeList = activeRanking
+      ? (activeRanking === 'global' ? rankings.global : rankings.china)
+      : [];
 
     const MapComponent = isSwapped ? WorldMap : Map;
     const mapDataToUse = isSwapped ? worldMapData : mapData;
@@ -294,33 +318,113 @@ class index extends PureComponent {
             <span>僵尸网络类型</span>
           </ModuleTitle>
 
-          <GlobalSelectStyle />
-          <StyledSelectWrapper>
-            <Select
-              value={this.state.selectedNetwork}
-              onChange={this.handleNetworkChange}
-              loading={loading}
-              style={{
-                width: '180px',
+          <StyledSelectWrapper style={{ position: 'relative' }}>
+            <TechDropdownTrigger
+              onClick={() => {
+                if (loading) return;
+                this.setState(prev => ({
+                  dropdownOpen: !prev.dropdownOpen,
+                  activeRanking: !prev.dropdownOpen ? null : prev.activeRanking
+                }));
               }}
-              dropdownClassName="tech-select-dropdown"
-              suffixIcon={
-                <span style={{
-                  fontSize: '12px',
-                  color: 'rgba(91, 192, 222, 0.8)',
-                  textShadow: '0 0 5px rgba(91, 192, 222, 0.5)'
-                }}>▼</span>
-              }
             >
-              {networkTypes.map(network => (
-                <Option
-                  key={network.name}
-                  value={network.name}
+              <span className="label">{this.state.selectedNetwork}</span>
+              <span className="icon">▼</span>
+            </TechDropdownTrigger>
+
+            {dropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '110%',
+                  left: 0,
+                  width: activeRanking ? '380px' : '220px',
+                  background: 'rgba(6, 14, 30, 0.94)',
+                  border: '1px solid rgba(91, 192, 222, 0.25)',
+                  borderRadius: '14px',
+                  boxShadow: '0 20px 45px rgba(4, 10, 24, 0.8), inset 0 0 30px rgba(91,192,222,0.12)',
+                  display: 'flex',
+                  flexDirection: 'row',
+                  overflow: 'hidden',
+                  zIndex: 2000,
+                  backdropFilter: 'blur(6px)'
+                }}
+              >
+                <div
+                  style={{
+                    borderRight: activeRanking ? '1px solid rgba(91, 192, 222, 0.15)' : 'none',
+                    minWidth: '130px',
+                    flexShrink: 0,
+                    background: 'rgba(8, 18, 40, 0.7)'
+                  }}
                 >
-                  {network.display_name}
-                </Option>
-              ))}
-            </Select>
+                  {[
+                    { key: 'global', label: '按照全球节点数量排序' },
+                    { key: 'china', label: '按照对中国影响程度排序' },
+                  ].map(cat => (
+                    <div
+                      key={cat.key}
+                      onClick={() =>
+                        this.setState(prev => ({
+                          activeRanking: prev.activeRanking === cat.key ? null : cat.key
+                        }))
+                      }
+                      style={{
+                        padding: '16px 18px',
+                        color: activeRanking === cat.key ? '#f4fbff' : '#9abef3',
+                        background: activeRanking === cat.key ? 'linear-gradient(90deg, #166ad3, #0f2c55)' : 'transparent',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        letterSpacing: 0.3,
+                        lineHeight: 1.35,
+                        textShadow: activeRanking === cat.key ? '0 0 12px rgba(91,192,222,0.9)' : '0 0 4px rgba(91,192,222,0.2)',
+                        borderLeft: activeRanking === cat.key ? '3px solid #5bc0de' : '3px solid transparent',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {cat.label}
+                    </div>
+                  ))}
+                </div>
+                {activeRanking && (
+                  <div
+                    style={{
+                      flex: 1,
+                      maxHeight: '240px',
+                      overflowY: 'auto',
+                      background: 'rgba(4, 10, 24, 0.8)'
+                    }}
+                  >
+                    {(activeList || []).map(item => (
+                      <div
+                        key={item.name}
+                        onClick={() => this.handleNetworkChange(item.name)}
+                        style={{
+                          padding: '12px 14px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          color: '#dbefff',
+                          cursor: 'pointer',
+                          background: this.state.selectedNetwork === item.name ? 'rgba(91,192,222,0.18)' : 'transparent',
+                          transition: 'all 0.2s ease',
+                          borderBottom: '1px solid rgba(91, 192, 222, 0.08)'
+                        }}
+                      >
+                        <span style={{ fontWeight: 600 }}>{item.display_name || item.name}</span>
+                        <span style={{ color: '#7ad1ff', fontSize: 13, fontWeight: 700 }}>
+                          {activeRanking === 'global' ? item.global_count : item.china_count}
+                        </span>
+                      </div>
+                    ))}
+                    {(activeList || []).length === 0 && (
+                      <div style={{ padding: '12px', color: '#8fb7e4' }}>暂无数据</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </StyledSelectWrapper>
         </div>
 

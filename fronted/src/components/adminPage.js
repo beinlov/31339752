@@ -196,6 +196,41 @@ const SidebarDivider = styled.div`
   box-shadow: 0 0 5px rgba(30, 70, 120, 0.3);
 `;
 
+const SidebarGroupHeader = styled.button`
+  padding: 14px 24px 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #9fd3ff;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.95;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: color 0.2s ease;
+  text-shadow: 0 2px 12px rgba(100, 181, 246, 0.35);
+
+  span:first-child {
+    background: linear-gradient(90deg, #69b7ff, #8f8cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  &:hover {
+    color: #8fb7e4;
+  }
+
+  .chevron {
+    transform: rotate(${props => (props.open ? '0deg' : '-90deg')});
+    transition: transform 0.2s ease;
+  }
+`;
+
 const Content = styled.div`
   flex: 1;
   padding: 20px;
@@ -302,6 +337,10 @@ const AdminPage = ({ history }) => {
   const [tutorialStep, setTutorialStep] = useState(0);
   const [networkTypes, setNetworkTypes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openGroups, setOpenGroups] = useState({
+    '僵尸网络管理': true,
+    '系统管理': true
+  });
 
   useEffect(() => {
     fetchNetworkTypes();
@@ -321,99 +360,76 @@ const AdminPage = ({ history }) => {
     handleNetChange("ramnit")
   };
 
-  // 根据不同网络定义菜单项
-  const getMenuItems = (networkId) => {
-    const baseMenuItems = [
-      {
-        id: 'node_distribution',
-        name: '节点分布',
-        component: NodeDistribution,
-        icon: '📍'  // 使用地图标记图标
-      },
+  const getMenuGroups = (networkId) => {
+    const botnetItems = [
       {
         id: 'register_botnet',
-        name: '添加新僵尸网络',
+        name: '僵尸网络添加',
         component: BotnetRegistration,
-        icon: '✚'  // 十字加号，表示添加/新建
+        icon: '✚'
+      },
+      {
+        id: 'clear',
+        name: '受控节点监控',
+        component: NodeManagement,
+        icon: '&#xe88f;'
+      },
+      {
+        id: 'node_distribution',
+        name: '受控节点分布情况',
+        component: NodeDistribution,
+        icon: '📍'
+      },
+      {
+        id: 'report',
+        name: '节点失控日志',
+        component: ReportContent,
+        icon: '&#xe86e;'
+      },
+      {
+        id: 'server',
+        name: 'C2状态监控',
+        component: ServerManagement,
+        icon: '💻'
+      }
+    ];
+
+    if (networkId === 'asruex') {
+      botnetItems.push({
+        id: 'monitor',
+        name: '交互监控',
+        component: AsruexLogViewer,
+        icon: '&#xe88e;'
+      });
+    }
+
+    const systemItems = [
+      {
+        id: 'user',
+        name: '用户管理',
+        component: UserContent,
+        icon: '&#xe7fb;'
       },
       {
         id: 'log',
         name: '操作日志',
         component: LogContent,
-        icon: '&#xe777;' // supervise icon
-      },
-      {
-        id: 'report',
-        name: '受控节点可控情况分析',
-        component: ReportContent,
-        icon: '&#xe86e;' // early-warning icon
-      },
-      {
-        id: 'user',
-        name: '用户管理',
-        component: UserContent,
-        icon: '&#xe7fb;' // lock icon
-      },
-      {
-        id: 'server',
-        name: 'C2管理',
-        component: ServerManagement,
-        icon: '💻' // 服务器图标 (电脑符号)
-      },
-      // 扩展与应用菜单项已隐藏
-      // {
-      //   id: 'extension',
-      //   name: '扩展与应用',
-      //   component: ExtensionContent,
-      //   icon: '&#xe89e;' // application icon
-      // },
+        icon: '&#xe777;'
+      }
     ];
 
-    // 根据网络类型添加特定的菜单项
-    if (networkId === 'leethozer') {
-      return [
-        {
-          id: 'clear',
-          name: '节点监控与清除',
-          component: NodeManagement,
-          icon: '&#xe88e;' // monitoring icon
-        },
-        ...baseMenuItems
-      ];
-    }
-    else if (networkId === 'asruex') {
-      return [
-        {
-          id: 'clear',
-          name: '节点监控与清除',
-          component: NodeManagement,
-          icon: '&#xe88f;' // clear icon
-        },
-        {
-          id: 'monitor',
-          name: '交互监控',
-          component: AsruexLogViewer,
-          icon: '&#xe88e;' // monitoring icon
-        },
-        ...baseMenuItems
-      ];
-    }
-    else {
-      return [
-        {
-          id: 'clear',
-          name: '节点监控与清除',
-          component: NodeManagement,
-          icon: '&#xe88f;' // diagnose icon
-        },
-        ...baseMenuItems
-      ];
-    }
+    return [
+      { title: '僵尸网络管理', items: botnetItems },
+      { title: '系统管理', items: systemItems }
+    ];
   };
+
+  const getAllMenuItems = (networkId) =>
+    getMenuGroups(networkId).flatMap(group => group.items);
 
   const handleMenuClick = (menuId) => {
     setActiveMenu(menuId);
-    const menuItems = getMenuItems(selectedNetwork);
+    const menuItems = getAllMenuItems(selectedNetwork);
     const selectedItem = menuItems.find(item => item.id === menuId);
     if (selectedItem) {
       if (menuId === 'clear') {
@@ -444,7 +460,7 @@ const AdminPage = ({ history }) => {
     localStorage.setItem('selectedNetwork', newNetwork);
 
     // 无论当前在哪个菜单，都重新渲染当前内容组件
-    const menuItems = getMenuItems(newNetwork);
+    const menuItems = getAllMenuItems(newNetwork);
     const selectedItem = menuItems.find(item => item.id === activeMenu);
     if (selectedItem) {
       setCurrentContent(
@@ -555,20 +571,37 @@ const AdminPage = ({ history }) => {
       </Header>
       <MainContent>
         <Sidebar className="sidebar">
-          {getMenuItems(selectedNetwork).map((item, index) => (
-            <React.Fragment key={item.id}>
-              <SidebarItem
-                active={activeMenu === item.id}
-                onClick={() => handleMenuClick(item.id)}
+          {getMenuGroups(selectedNetwork).map((group, groupIndex) => (
+            <React.Fragment key={group.title}>
+              <SidebarGroupHeader
+                type="button"
+                open={openGroups[group.title]}
+                onClick={() =>
+                  setOpenGroups(prev => ({
+                    ...prev,
+                    [group.title]: !prev[group.title]
+                  }))
+                }
               >
-                {item.icon.startsWith('&') ? (
-                  <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
-                ) : (
-                  <span className="icon">{item.icon}</span>
-                )}
-                <span>{item.name}</span>
-              </SidebarItem>
-              {index === 0 && <SidebarDivider />}
+                <span>{group.title}</span>
+                <span className="chevron">⌄</span>
+              </SidebarGroupHeader>
+              {openGroups[group.title] &&
+                group.items.map(item => (
+                  <SidebarItem
+                    key={item.id}
+                    active={activeMenu === item.id}
+                    onClick={() => handleMenuClick(item.id)}
+                  >
+                    {item.icon.startsWith('&') ? (
+                      <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                    ) : (
+                      <span className="icon">{item.icon}</span>
+                    )}
+                    <span>{item.name}</span>
+                  </SidebarItem>
+                ))}
+              {groupIndex !== getMenuGroups(selectedNetwork).length - 1 && <SidebarDivider />}
             </React.Fragment>
           ))}
         </Sidebar>
