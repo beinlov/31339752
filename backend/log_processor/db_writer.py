@@ -511,15 +511,11 @@ class BotnetDBWriter:
                     event_type VARCHAR(50) COMMENT '事件类型',
                     status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
                     is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    INDEX idx_node_id (node_id),
-                    INDEX idx_ip (ip),
-                    INDEX idx_communication_time (communication_time),
-                    INDEX idx_received_at (received_at),
-                    INDEX idx_location (country, province, city),
-                    INDEX idx_is_china (is_china),
-                    INDEX idx_composite (ip, communication_time)
+                    UNIQUE KEY idx_unique_communication (ip, communication_time) COMMENT '唯一约束：防止重复数据',
+                    INDEX idx_communication_time (communication_time) COMMENT '时间范围查询',
+                    INDEX idx_location (country, province, city) COMMENT '地理位置查询'
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点通信记录表'
+                COMMENT='僵尸网络节点通信记录表（优化版：唯一约束+精简索引）'
             """)
             
             # 3. 升级表结构（处理旧表迁移）
@@ -678,15 +674,11 @@ class BotnetDBWriter:
                     event_type VARCHAR(50) COMMENT '事件类型',
                     status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
                     is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    INDEX idx_node_id (node_id),
-                    INDEX idx_ip (ip),
-                    INDEX idx_communication_time (communication_time),
-                    INDEX idx_received_at (received_at),
-                    INDEX idx_location (country, province, city),
-                    INDEX idx_is_china (is_china),
-                    INDEX idx_composite (ip, communication_time)
+                    UNIQUE KEY idx_unique_communication (ip, communication_time) COMMENT '唯一约束：防止重复数据',
+                    INDEX idx_communication_time (communication_time) COMMENT '时间范围查询',
+                    INDEX idx_location (country, province, city) COMMENT '地理位置查询'
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点通信记录表'
+                COMMENT='僵尸网络节点通信记录表（优化版：唯一约束+精简索引）'
             """)
             
             # 3. 升级表结构（处理旧表迁移）
@@ -1019,7 +1011,7 @@ class BotnetDBWriter:
             # Step 4: 插入通信记录表
             # ========================================
             comm_sql = f"""
-                INSERT INTO {self.communication_table}
+                INSERT IGNORE INTO {self.communication_table}
                 (node_id, ip, communication_time, longitude, latitude, country, province, 
                  city, continent, isp, asn, event_type, status, is_china)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -1063,10 +1055,10 @@ class BotnetDBWriter:
                 for i in range(0, len(comm_values), batch_size):
                     batch = comm_values[i:i+batch_size]
                     
-                    # 构建批量INSERT语句（14个字段）
+                    # 构建批量INSERT IGNORE语句（14个字段）- 保证幂等性
                     placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'] * len(batch))
                     comm_sql_batch = f"""
-                        INSERT INTO {self.communication_table}
+                        INSERT IGNORE INTO {self.communication_table}
                         (node_id, ip, communication_time, longitude, latitude, country, province, 
                          city, continent, isp, asn, event_type, status, is_china)
                         VALUES {placeholders}

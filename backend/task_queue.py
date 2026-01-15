@@ -24,6 +24,7 @@ class TaskQueue:
     
     def __init__(self):
         """初始化Redis连接"""
+        self.queue_name = QUEUE_NAME  # 记录队列名称，方便诊断
         self.redis_client = redis.Redis(
             host=REDIS_HOST,
             port=REDIS_PORT,

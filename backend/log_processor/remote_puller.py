@@ -32,18 +32,31 @@ class RemotePuller:
         """
         self.c2_config = c2_config
         self.processor = processor
+        
+        # 打印每个C2端点的配置（调试用）
+        for c2 in c2_config:
+            if c2.get('enabled', True):
+                logger.info(f"C2端点配置 [{c2['name']}]: batch_size={c2.get('batch_size', 1000)}, pull_interval={c2.get('pull_interval', 60)}s")
         self.running = False
         self.sessions = {}
         self.state_file = state_file
-        self.last_timestamps = {}  # 每个 C2 的最后处理时间戳
         
-        # 统计
+        # 双游标机制：seq_id + 时间戳
+        self.last_seq_ids = {}  # 每个 C2 的最后处理序列ID
+        self.last_timestamps = {}  # 每个 C2 的最后处理时间戳（备用）
+        
+        # 统计与监控
         self.stats = {
             'total_pulled': 0,
             'total_saved': 0,
             'error_count': 0,
-            'last_pull_time': None
+            'duplicate_count': 0,  # 重复数据计数
+            'last_pull_time': None,
+            'backpressure_pauses': 0,  # 背压暂停次数
         }
+        
+        # 背压控制状态
+        self.backpressure_active = False
         
         # 加载状态（断点续传）
         self.load_state()
@@ -56,16 +69,19 @@ class RemotePuller:
             if os.path.exists(self.state_file):
                 with open(self.state_file, 'r') as f:
                     state = json.load(f)
+                    self.last_seq_ids = state.get('last_seq_ids', {})
                     self.last_timestamps = state.get('last_timestamps', {})
-                    logger.info(f"加载拉取状态: {len(self.last_timestamps)} 个 C2 端点")
+                    logger.info(f"加载拉取状态: {len(self.last_seq_ids)} 个 C2 端点")
         except Exception as e:
             logger.warning(f"加载拉取状态失败: {e}，将从头开始拉取")
+            self.last_seq_ids = {}
             self.last_timestamps = {}
     
     def save_state(self):
         """保存拉取状态"""
         try:
             state = {
+                'last_seq_ids': self.last_seq_ids,
                 'last_timestamps': self.last_timestamps,
                 'updated_at': datetime.now().isoformat()
             }
@@ -116,15 +132,18 @@ class RemotePuller:
     async def pull_cycle(self):
         """单次拉取循环"""
         if not self.running:
+            logger.warning("拉取循环跳过: 拉取器未运行")
             return
         
-        logger.debug(f"开始拉取循环 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"开始拉取循环 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         # 并行拉取所有C2端点
         tasks = []
-        for c2 in self.c2_config:
-            if not c2.get('enabled', True):
-                continue
+        enabled_c2s = [c2 for c2 in self.c2_config if c2.get('enabled', True)]
+        logger.info(f"准备拉取 {len(enabled_c2s)} 个启用的C2端点")
+        
+        for c2 in enabled_c2s:
+            logger.info(f"创建拉取任务: {c2['name']}")
             tasks.append(self._pull_from_c2(c2))
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -146,6 +165,8 @@ class RemotePuller:
         
         if total_records > 0:
             logger.info(f"拉取循环完成: 成功 {success_count}, 失败 {error_count}, 总记录 {total_records}")
+        else:
+            logger.info(f"拉取循环完成: 成功 {success_count}, 失败 {error_count}, 无新数据")
     
     async def _pull_from_c2(self, c2: Dict) -> Optional[int]:
         """
@@ -161,11 +182,16 @@ class RemotePuller:
         url = c2['url']
         batch_size = c2.get('batch_size', 1000)
         
+        logger.info(f"[{name}] _pull_from_c2 开始执行")
+        logger.info(f"[{name}] 配置的batch_size: {batch_size}")
+        
         try:
             session = self.sessions.get(name)
             if not session:
                 logger.error(f"[{name}] HTTP会话不存在")
                 return None
+            
+            logger.info(f"[{name}] HTTP会话已找到，准备发送请求")
             
             # 阶段1：拉取数据（confirm=false，不删除）
             pull_url = f"{url}/api/pull"
@@ -174,17 +200,21 @@ class RemotePuller:
                 'confirm': 'false'  # 不自动确认，使用两阶段确认
             }
             
-            # 支持断点续传（可通过环境变量禁用）
+            # 双游标断点续传：优先使用seq_id，其次使用时间戳
             enable_resume = os.environ.get('ENABLE_PULL_RESUME', 'true').lower() == 'true'
+            last_seq_id = self.last_seq_ids.get(name) if enable_resume else None
             last_timestamp = self.last_timestamps.get(name) if enable_resume else None
             
-            if last_timestamp:
-                params['since'] = last_timestamp
-                logger.info(f"[{name}] 使用断点续传: since={last_timestamp}")
+            if last_seq_id is not None:
+                params['since_seq'] = last_seq_id
+                logger.info(f"[{name}] 使用序列ID断点续传: since_seq={last_seq_id}")
+            elif last_timestamp:
+                params['since_ts'] = last_timestamp
+                logger.info(f"[{name}] 使用时间戳断点续传: since_ts={last_timestamp}")
             else:
                 logger.info(f"[{name}] 拉取全部数据（无断点续传）")
             
-            logger.debug(f"[{name}] 拉取数据: {pull_url}")
+            logger.info(f"[{name}] 开始拉取数据: {pull_url}?limit={batch_size}")
             
             # 发送请求
             async with session.get(pull_url, params=params) as response:
@@ -195,6 +225,8 @@ class RemotePuller:
                 
                 if response.status != 200:
                     logger.error(f"[{name}] 拉取失败: HTTP {response.status}")
+                    self.stats['error_count'] += 1
+                    return None
                 
                 # 解析响应
                 data = await response.json()
@@ -214,8 +246,11 @@ class RemotePuller:
                         self.save_state()
                         logger.info(f"[{name}] 已清除断点续传时间戳，下次将拉取全部数据")
                     else:
-                        logger.debug(f"[{name}] 没有新数据")
+                        logger.info(f"[{name}] 没有新数据（返回0条）")
                     return 0
+                
+                # 从响应中获取max_seq_id（C2端返回）
+                max_seq_id = data.get('max_seq_id', None)
                 
                 # 按 botnet_type 分组
                 records_by_type = {}
@@ -227,7 +262,7 @@ class RemotePuller:
                         records_by_type[botnet_type] = []
                     records_by_type[botnet_type].append(record)
                     
-                    # 记录最大时间戳（用于断点续传）
+                    # 记录最大时间戳（用于断点续传备份）
                     timestamp = record.get('timestamp')
                     if timestamp:
                         if not max_timestamp or timestamp > max_timestamp:
@@ -256,10 +291,14 @@ class RemotePuller:
                             if confirm_response.status == 200:
                                 logger.info(f"[{name}] 已确认删除: {len(records)} 条")
                                 
-                                # 更新断点续传状态
+                                # 更新断点续传状态（优先使用seq_id）
+                                if max_seq_id is not None:
+                                    self.last_seq_ids[name] = max_seq_id
+                                    logger.debug(f"[{name}] 更新seq_id游标: {max_seq_id}")
                                 if max_timestamp:
                                     self.last_timestamps[name] = max_timestamp
-                                    self.save_state()
+                                    logger.debug(f"[{name}] 更新时间戳游标: {max_timestamp}")
+                                self.save_state()
                             else:
                                 logger.warning(f"[{name}] 确认删除失败: HTTP {confirm_response.status}")
                     except Exception as e:
@@ -284,15 +323,75 @@ class RemotePuller:
             self.stats['error_count'] += 1
             return None
     
+    async def _check_queue_length(self) -> Optional[int]:
+        """检查队列长度（用于背压控制）"""
+        try:
+            # 尝试从task_queue获取队列长度
+            from log_processor.task_queue import task_queue
+            if task_queue:
+                # 在线程池中运行，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, task_queue.get_queue_length)
+        except (ImportError, AttributeError, Exception) as e:
+            # 队列不可用或Redis连接异常，返回None表示不进行背压控制
+            logger.debug(f"无法获取队列长度: {e}")
+            pass
+        return None
+    
     async def run(self):
-        """运行拉取循环（作为后台任务）"""
+        """运行拉取循环（作为后台任务，支持背压控制）"""
         await self.start()
         
         # 获取默认的拉取间隔
         default_interval = 60
         
+        # 计算实际拉取间隔
+        interval = min([c.get('pull_interval', default_interval) 
+                       for c in self.c2_config if c.get('enabled', True)],
+                      default=default_interval)
+        logger.info(f"拉取间隔: {interval} 秒 ({interval/60:.1f} 分钟)")
+        
+        # 首次启动立即拉取一次
+        logger.info("执行首次数据拉取...")
+        try:
+            await self.pull_cycle()
+            logger.info("首次数据拉取完成")
+        except Exception as e:
+            logger.error(f"首次数据拉取失败: {e}", exc_info=True)
+        
         try:
             while self.running:
+                # 背压控制：检查队列长度
+                queue_length = await self._check_queue_length()
+                if queue_length is not None:
+                    # 导入配置
+                    from config import BACKPRESSURE_CONFIG
+                    
+                    if BACKPRESSURE_CONFIG.get('enabled', False):
+                        high_watermark = BACKPRESSURE_CONFIG.get('queue_high_watermark', 10000)
+                        low_watermark = BACKPRESSURE_CONFIG.get('queue_low_watermark', 5000)
+                        pause_duration = BACKPRESSURE_CONFIG.get('pause_duration_seconds', 300)
+                        
+                        if queue_length >= high_watermark and not self.backpressure_active:
+                            # 触发背压：暂停拉取
+                            self.backpressure_active = True
+                            self.stats['backpressure_pauses'] += 1
+                            logger.warning(
+                                f"队列积压达到高水位 ({queue_length}/{high_watermark})，"
+                                f"暂停拉取 {pause_duration} 秒"
+                            )
+                            await asyncio.sleep(pause_duration)
+                            continue
+                        elif queue_length < low_watermark and self.backpressure_active:
+                            # 恢复拉取
+                            self.backpressure_active = False
+                            logger.info(f"队列积压降至低水位 ({queue_length}/{low_watermark})，恢复拉取")
+                        elif self.backpressure_active:
+                            # 仍在暂停中
+                            logger.debug(f"队列积压中 ({queue_length})，继续等待")
+                            await asyncio.sleep(30)
+                            continue
+                
                 # 执行拉取
                 await self.pull_cycle()
                 
