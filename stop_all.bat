@@ -1,44 +1,71 @@
 @echo off
+REM ============================================================
 REM Botnet Platform - Stop All Services
-REM ========================================
+REM ============================================================
 
-echo ========================================
-echo   Botnet Platform - Stop Services
-echo ========================================
+color 0C
+title Stop Botnet Platform
+
+echo.
+echo ============================================================
+echo    Botnet Platform - Stop All Services
+echo ============================================================
+echo.
+echo Stopping the following services:
+echo   1. Log Processor (Botnet Log Processor)
+echo   2. Platform Backend (Botnet API Backend)
+echo   3. Stats Aggregator (Botnet Stats Aggregator)
+echo   4. Frontend UI (Botnet Frontend)
+echo   5. Redis Server
+echo.
+echo WARNING: This will close all related Python and Node processes!
 echo.
 
-echo [1/3] Stopping Worker process...
-taskkill /FI "WindowTitle eq Botnet Worker*" /F >nul 2>&1
+pause
+
+echo.
+echo [Stopping] Closing service windows...
+
+REM Close services by window title
+taskkill /FI "WINDOWTITLE eq Botnet Log Processor*" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Botnet API Backend*" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Botnet Stats Aggregator*" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Botnet Frontend*" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Redis Server*" /F >nul 2>&1
+
+timeout /t 2 /nobreak >nul
+
+echo [OK] Service windows closed
+
+echo.
+echo [Checking] Checking for remaining processes...
+
+REM Check and cleanup remaining Python processes
+tasklist /FI "IMAGENAME eq python.exe" | find /I "python.exe" >nul
 if %errorlevel% equ 0 (
-    echo [OK] Worker process stopped
-) else (
-    echo [INFO] Worker process not running
+    echo [Cleaning] Found Python processes, cleaning up...
+    taskkill /IM python.exe /F >nul 2>&1
+    timeout /t 1 /nobreak >nul
 )
 
-echo.
-echo [2/3] Stopping Web service...
-taskkill /FI "WindowTitle eq Botnet Web*" /F >nul 2>&1
+REM Check and cleanup remaining Node processes
+tasklist /FI "IMAGENAME eq node.exe" | find /I "node.exe" >nul
 if %errorlevel% equ 0 (
-    echo [OK] Web service stopped
-) else (
-    echo [INFO] Web service not running
+    echo [Cleaning] Found Node.js processes, cleaning up...
+    taskkill /IM node.exe /F >nul 2>&1
+    timeout /t 1 /nobreak >nul
 )
 
-REM Fallback: Kill process by port
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":8000" ^| find "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
+echo [OK] Remaining processes cleaned up
 
 echo.
-echo [3/3] Redis service (optional)...
-echo [INFO] Redis server kept running. Stop manually if needed.
-REM Uncomment to stop Redis
-REM taskkill /FI "WindowTitle eq Redis Server*" /F >nul 2>&1
-
+echo ============================================================
+echo    All Services Stopped
+echo ============================================================
 echo.
-echo ========================================
-echo   Botnet Platform Stopped
-echo ========================================
+echo Redis Server is still running (close manually if needed)
+echo.
+echo To restart, run: start_all_v3.bat
 echo.
 
 pause
