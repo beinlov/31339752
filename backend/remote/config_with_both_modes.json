@@ -1,0 +1,63 @@
+{
+  "_comment": "C2端配置文件 - 同时支持推送和拉取模式",
+  
+  "botnet": {
+    "botnet_type": "test",
+    "log_dir": "/home/ubuntu/log",
+    "log_file_pattern": "test_{date}.log"
+  },
+  
+  "_comment_mode": "========== 工作模式配置 ==========",
+  "mode": {
+    "_comment": "work_mode: pull（拉取模式，默认） 或 push（推送模式） 或 both（双模式）",
+    "work_mode": "pull",
+    
+    "_comment_enable_pull_server": "是否启用拉取服务器（供平台拉取数据）",
+    "enable_pull_server": true,
+    
+    "_comment_enable_push_client": "是否启用推送客户端（主动推送到平台）",
+    "enable_push_client": false
+  },
+  
+  "_comment_push": "========== 推送模式配置（C2主动推送到平台）==========",
+  "push_client": {
+    "_comment_api_endpoint": "平台接收数据的API端点",
+    "api_endpoint": "http://平台IP:8000/api/upload",
+    
+    "_comment_api_key": "连接平台的认证密钥",
+    "api_key": "平台提供的API_KEY",
+    
+    "_comment_upload_interval": "推送间隔（秒）",
+    "upload_interval": 300,
+    
+    "_comment_batch_size": "每次推送数量",
+    "batch_size": 500
+  },
+  
+  "_comment_pull": "========== 拉取模式配置（平台拉取C2数据）==========",
+  "pull_server": {
+    "_comment_host": "C2端HTTP服务器监听地址",
+    "host": "0.0.0.0",
+    
+    "_comment_port": "C2端HTTP服务器监听端口",
+    "port": 8888,
+    
+    "_comment_api_key": "验证平台身份的密钥（平台拉取时需提供）",
+    "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"
+  },
+  
+  "cache": {
+    "max_cached_records": 10000,
+    "high_watermark": 8000,
+    "low_watermark": 2000,
+    "read_batch_size": 5000,
+    "adaptive_read": true,
+    "db_file": "/tmp/c2_data_cache.db",
+    "retention_days": 7
+  },
+  
+  "processing": {
+    "read_interval": 60,
+    "max_files_per_read": 10
+  }
+}
