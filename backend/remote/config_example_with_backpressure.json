@@ -1,0 +1,51 @@
+{
+  "_comment": "C2端配置文件 - 带背压控制",
+  
+  "server": {
+    "api_endpoint": "http://localhost:8888",
+    "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"
+  },
+  
+  "botnet": {
+    "botnet_type": "test",
+    "log_dir": "/home/ubuntu/log",
+    "log_file_pattern": "test_{date}.log"
+  },
+  
+  "cache": {
+    "_comment_max": "最大缓存记录数（硬限制，超过此值将强制停止读取）",
+    "max_cached_records": 10000,
+    
+    "_comment_high": "高水位线（达到此值暂停读取，建议设为max的80%）",
+    "high_watermark": 8000,
+    
+    "_comment_low": "低水位线（低于此值全速读取，建议设为max的20%）",
+    "low_watermark": 2000,
+    
+    "_comment_batch": "每次读取的基础批量大小",
+    "read_batch_size": 5000,
+    
+    "_comment_adaptive": "是否启用自适应读取（true=智能背压，false=简单阈值）",
+    "adaptive_read": true,
+    
+    "_comment_retention": "已拉取记录保留天数",
+    "retention_days": 7,
+    
+    "_comment_db": "SQLite数据库文件路径",
+    "db_file": "/tmp/c2_data_cache.db"
+  },
+  
+  "processing": {
+    "_comment_interval": "日志读取间隔（秒）",
+    "read_interval": 60,
+    
+    "_comment_max_files": "单次处理的最大文件数",
+    "max_files_per_read": 10
+  },
+  
+  "http_server": {
+    "host": "0.0.0.0",
+    "port": 8888,
+    "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"
+  }
+}

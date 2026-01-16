@@ -156,106 +156,136 @@ class BotnetLogProcessor:
         # ===== 模式1: 使用Redis队列（推荐，不阻塞） =====
         if USE_QUEUE_FOR_PULLING and task_queue:
             try:
-                task_id = task_queue.push_task(
-                    botnet_type=botnet_type,
-                    ip_data=ip_data,
-                    client_ip='log_processor'  # 标识来源
+                # 在线程池中执行Redis操作，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                
+                # 异步推送任务
+                task_id = await loop.run_in_executor(
+                    None,
+                    task_queue.push_task,
+                    botnet_type,
+                    ip_data,
+                    'log_processor'  # 标识来源
                 )
-                queue_len = task_queue.get_queue_length()
+                
+                # 异步获取队列长度
+                queue_len = await loop.run_in_executor(
+                    None,
+                    task_queue.get_queue_length
+                )
+                
                 logger.info(
                     f"[{botnet_type}] 已推送 {len(ip_data)} 条数据到队列，"
                     f"任务ID: {task_id}, 队列长度: {queue_len}"
                 )
                 return  # 立即返回，由Worker异步处理
             except Exception as e:
-                logger.error(f"[{botnet_type}] 推送到队列失败: {e}，降级为直接处理")
-                # 降级到直接处理模式
+                logger.error(f"[{botnet_type}] 推送到队列失败: {e}，降级为后台直接处理")
+                # 降级到后台处理模式（不阻塞拉取循环）
         
-        # ===== 模式2: 直接处理（会占用资源，可能影响前端） =====
-        writer = self.writers[botnet_type]
-        logger.info(f"[{botnet_type}] 收到 {len(ip_data)} 个IP，开始直接处理...")
+        # ===== 模式2: 降级处理（创建后台任务，不阻塞拉取循环） =====
+        logger.info(f"[{botnet_type}] 创建后台任务处理 {len(ip_data)} 个IP...")
         
-        # 批量处理IP查询和数据库写入
-        processed_count = 0
-        error_count = 0
-        start_time = datetime.now()
+        # 创建后台任务，不阻塞当前协程
+        asyncio.create_task(self._process_data_in_background(botnet_type, ip_data))
+        return  # 立即返回，不等待处理完成
+    
+    async def _process_data_in_background(self, botnet_type: str, ip_data: List[Dict]):
+        """
+        后台处理数据（降级模式）
         
-        # === 性能监控：IP增强阶段 ===
-        enrich_start = datetime.now()
+        Args:
+            botnet_type: 僵尸网络类型
+            ip_data: 结构化IP数据列表
+        """
+        writer = self.writers.get(botnet_type)
+        if not writer:
+            logger.warning(f"Unknown botnet type: {botnet_type}")
+            return
         
-        # 使用gather并发查询IP信息（已有Semaphore控制并发上限）
-        ip_query_tasks = []
-        for ip_item in ip_data:
-            ip_query_tasks.append(self.enricher.enrich(ip_item['ip']))
+        logger.info(f"[{botnet_type}] [后台] 开始处理 {len(ip_data)} 个IP...")
         
-        # 并发查询所有IP的地理位置信息
-        ip_infos = await asyncio.gather(*ip_query_tasks, return_exceptions=True)
-        
-        enrich_time = (datetime.now() - enrich_start).total_seconds()
-        enrich_stats = self.enricher.get_stats()
-        logger.info(
-            f"[{botnet_type}] IP增强完成: {len(ip_data)}条 用时{enrich_time:.2f}秒 ({len(ip_data)/enrich_time:.0f} IP/秒) "
-            f"缓存命中率{enrich_stats['total_cache_hit_rate']}"
-        )
-        
-        # 将查询结果与IP数据配对并写入
-        for ip_item, ip_info in zip(ip_data, ip_infos):
-            try:
-                # 如果查询出错，使用默认值
-                if isinstance(ip_info, Exception):
-                    logger.warning(f"IP查询失败 {ip_item['ip']}: {ip_info}")
-                    ip_info = {
-                        'country': '未知',
-                        'province': '',
-                        'city': '',
-                        'longitude': 0,
-                        'latitude': 0,
-                        'continent': '',
-                        'isp': '',
-                        'asn': '',
-                        'is_china': False
-                    }
-                
-                # 构造parsed_data格式
-                parsed_data = {
-                    'ip': ip_item['ip'],
-                    'timestamp': datetime.fromisoformat(ip_item['timestamp']) if isinstance(ip_item['timestamp'], str) else ip_item['timestamp'],
-                    'event_type': 'remote_upload',
-                    'source': 'remote_uploader',
-                    'date': ip_item.get('date', datetime.now().strftime('%Y-%m-%d')),
-                    'botnet_type': ip_item.get('botnet_type', botnet_type)
-                }
-                
-                # 写入数据库缓冲区（不立即刷新）
-                writer.add_node(parsed_data, ip_info)
-                
-                processed_count += 1
-                self.stats['processed_lines'] += 1
-                
-            except Exception as e:
-                logger.error(f"处理API数据失败 [{botnet_type}] {ip_item.get('ip', 'unknown')}: {e}")
-                error_count += 1
-                self.stats['errors'] += 1
-        
-        # === 性能监控：数据库写入阶段 ===
-        db_start = datetime.now()
-        
-        # 批量刷新到数据库（提高效率）
         try:
+            # 批量处理IP查询和数据库写入
+            processed_count = 0
+            error_count = 0
+            start_time = datetime.now()
+            
+            # === 性能监控：IP增强阶段 ===
+            enrich_start = datetime.now()
+            
+            # 使用gather并发查询IP信息（已有Semaphore控制并发上限）
+            ip_query_tasks = []
+            for ip_item in ip_data:
+                ip_query_tasks.append(self.enricher.enrich(ip_item['ip']))
+            
+            # 并发查询所有IP的地理位置信息
+            ip_infos = await asyncio.gather(*ip_query_tasks, return_exceptions=True)
+            
+            enrich_time = (datetime.now() - enrich_start).total_seconds()
+            enrich_stats = self.enricher.get_stats()
+            logger.info(
+                f"[{botnet_type}] [后台] IP增强完成: {len(ip_data)}条 用时{enrich_time:.2f}秒 ({len(ip_data)/enrich_time:.0f} IP/秒) "
+                f"缓存命中率{enrich_stats['total_cache_hit_rate']}"
+            )
+            
+            # 将查询结果与IP数据配对并写入
+            for ip_item, ip_info in zip(ip_data, ip_infos):
+                try:
+                    # 如果查询出错，使用默认值
+                    if isinstance(ip_info, Exception):
+                        logger.warning(f"IP查询失败 {ip_item['ip']}: {ip_info}")
+                        ip_info = {
+                            'country': '未知',
+                            'province': '',
+                            'city': '',
+                            'longitude': 0,
+                            'latitude': 0,
+                            'continent': '',
+                            'isp': '',
+                            'asn': '',
+                            'is_china': False
+                        }
+                    
+                    # 构造parsed_data格式
+                    parsed_data = {
+                        'ip': ip_item['ip'],
+                        'timestamp': datetime.fromisoformat(ip_item['timestamp']) if isinstance(ip_item['timestamp'], str) else ip_item['timestamp'],
+                        'event_type': 'remote_upload',
+                        'source': 'remote_uploader',
+                        'date': ip_item.get('date', datetime.now().strftime('%Y-%m-%d')),
+                        'botnet_type': ip_item.get('botnet_type', botnet_type)
+                    }
+                    
+                    # 写入数据库缓冲区（不立即刷新）
+                    writer.add_node(parsed_data, ip_info)
+                    
+                    processed_count += 1
+                    self.stats['processed_lines'] += 1
+                    
+                except Exception as e:
+                    logger.error(f"处理API数据失败 [{botnet_type}] {ip_item.get('ip', 'unknown')}: {e}")
+                    error_count += 1
+                    self.stats['errors'] += 1
+            
+            # === 性能监控：数据库写入阶段 ===
+            db_start = datetime.now()
+            
+            # 批量刷新到数据库（提高效率）
             await writer.flush(force=True)
             
             db_time = (datetime.now() - db_start).total_seconds()
             total_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(
-                f"[OK] [{botnet_type}] API数据处理完成: "
+                f"[OK] [{botnet_type}] [后台] API数据处理完成: "
                 f"成功 {processed_count}, 失败 {error_count}, "
                 f"总用时 {total_time:.2f}秒 ({processed_count/total_time:.0f} IP/秒) | "
                 f"IP增强 {enrich_time:.2f}秒({enrich_time/total_time*100:.1f}%) "
                 f"DB写入 {db_time:.2f}秒({db_time/total_time*100:.1f}%)"
             )
         except Exception as e:
-            logger.error(f"[ERROR] [{botnet_type}] 数据库刷新失败: {e}")
+            logger.error(f"[ERROR] [{botnet_type}] [后台] 数据处理失败: {e}", exc_info=True)
 
     async def process_log_line(self, botnet_type: str, line: str):
         """
