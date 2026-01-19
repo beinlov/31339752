@@ -55,6 +55,7 @@ async def get_node_details(
     page_size: int = Query(1000, ge=10, le=100000),
     status: Optional[str] = None,
     country: Optional[str] = None,
+    keyword: Optional[str] = None,
     ip_start: Optional[str] = None,
     ip_end: Optional[str] = None,
     time_start: Optional[str] = None,
@@ -115,6 +116,13 @@ async def get_node_details(
         if country:
             where_conditions.append("n.country = %s")
             condition_params.append(country)
+
+        if keyword:
+            kw = keyword.strip()
+            if kw:
+                where_conditions.append("(n.country LIKE %s OR n.province LIKE %s OR n.city LIKE %s)")
+                like_kw = f"%{kw}%"
+                condition_params.extend([like_kw, like_kw, like_kw])
         
         if ip_start and ip_end:
             where_conditions.append("INET_ATON(n.ip) BETWEEN INET_ATON(%s) AND INET_ATON(%s)")
