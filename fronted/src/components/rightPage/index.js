@@ -1,7 +1,6 @@
 import React, { PureComponent } from 'react';
 import { BorderBox13 } from '@jiaminghi/data-view-react';
 import DataDisplay from './charts/DataDisplay';
-import IndustryDistribution from './charts/IndustryDistribution';
 import DiffusionTrend from './charts/DiffusionTrend';
 import { ModuleTitle } from '../../style/globalStyledSet';
 import { connect } from '../../utils/ModernConnect';
@@ -9,7 +8,6 @@ import earthRotateGif from '../../assets/images/earth-rotate.gif';
 import {
   RightPageStyle,
   RightTopBox,
-  RightCenterBox,
   RightBottomBox,
 } from './style';
 
@@ -20,7 +18,6 @@ class RightPage extends PureComponent {
   }
 
   render() {
-    const { industryData } = this.props;
     return (
       <RightPageStyle>
         <RightTopBox>
@@ -39,22 +36,6 @@ class RightPage extends PureComponent {
             </div>
           </div>
         </RightTopBox>
-
-        <RightCenterBox>
-          <BorderBox13 className='right-center-borderBox13'>
-            <div className='right-center'>
-              <ModuleTitle>
-                <i className='iconfont'>&#xe7fd;</i>
-                <span>重要行业分布情况</span>
-              </ModuleTitle>
-              <div className='industry-box'>
-                <IndustryDistribution
-                  industryData={industryData}
-                />
-              </div>
-            </div>
-          </BorderBox13>
-        </RightCenterBox>
 
         <RightBottomBox>
           <BorderBox13 className='right-bottom-borderBox13'>
@@ -75,7 +56,6 @@ class RightPage extends PureComponent {
 }
 
 const mapStateToProps = state => ({
-  industryData: state.rightPage.industryData,
 });
 
 export default connect(mapStateToProps)(RightPage);

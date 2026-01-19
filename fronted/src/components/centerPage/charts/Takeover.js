@@ -14,7 +14,7 @@ const useStyles = makeStyles((theme) => ({
     gap: '0.2rem',
     alignItems: 'center',
     position: 'absolute',
-    //top: '0%',
+    top: '25%',
   },
   actionButton: {
     width: '1rem',
@@ -103,130 +103,9 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
     }
   };
 
-  const handleRangeClean = async () => {
-    if (!selectedNetwork) {
-      console.error('No botnet network selected');
-      return;
-    }
-
-    try {
-      const locationInfo = await getUserLocation();
-      
-      // 这里可以添加一个弹窗让用户选择要清理的IP范围
-      const targetMachines = []; // 这里应该从用户选择中获取
-
-      const token = localStorage.getItem('token');
-      fetch('http://localhost:8000/api/clean-botnet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          botnet_type: selectedNetwork,
-          target_machines: targetMachines,
-          clean_method: 'clear',
-          username: localStorage.getItem('username') || 'admin',
-          location: locationInfo.location,
-          operator_ip: locationInfo.ip
-        }),
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          dispatch({
-            type: 'mapState/fetchProvinceAmounts'
-          });
-          dispatch({
-            type: 'mapState/fetchBotnetDistribution'
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      });
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
-
-  const handleSuppress = async () => {
-    if (!selectedNetwork) {
-      console.error('No botnet network selected');
-      return;
-    }
-
-    try {
-      const locationInfo = await getUserLocation();
-      
-      const token = localStorage.getItem('token');
-      fetch('http://localhost:8000/api/clean-botnet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          botnet_type: selectedNetwork,
-          target_machines: [],
-          clean_method: 'suppress',
-          username: localStorage.getItem('username') || 'admin',
-          location: locationInfo.location,
-          operator_ip: locationInfo.ip
-        }),
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          dispatch({
-            type: 'mapState/fetchProvinceAmounts'
-          });
-          dispatch({
-            type: 'mapState/fetchBotnetDistribution'
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      });
-    } catch (error) {
-      console.error('Error:', error);
-    }
-  };
-
   return (
     <Fragment>
       <Box className={classes.buttonContainer}>
-        <Box 
-          className={classes.actionButton}
-          onClick={canOperate ? handleSuppress : undefined}
-          style={{ 
-            opacity: canOperate ? 1 : 0.5, 
-            cursor: canOperate ? 'pointer' : 'not-allowed',
-            pointerEvents: canOperate ? 'auto' : 'none'
-          }}
-          title={isGuest ? '访客无操作权限' : ''}
-        >
-          <Typography className={classes.buttonText}>
-            抑制阻断
-          </Typography>
-        </Box>
-
-        <Box 
-          className={classes.actionButton}
-          onClick={canOperate ? handleRangeClean : undefined}
-          style={{ 
-            opacity: canOperate ? 1 : 0.5, 
-            cursor: canOperate ? 'pointer' : 'not-allowed',
-            pointerEvents: canOperate ? 'auto' : 'none'
-          }}
-          title={isGuest ? '访客无操作权限' : ''}
-        >
-          <Typography className={classes.buttonText}>
-            范围清除
-          </Typography>
-        </Box> 
-        
         <Box 
           className={classes.actionButton}
           onClick={canOperate ? handleClean : undefined}

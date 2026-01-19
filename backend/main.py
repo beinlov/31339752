@@ -20,6 +20,7 @@ from api_ip_upload import router as ip_upload_router
 from router.server import router as server_router
 from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
+from router.node_history import router as node_history_router
 
 import logging
 import re
@@ -95,6 +96,9 @@ app.include_router(server_router, prefix="/api/server", tags=["server-management
 
 # 包含僵尸网络统计路由
 app.include_router(botnet_stats_router, prefix="/api/stats", tags=["botnet-statistics"])
+
+# 包含节点历史记录路由
+app.include_router(node_history_router, prefix="/api", tags=["node-history"])
 
 # 终端执行路由（受限）
 app.include_router(terminal_router, prefix="/api", tags=["terminal"])
