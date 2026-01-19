@@ -157,20 +157,19 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         },
         axisLabel: {
           color: '#BCDCFF',
-          fontSize: 14,  // 增加X轴标签字体大小
-          interval: 4, // 每5个数据点显示一个标签（5秒一格）
+          fontSize: 14,
+          interval: 'auto', // 自动计算标签间隔
+          rotate: 0,
           formatter: (value) => {
-            return value; // 直接显示时:分:秒格式
+            return value; // 显示时:分格式
           }
         },
-        splitNumber: 5,
         axisTick: {
           alignWithLabel: true,
-          interval: 4 // 每5个数据点显示一个刻度
+          interval: 'auto'
         },
         splitLine: {
           show: true,
-          interval: 4, // 每5个数据点显示一条分割线
           lineStyle: {
             color: 'rgba(188, 220, 255, 0.1)',
             type: 'dashed'
@@ -189,20 +188,19 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         },
         axisLabel: {
           color: '#BCDCFF',
-          fontSize: 14,  // 增加X轴标签字体大小
-          interval: 4, // 每5个数据点显示一个标签（5秒一格）
+          fontSize: 14,
+          interval: 'auto', // 自动计算标签间隔
+          rotate: 0,
           formatter: (value) => {
-            return value; // 直接显示时:分:秒格式
+            return value; // 显示时:分格式
           }
         },
-        splitNumber: 5,
         axisTick: {
           alignWithLabel: true,
-          interval: 4 // 每5个数据点显示一个刻度
+          interval: 'auto'
         },
         splitLine: {
           show: true,
-          interval: 4, // 每5个数据点显示一条分割线
           lineStyle: {
             color: 'rgba(188, 220, 255, 0.1)',
             type: 'dashed'

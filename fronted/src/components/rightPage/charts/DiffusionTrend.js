@@ -2,6 +2,7 @@ import React, { PureComponent } from 'react';
 import { connect } from '../../../utils/ModernConnect';
 import Chart from '../../../utils/chart';
 import { DiffusionTrendOptions } from './options';
+import request from '../../../utils/request';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import {
@@ -34,66 +35,58 @@ class DiffusionTrend extends PureComponent {
       timeData: []
     };
     this.chartInstance = null;
-    this.timer = null;
+    this.fetchTimer = null;
   }
 
   componentDidMount() {
-    // 初始化时间数据
-    this.updateTimeData();
+    // 初始加载数据
+    this.fetchNodeHistory();
     
-    // 每秒更新时间数据
-    this.timer = setInterval(this.updateTimeData, 1000);
+    // 每5分钟更新一次数据
+    this.fetchTimer = setInterval(this.fetchNodeHistory, 5 * 60 * 1000);
   }
 
   componentWillUnmount() {
-    if (this.timer) {
-      clearInterval(this.timer);
+    if (this.fetchTimer) {
+      clearInterval(this.fetchTimer);
     }
   }
 
   componentDidUpdate(prevProps) {
-    // 当botnetData发生变化时，更新图表数据
-    if (prevProps.botnetData !== this.props.botnetData) {
-      this.updateChartData();
+    // 当选中的僵尸网络发生变化时，重新获取数据
+    if (prevProps.selectedNetwork !== this.props.selectedNetwork) {
+      this.fetchNodeHistory();
     }
   }
 
-  // 更新时间数据
-  updateTimeData = () => {
-    // 生成最近25秒的实时时间数据
-    const now = new Date();
-    const newTimeData = Array.from({ length: 25 }, (_, i) => {
-      const time = new Date(now.getTime() - (24 - i) * 1000);
-      return time.toLocaleTimeString('zh-CN', { 
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit', 
-        second: '2-digit'
-      });
-    });
-
-    this.setState({ timeData: newTimeData }, () => {
-      // 同时更新图表数据
-      this.updateChartData();
-    });
-  };
-
-  // 更新图表数据
-  updateChartData = () => {
-    const { botnetData } = this.props;
+  // 从后端API获取节点数量历史记录
+  fetchNodeHistory = async () => {
+    const { selectedNetwork } = this.props;
     
-    if (!botnetData) return;
+    if (!selectedNetwork) {
+      console.warn('No botnet network selected');
+      return;
+    }
 
-    this.setState(prevState => {
-      // 更新数据数组，保持最近25个数据点
-      const newNationalData = [...(prevState.nationalData || []), botnetData.china_amount].slice(-25);
-      const newGlobalData = [...(prevState.globalData || []), botnetData.global_amount].slice(-25);
-
-      return {
-        nationalData: newNationalData,
-        globalData: newGlobalData
-      };
-    });
+    try {
+      const response = await request(
+        `http://localhost:8000/api/node-count-history/${selectedNetwork}?hours=2`
+      );
+      
+      if (response && Array.isArray(response)) {
+        const timeData = response.map(item => item.timestamp);
+        const nationalData = response.map(item => item.china_count);
+        const globalData = response.map(item => item.global_count);
+        
+        this.setState({
+          timeData,
+          nationalData,
+          globalData
+        });
+      }
+    } catch (error) {
+      console.error('获取节点历史数据失败:', error);
+    }
   };
 
   render() {
