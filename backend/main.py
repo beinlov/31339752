@@ -20,11 +20,8 @@ from api_ip_upload import router as ip_upload_router
 from router.server import router as server_router
 from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
-<<<<<<< HEAD
 from router.node_history import router as node_history_router
-=======
-from router.suppression import router as suppression_router
->>>>>>> 45fb20c8b41d48b472ac15afe1872a75be86a4b1
+# from router.suppression import router as suppression_router  # Temporarily disabled - missing psutil
 
 import logging
 import re
@@ -108,7 +105,7 @@ app.include_router(node_history_router, prefix="/api", tags=["node-history"])
 app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 
 # 包含抑制阻断策略路由
-app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
+# app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])  # Temporarily disabled - missing psutil
 
 # 数据模型
 class ProvinceAmount(BaseModel):

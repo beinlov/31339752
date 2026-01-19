@@ -7,9 +7,9 @@ export const RightPageStyle = styled.div`
 
 export const RightTopBox = styled.div`
   position: relative;
-  height: 20%;
+  height: 34%;
   width: 100%;
-  margin-bottom: 18%;
+  margin-bottom: 1%;
   top:0%;
 
   .right-top {
@@ -58,11 +58,12 @@ export const RightCenterBox = styled.div`
 
 export const RightBottomBox = styled.div`
   position: relative;
-  height: 40%;
+  height: 65%;
   width: 100%;
   // top: 0.1%;
   .right-bottom-borderBox13 {
     padding: 0.25rem 0.1875rem 0.1875rem;
+    height: 100%;
     
     .right-bottom {
       width: 100%;

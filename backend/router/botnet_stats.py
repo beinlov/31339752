@@ -379,16 +379,17 @@ async def get_botnet_nodes(
             params.append(status)
         
         if country:
-            conditions.append("country = %s")
-            params.append(country)
+            conditions.append("(country LIKE %s OR province LIKE %s OR city LIKE %s)")
+            search_term = f"%{country}%"
+            params.extend([search_term, search_term, search_term])
         
         if province:
-            conditions.append("province = %s")
-            params.append(province)
+            conditions.append("province LIKE %s")
+            params.append(f"%{province}%")
         
         if city:
-            conditions.append("city = %s")
-            params.append(city)
+            conditions.append("city LIKE %s")
+            params.append(f"%{city}%")
         
         # 构建基本查询
         base_query = f"""
@@ -583,16 +584,17 @@ async def get_all_botnet_nodes(
                 params.append(status)
             
             if country:
-                conditions.append("country = %s")
-                params.append(country)
+                conditions.append("(country LIKE %s OR province LIKE %s OR city LIKE %s)")
+                search_term = f"%{country}%"
+                params.extend([search_term, search_term, search_term])
             
             if province:
-                conditions.append("province = %s")
-                params.append(province)
+                conditions.append("province LIKE %s")
+                params.append(f"%{province}%")
             
             if city:
-                conditions.append("city = %s")
-                params.append(city)
+                conditions.append("city LIKE %s")
+                params.append(f"%{city}%")
             
             # 构建基本查询
             base_query = f"""

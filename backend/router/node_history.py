@@ -21,75 +21,59 @@ class NodeCountHistory(BaseModel):
 
 
 @router.get("/node-count-history/{botnet_type}", response_model=List[NodeCountHistory])
-async def get_node_count_history(botnet_type: str, hours: int = 2):
+async def get_node_count_history(
+    botnet_type: str, 
+    days: int = 7
+):
     """
-    获取指定僵尸网络的节点数量历史记录（5分钟间隔）
+    从botnet_timeset表获取指定僵尸网络的每日节点数量历史记录
     
     Args:
         botnet_type: 僵尸网络类型（如 mozi, ramnit 等）
-        hours: 返回最近多少小时的数据（默认2小时）
+        days: 返回最近多少天的数据（默认7天）
     
     Returns:
-        按时间排序的节点数量历史记录列表
+        按日期排序的节点数量历史记录列表
     """
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor(DictCursor)
         
-        # 检查表是否存在
-        node_table = f"botnet_nodes_{botnet_type}"
+        # 检查timeset表是否存在
+        timeset_table = f"botnet_timeset_{botnet_type}"
         cursor.execute(f"""
             SELECT COUNT(*) as count 
             FROM information_schema.tables 
             WHERE table_schema = DATABASE() 
             AND table_name = %s
-        """, (node_table,))
+        """, (timeset_table,))
         
         if cursor.fetchone()['count'] == 0:
             raise HTTPException(status_code=404, detail=f"Botnet type '{botnet_type}' not found")
         
-        # 生成最近N小时的5分钟时间点
-        now = datetime.now()
-        time_points = []
-        current_time = now.replace(second=0, microsecond=0)
-        # 向下取整到5分钟
-        current_time = current_time.replace(minute=(current_time.minute // 5) * 5)
+        # 从timeset表查询最近N天的数据
+        query = f"""
+            SELECT 
+                DATE_FORMAT(date, '%%m-%%d') as date_str,
+                global_count,
+                china_count
+            FROM {timeset_table}
+            WHERE date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            ORDER BY date ASC
+        """
+        cursor.execute(query, (days,))
+        rows = cursor.fetchall()
         
-        # 生成时间点列表（最近hours小时，每5分钟一个点）
-        num_points = (hours * 60) // 5
-        for i in range(num_points, -1, -1):
-            time_point = current_time - timedelta(minutes=i * 5)
-            time_points.append(time_point)
-        
+        # 构建返回数据
         result = []
-        
-        for time_point in time_points:
-            # 查询该时间点的中国节点总数
-            china_query = f"""
-                SELECT COUNT(*) as count
-                FROM {node_table}
-                WHERE country = '中国'
-                AND updated_at <= %s
-            """
-            cursor.execute(china_query, (time_point,))
-            china_count = cursor.fetchone()['count']
-            
-            # 查询该时间点的全球节点总数
-            global_query = f"""
-                SELECT COUNT(*) as count
-                FROM {node_table}
-                WHERE updated_at <= %s
-            """
-            cursor.execute(global_query, (time_point,))
-            global_count = cursor.fetchone()['count']
-            
+        for row in rows:
             result.append({
-                "timestamp": time_point.strftime('%H:%M'),
-                "china_count": int(china_count),
-                "global_count": int(global_count)
+                "timestamp": row['date_str'],
+                "china_count": row['china_count'],
+                "global_count": row['global_count']
             })
         
-        logger.info(f"Retrieved {len(result)} history points for {botnet_type}")
+        logger.info(f"Retrieved {len(result)} daily history points for {botnet_type} (last {days} days)")
         return result
         
     except HTTPException:
