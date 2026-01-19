@@ -140,25 +140,21 @@ class BotnetLogProcessor:
                 self.remote_puller = None
         else:
             logger.warning("⚠️  远程拉取功能未启用")
-        
+
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """
-        处理来自API的结构化IP数据（支持队列模式和直接处理模式）
-        
-        Args:
-            botnet_type: 僵尸网络类型
-            ip_data: 结构化IP数据列表
+        处理来自API的结构化IP数据（支持队列模式和降级模式）
         """
         if botnet_type not in self.writers:
             logger.warning(f"Unknown botnet type: {botnet_type}")
             return
-        
+
         # ===== 模式1: 使用Redis队列（推荐，不阻塞） =====
         if USE_QUEUE_FOR_PULLING and task_queue:
             try:
                 # 在线程池中执行Redis操作，避免阻塞事件循环
                 loop = asyncio.get_event_loop()
-                
+
                 # 异步推送任务
                 task_id = await loop.run_in_executor(
                     None,
@@ -167,28 +163,28 @@ class BotnetLogProcessor:
                     ip_data,
                     'log_processor'  # 标识来源
                 )
-                
+
                 # 异步获取队列长度
                 queue_len = await loop.run_in_executor(
                     None,
                     task_queue.get_queue_length
                 )
-                
+
                 logger.info(
                     f"[{botnet_type}] 已推送 {len(ip_data)} 条数据到队列，"
                     f"任务ID: {task_id}, 队列长度: {queue_len}"
                 )
-                return  # 立即返回，由Worker异步处理
+                return  # 成功推送到队列，直接返回
             except Exception as e:
                 logger.error(f"[{botnet_type}] 推送到队列失败: {e}，降级为后台直接处理")
-                # 降级到后台处理模式（不阻塞拉取循环）
-        
+
         # ===== 模式2: 降级处理（创建后台任务，不阻塞拉取循环） =====
+        # 即使没有队列，我们也不在主拉取循环里直接处理，而是起一个后台任务
         logger.info(f"[{botnet_type}] 创建后台任务处理 {len(ip_data)} 个IP...")
-        
+
         # 创建后台任务，不阻塞当前协程
         asyncio.create_task(self._process_data_in_background(botnet_type, ip_data))
-        return  # 立即返回，不等待处理完成
+        return
     
     async def _process_data_in_background(self, botnet_type: str, ip_data: List[Dict]):
         """
@@ -270,7 +266,6 @@ class BotnetLogProcessor:
             
             # === 性能监控：数据库写入阶段 ===
             db_start = datetime.now()
-            
             # 批量刷新到数据库（提高效率）
             await writer.flush(force=True)
             
@@ -278,6 +273,7 @@ class BotnetLogProcessor:
             total_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(
+                f"[OK] [{botnet_type}] API数据处理完成: "
                 f"[OK] [{botnet_type}] [后台] API数据处理完成: "
                 f"成功 {processed_count}, 失败 {error_count}, "
                 f"总用时 {total_time:.2f}秒 ({processed_count/total_time:.0f} IP/秒) | "

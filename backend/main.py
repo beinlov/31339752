@@ -20,7 +20,11 @@ from api_ip_upload import router as ip_upload_router
 from router.server import router as server_router
 from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
+<<<<<<< HEAD
 from router.node_history import router as node_history_router
+=======
+from router.suppression import router as suppression_router
+>>>>>>> 45fb20c8b41d48b472ac15afe1872a75be86a4b1
 
 import logging
 import re
@@ -103,6 +107,8 @@ app.include_router(node_history_router, prefix="/api", tags=["node-history"])
 # 终端执行路由（受限）
 app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 
+# 包含抑制阻断策略路由
+app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
 
 # 数据模型
 class ProvinceAmount(BaseModel):
@@ -124,11 +130,6 @@ class BotnetType(BaseModel):
     description: str
     table_name: str
     created_at: Optional[datetime] = None
-
-
-# ============================================================
-# 日志上传接口（用于接收远端传输的日志）
-# ============================================================
 
 # IP数据项模型（用于新格式）
 class IPDataItem(BaseModel):
