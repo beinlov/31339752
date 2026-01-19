@@ -110,60 +110,6 @@ const CloseButton = styled.button`
   }
 `;
 
-// 筛选栏
-const FilterBar = styled.div`
-  padding: 16px 30px;
-  background: rgba(10, 25, 41, 0.4);
-  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-`;
-
-const FilterLabel = styled.label`
-  color: #90caf9;
-  font-size: 13px;
-  margin-right: 8px;
-`;
-
-const DateInput = styled.input`
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(100, 181, 246, 0.3);
-  background: rgba(26, 115, 232, 0.1);
-  color: #e0e0e0;
-  font-size: 13px;
-  transition: all 0.3s ease;
-
-  &:focus {
-    outline: none;
-    border-color: #1a73e8;
-    box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
-  }
-`;
-
-const FilterButton = styled.button`
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid rgba(100, 181, 246, 0.3);
-  background: rgba(26, 115, 232, 0.2);
-  color: #90caf9;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.3s ease;
-
-  &:hover {
-    background: rgba(26, 115, 232, 0.3);
-    border-color: #64b5f6;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
 // Modal 内容区域
 const ModalContent = styled.div`
   flex: 1;
@@ -355,14 +301,6 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [total, setTotal] = useState(0);
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-
-  const formatDateTimeForQuery = (value) => {
-    if (!value) return '';
-    const normalized = value.replace('T', ' ');
-    return normalized.length === 16 ? `${normalized}:00` : normalized;
-  };
 
   const fetchCommunications = async () => {
     setLoading(true);
@@ -375,12 +313,6 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
         page: page,
         page_size: pageSize
       };
-
-      const startQuery = formatDateTimeForQuery(startTime);
-      const endQuery = formatDateTimeForQuery(endTime);
-
-      if (startQuery) params.start_time = startQuery;
-      if (endQuery) params.end_time = endQuery;
 
       const response = await axios.get(`${API_BASE_URL}/api/node-communications`, { params });
       
@@ -401,18 +333,6 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
   useEffect(() => {
     fetchCommunications();
   }, [page]);
-
-  const handleFilter = () => {
-    setPage(1);
-    fetchCommunications();
-  };
-
-  const handleResetFilter = () => {
-    setStartTime('');
-    setEndTime('');
-    setPage(1);
-    setTimeout(fetchCommunications, 100);
-  };
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -439,29 +359,6 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
           </ModalTitle>
           <CloseButton onClick={onClose}>×</CloseButton>
         </ModalHeader>
-
-        <FilterBar>
-          <FilterLabel>时间筛选：</FilterLabel>
-          <DateInput
-            type="datetime-local"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            placeholder="开始时间"
-          />
-          <span style={{ color: '#90caf9' }}>至</span>
-          <DateInput
-            type="datetime-local"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            placeholder="结束时间"
-          />
-          <FilterButton onClick={handleFilter} disabled={loading}>
-            🔍 查询
-          </FilterButton>
-          <FilterButton onClick={handleResetFilter} disabled={loading}>
-            🔄 重置
-          </FilterButton>
-        </FilterBar>
 
         <ModalContent>
           {loading ? (

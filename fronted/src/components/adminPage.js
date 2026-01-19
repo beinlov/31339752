@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { withRouter } from 'dva/router';
+import { Select } from 'antd';
 import NodeManagement from './NodeManagement';
 import LogContent from './LogContent';
 import UserContent from './UserContent';
@@ -12,6 +13,8 @@ import NodeDistribution from './NodeDistribution';
 import ServerManagement from './ServerManagement';
 import SuppressionStrategy from './SuppressionStrategy';
 import axios from 'axios';
+
+const { Option } = Select;
 
 // 样式定义
 const AdminContainer = styled.div`
@@ -47,30 +50,43 @@ const HeaderTitle = styled.div`
   letter-spacing: 2px;
 `;
 
-const NetworkSelect = styled.select`
-  padding: 8px 12px;
+const NetworkSelect = styled(Select)`
+  width: 220px;
   margin-right: 20px;
-  border-radius: 6px;
-  border: 1px solid rgba(100, 181, 246, 0.5);
-  width: 200px;
-  background: rgba(26, 115, 232, 0.2);
   color: white;
-  font-size: 14px;
-  cursor: pointer;
-  outline: none;
-  box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
-  transition: all 0.3s ease;
 
-  &:hover {
-    background: rgba(26, 115, 232, 0.3);
-    border-color: rgba(100, 181, 246, 0.8);
-    box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
+  .ant-select-selector {
+    background: rgba(26, 115, 232, 0.2) !important;
+    border: 1px solid rgba(100, 181, 246, 0.6) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
+    height: 40px !important;
+    display: flex;
+    align-items: center;
   }
 
-  option {
-    background: #0d47a1;
+  .ant-select-selection-item {
+    color: white !important;
+    font-size: 14px;
+  }
+
+  .ant-select-arrow {
+    color: #64b5f6 !important;
+  }
+
+  .ant-select-dropdown {
+    background: rgba(13, 39, 92, 0.95);
+    border: 1px solid rgba(100, 181, 246, 0.6);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .ant-select-item {
     color: white;
-    padding: 10px;
+  }
+
+  .ant-select-item-option-active,
+  .ant-select-item-option-selected {
+    background: rgba(100, 181, 246, 0.25) !important;
   }
 `;
 
@@ -364,12 +380,6 @@ const AdminPage = ({ history }) => {
   const getMenuGroups = (networkId) => {
     const botnetItems = [
       {
-        id: 'register_botnet',
-        name: '僵尸网络添加',
-        component: BotnetRegistration,
-        icon: '✚'
-      },
-      {
         id: 'clear',
         name: '受控节点监控',
         component: NodeManagement,
@@ -392,6 +402,12 @@ const AdminPage = ({ history }) => {
         name: '节点失控日志',
         component: ReportContent,
         icon: '&#xe86e;'
+      },
+      {
+        id: 'register_botnet',
+        name: '僵尸网络添加',
+        component: BotnetRegistration,
+        icon: '✚'
       },
       {
         id: 'server',
@@ -460,7 +476,7 @@ const AdminPage = ({ history }) => {
   };
 
 
-  const handleNetChange = (value) => {
+  const handleNetworkChange = (value) => {
     const newNetwork = value;
     setSelectedNetwork(newNetwork);
     // 保存选择的网络到localStorage
@@ -468,25 +484,6 @@ const AdminPage = ({ history }) => {
 
     // 无论当前在哪个菜单，都重新渲染当前内容组件
     const menuItems = getAllMenuItems(newNetwork);
-    const selectedItem = menuItems.find(item => item.id === activeMenu);
-    if (selectedItem) {
-      setCurrentContent(
-        <selectedItem.component
-          networkType={newNetwork}
-          key={newNetwork} // 添加 key 属性，强制组件重新渲染
-        />
-      );
-    }
-  };
-
-  const handleNetworkChange = (e) => {
-    const newNetwork = e.target.value;
-    setSelectedNetwork(newNetwork);
-    // 保存选择的网络到localStorage
-    localStorage.setItem('selectedNetwork', newNetwork);
-
-    // 无论当前在哪个菜单，都重新渲染当前内容组件
-    const menuItems = getMenuItems(newNetwork);
     const selectedItem = menuItems.find(item => item.id === activeMenu);
     if (selectedItem) {
       setCurrentContent(
@@ -559,15 +556,20 @@ const AdminPage = ({ history }) => {
         <HeaderTitle>僵尸网络接管与清除后台管理系统</HeaderTitle>
         <NetworkSelect
           className="network-select"
-          value={selectedNetwork}
+          value={selectedNetwork || undefined}
           onChange={handleNetworkChange}
           disabled={loading}
+          placeholder="请选择僵尸网络"
+          listHeight={240} // 显示约6个选项（每项约40px）
+          dropdownStyle={{ maxHeight: 240, overflowY: 'auto' }}
         >
-          <option value="">请选择僵尸网络</option>
+          <Option key="placeholder" value="">
+            请选择僵尸网络
+          </Option>
           {networkTypes.map(network => (
-            <option key={network.name} value={network.name}>
+            <Option key={network.name} value={network.name}>
               {network.display_name}
-            </option>
+            </Option>
           ))}
         </NetworkSelect>
         <HeaderButton onClick={startTutorial}>帮助</HeaderButton>

@@ -66,9 +66,16 @@ export const worldMapOptions = (params, isLeftPage = false) => {
     tooltip: {
       trigger: 'item',
       formatter: params => {
+        // 重要首都点位（effectScatter）不展示感染数量
+        if (params.seriesType === 'effectScatter') {
+          return params.name;
+        }
+
+        // 国家地图（map）仍展示感染节点数量
         if (params.value) {
           return `${params.name}<br/>感染节点数量：${params.value}`;
         }
+
         return params.name;
       }
     },

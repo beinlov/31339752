@@ -22,7 +22,8 @@ echo   1. Redis Server      (Port: 6379)
 echo   2. Log Processor     (with Internal Worker)
 echo   3. Platform Backend  (Port: 8000)
 echo   4. Stats Aggregator  (Daemon, 30min interval)
-echo   5. Frontend UI       (Port: 9000)
+echo   5. Daily Node Counter (8:00 AM daily)
+echo   6. Frontend UI       (Port: 9000)
 echo.
 echo ============================================================
 echo.
@@ -174,22 +175,30 @@ timeout /t 3 /nobreak >nul
 echo [OK] Platform Backend started - http://localhost:8000
 
 echo.
-echo [Starting 3/4] Stats Aggregator - Daemon Mode...
+echo [Starting 3/5] Stats Aggregator - Daemon Mode...
 start "Botnet Stats Aggregator" cmd /k "cd /d %~dp0backend\stats_aggregator && python aggregator.py daemon 30"
 timeout /t 1 /nobreak >nul
 echo [OK] Stats Aggregator started - aggregates every 30 minutes
 
 echo.
+echo [Starting 4/5] Daily Node Counter - Manual Execution...
+echo [INFO] Note: Schedule library not installed, using manual execution
+echo [INFO] To enable daily auto-run, install: pip install schedule
+echo [INFO] Or use Windows Task Scheduler to run: python backend/daily_node_counter_simple.py
+timeout /t 2 /nobreak >nul
+echo [OK] Daily Node Counter ready (manual mode)
+
+echo.
 REM Start frontend if enabled
 if "!SKIP_FRONTEND!"=="0" (
-    echo [Starting 4/4] Frontend UI - Vite...
+    echo [Starting 5/5] Frontend UI - Vite...
     cd /d "%~dp0frontend"
     start "Botnet Frontend" cmd /k "npm run dev"
     cd /d "%~dp0"
     timeout /t 3 /nobreak >nul
     echo [OK] Frontend UI started
 ) else (
-    echo [Skipped 4/4] Frontend UI - Node.js not installed
+    echo [Skipped 5/5] Frontend UI - Node.js not installed
 )
 
 REM ============================================================
@@ -205,10 +214,11 @@ echo   [1] Redis Server         - Port: 6379
 echo   [2] Log Processor (Internal Worker) - Background
 echo   [3] Platform Backend API - http://localhost:8000
 echo   [4] Stats Aggregator     - Background (every 30 minutes)
+echo   [5] Daily Node Counter   - Background (8:00 AM daily)
 if "!SKIP_FRONTEND!"=="0" (
-    echo   [5] Frontend UI          - http://localhost:9000
+    echo   [6] Frontend UI          - http://localhost:9000
 ) else (
-    echo   [5] Frontend UI          - Not started - Node.js not installed
+    echo   [6] Frontend UI          - Not started - Node.js not installed
 )
 echo.
 echo ============================================================
@@ -218,9 +228,10 @@ echo   - API Docs:   http://localhost:8000/docs
 echo   - Frontend:   http://localhost:9000
 echo.
 echo Log Files:
-echo   - Log Processor: backend/logs/log_processor.log
-echo   - Platform API:  Console output
-echo   - Aggregator:    backend/logs/stats_aggregator.log
+echo   - Log Processor:   backend/logs/log_processor.log
+echo   - Platform API:    Console output
+echo   - Aggregator:      backend/logs/stats_aggregator.log
+echo   - Node Counter:    Console output
 echo.
 echo To Stop Services:
 echo   - Close all opened command windows

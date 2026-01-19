@@ -21,6 +21,44 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def create_botnet_timeset_table(botnet_name: str):
+    """
+    为新僵尸网络创建时间序列表
+    """
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        table_name = f"botnet_timeset_{botnet_name}"
+        
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            date DATE NOT NULL UNIQUE COMMENT '日期',
+            count INT NOT NULL DEFAULT 0 COMMENT '节点数量',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+            INDEX idx_date (date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='{botnet_name}僵尸网络每日节点数量统计表';
+        """
+        
+        cursor.execute(create_table_sql)
+        conn.commit()
+        
+        logger.info(f"Created timeset table: {table_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating timeset table for {botnet_name}: {e}")
+        return False
+        
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
 # 数据模型
 class BotnetType(BaseModel):
     name: str
@@ -295,6 +333,9 @@ async def ensure_botnet_type_exists(botnet_name: str, table_name: str):
             conn.commit()
             logger.info(f"Botnet type {botnet_name} registered successfully")
             
+            # 创建对应的timeset表
+            create_botnet_timeset_table(botnet_name)
+            
     except Exception as e:
         logger.error(f"Error ensuring botnet type exists: {e}")
         raise
@@ -382,8 +423,10 @@ async def register_botnet_type(botnet: BotnetType, current_user: dict = Depends(
             VALUES (%s, %s, %s, %s, %s)
         """, (botnet.name, botnet.display_name, botnet.description, botnet.table_name, clean_methods_json))
         
-
         conn.commit()
+        
+        # 创建对应的timeset表
+        create_botnet_timeset_table(botnet.name)
         return {
             "status": "success", 
             "message": f"Botnet type {botnet.name} registered successfully",
