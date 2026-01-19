@@ -1,6 +1,28 @@
 import { delay } from '../utils';
 import request from '../utils/request';
 
+// 规范化省份名称（与options.js中的逻辑保持一致）
+const normalizeProvince = (rawName) => {
+  if (!rawName) return '';
+
+  let name = rawName.trim();
+  // 去掉"中国"前缀
+  name = name.replace(/^中国/, '');
+
+  // 在第一个行政区关键字处截断后面全部内容
+  const match = name.match(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区|省|市)/);
+  if (match) {
+    const index = match.index;
+    if (index > 0) {
+      name = name.slice(0, index);
+    } else if (index === 0) {
+      return rawName;
+    }
+  }
+
+  return name;
+};
+
 export default {
   namespace: 'mapState',
 
@@ -155,8 +177,8 @@ export default {
           return;
         }
 
-        // 移除省份名称中的后缀
-        const shortName = provinceName.replace(/(省|市|自治区|特别行政区)$/, '');
+        // 使用 normalizeProvince 函数规范化省份名称
+        const shortName = normalizeProvince(provinceName);
 
         const response = yield call(
           request,
@@ -218,7 +240,7 @@ export default {
           dispatch({ type: 'fetchBotnetDistribution' });
           dispatch({ type: 'fetchWorldData' });
 
-          // Set up single timer for all data updates with 30 second interval
+          // Set up single timer for all data updates with 10 second interval
           dataTimer = setInterval(() => {
             dispatch({ type: 'fetchProvinceData' });
             dispatch({ type: 'fetchBotnetDistribution' });
@@ -228,7 +250,7 @@ export default {
             if (state.currentMap !== 'china') {
               dispatch({ type: 'fetchCityData' });
             }
-          }, 1700); // Changed from 1000ms to 30000ms (30 seconds)
+          }, 10000); // 10秒轮询一次，避免过于频繁导致后端压力
         }
       });
     }

@@ -1,0 +1,183 @@
+========================================
+Worker.py Redis Connection Error - 故障排除
+========================================
+
+ERROR: Error 10061 connecting to localhost:6379
+ERROR: 由于目标计算机积极拒绝，无法连接
+
+========================================
+诊断步骤
+========================================
+
+1. 运行诊断脚本
+   ---------------------
+   check_redis.bat
+   
+   预期看到:
+   [OK] Port 6379 is listening
+   [OK] redis-server.exe is running
+
+2. 如果Redis未运行
+   ---------------------
+   手动启动Redis:
+   
+   Option A: 直接运行
+   redis-server
+   
+   Option B: 使用Docker
+   docker run -d -p 6379:6379 --name redis redis:latest
+   
+   Option C: WSL
+   wsl -d Ubuntu
+   redis-server
+
+3. 检查端口占用
+   ---------------------
+   netstat -ano | find ":6379"
+   
+   应该看到:
+   TCP    0.0.0.0:6379    0.0.0.0:0    LISTENING    [PID]
+   
+   如果没有输出 = Redis未启动
+
+4. 测试Python连接
+   ---------------------
+   cd backend
+   python -c "import redis; r=redis.Redis(); print(r.ping())"
+   
+   应该输出:
+   True
+   
+   如果报错 = 连接失败
+
+========================================
+解决方案
+========================================
+
+方案1: 使用增强版启动脚本（推荐）
+----------------------------------
+运行: start_with_redis.bat
+
+此脚本会：
+1. 自动检测Redis状态
+2. 如果未运行则自动启动
+3. 验证Python可以连接
+4. 最后启动Worker
+
+方案2: 手动启动（按顺序）
+--------------------------
+终端1: redis-server
+       等待看到 "Ready to accept connections"
+
+终端2: cd backend
+       python worker.py
+       等待看到 "[Worker] 启动成功，等待任务..."
+
+终端3: cd backend
+       uvicorn main:app --host 0.0.0.0 --port 8000
+
+方案3: 使用Docker Redis
+------------------------
+docker run -d -p 6379:6379 --name redis redis:latest
+docker ps  # 验证运行中
+
+然后运行:
+start_quick.bat
+
+========================================
+常见问题
+========================================
+
+Q1: Redis窗口一闪而过？
+A: Redis启动失败，可能原因：
+   - 端口6379已被占用
+   - 配置文件错误
+   - 缺少依赖
+
+   解决：
+   netstat -ano | find ":6379"  # 检查端口
+   如果被占用，杀掉进程或换端口
+
+Q2: Worker启动后立即退出？
+A: Redis连接失败，查看Worker窗口的错误信息
+   
+   现在Worker会显示：
+   [Worker] Redis连接失败！请确保Redis已启动
+   [Worker] 启动Redis: redis-server
+
+Q3: 端口6379被占用？
+A: 修改Redis配置使用其他端口
+   
+   1. 创建 redis.conf:
+      port 6380
+   
+   2. 启动Redis:
+      redis-server redis.conf
+   
+   3. 修改 backend/task_queue.py:
+      REDIS_PORT = 6380
+
+Q4: 防火墙阻止连接？
+A: 关闭防火墙或添加规则允许6379端口
+
+Q5: 看到"ConnectionRefusedError"？
+A: Redis未启动或监听地址不对
+   
+   检查Redis监听地址:
+   redis-cli INFO server | find "tcp_port"
+
+========================================
+验证修复
+========================================
+
+Step 1: 确认Redis运行
+------------------------
+check_redis.bat
+
+应该看到:
+[OK] Port 6379 is listening
+[OK] redis-server.exe is running
+
+Step 2: 启动Worker
+-------------------
+cd backend
+python worker.py
+
+应该看到:
+[Worker] 检查Redis连接...
+[Worker] Redis连接成功: localhost:6379
+[Worker] 启动成功，等待任务...
+
+Step 3: 访问前端
+----------------
+http://localhost:8000
+
+应该正常打开 ✓
+
+========================================
+快速参考
+========================================
+
+启动脚本（按推荐顺序）:
+1. start_with_redis.bat  # 最智能，自动启动Redis
+2. start_all.bat         # 需要Redis已运行
+3. start_quick.bat       # 最快，跳过检查
+
+诊断工具:
+- check_redis.bat        # 诊断Redis连接
+- check_status.bat       # 检查所有服务状态
+
+停止:
+- stop_all.bat           # 停止所有服务
+
+========================================
+需要帮助？
+========================================
+
+1. 运行 check_redis.bat 并提供输出
+2. 查看 Worker 窗口的完整错误信息
+3. 提供以下命令的输出:
+   - netstat -ano | find ":6379"
+   - tasklist | find "redis"
+
+========================================

@@ -28,8 +28,8 @@ const TopBar = styled.div`
 const Button = styled.button`
   padding: 10px 18px;
   border-radius: 8px;
-  border: none;
-  background: #1a237e;
+  border: 1px solid rgba(100, 181, 246, 0.5);
+  background: linear-gradient(90deg, #1565c0, #1a73e8);
   color: white;
   cursor: pointer;
   transition: all 0.25s ease;
@@ -37,11 +37,14 @@ const Button = styled.button`
   align-items: center;
   gap: 8px;
   font-size: 14px;
+  box-shadow: 0 0 15px rgba(26, 115, 232, 0.3);
+  font-weight: 500;
   
   &:hover {
-    background: #0d1642;
+    background: linear-gradient(90deg, #0d47a1, #1565c0);
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
+    border-color: rgba(100, 181, 246, 0.8);
   }
   
   &:active {
@@ -49,7 +52,7 @@ const Button = styled.button`
   }
   
   &:disabled {
-    background: #cccccc;
+    background: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -59,10 +62,10 @@ const Button = styled.button`
 const ActionButton = styled(Button)`
   padding: 6px 12px;
   font-size: 13px;
-  background: ${props => props.variant === 'edit' ? '#1976d2' : props.variant === 'delete' ? '#d32f2f' : '#1a237e'};
+  background: ${props => props.variant === 'edit' ? 'linear-gradient(90deg, #1976d2, #2196f3)' : props.variant === 'delete' ? 'linear-gradient(90deg, #d32f2f, #f44336)' : 'linear-gradient(90deg, #1565c0, #1a73e8)'};
   
   &:hover {
-    background: ${props => props.variant === 'edit' ? '#115293' : props.variant === 'delete' ? '#b71c1c' : '#0d1642'};
+    background: ${props => props.variant === 'edit' ? 'linear-gradient(90deg, #115293, #1976d2)' : props.variant === 'delete' ? 'linear-gradient(90deg, #b71c1c, #d32f2f)' : 'linear-gradient(90deg, #0d47a1, #1565c0)'};
   }
 `;
 
@@ -80,22 +83,25 @@ const Table = styled.table`
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
   border-radius: 8px;
   table-layout: fixed;
+  border: 1px solid rgba(100, 181, 246, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 `;
 
 const Th = styled.th`
   padding: 14px;
-  background: #f5f5f5;
+  background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   text-align: left;
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   position: sticky;
   top: 0;
   z-index: 1;
   font-weight: 600;
-  color: #333;
+  color: #64b5f6;
   transition: background 0.2s ease;
+  box-shadow: 0 2px 10px rgba(26, 115, 232, 0.2);
   
   &:hover {
     background: #e0e0e0;
@@ -104,13 +110,14 @@ const Th = styled.th`
 
 const Td = styled.td`
   padding: 14px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
+  color: #e0e0e0;
 `;
 
 const Tr = styled.tr`
   &:hover {
-    background: #f8f9ff;
+    background: rgba(26, 115, 232, 0.15);
   }
   transition: all 0.2s ease;
 `;
@@ -126,12 +133,17 @@ const Pagination = styled.div`
 
 const PageButton = styled.button`
   padding: 5px 10px;
-  border: 1px solid #ddd;
-  background: ${props => props.active ? '#1a237e' : 'white'};
-  color: ${props => props.active ? 'white' : '#333'};
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  box-shadow: ${props => props.active ? '0 0 10px rgba(26, 115, 232, 0.3)' : 'none'};
+  
   &:hover {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
+    border-color: rgba(100, 181, 246, 0.5);
   }
 `;
 
@@ -142,7 +154,8 @@ const ModalOverlay = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -150,11 +163,12 @@ const ModalOverlay = styled.div`
 `;
 
 const ModalContent = styled.div`
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.98) 0%, rgba(26, 35, 50, 0.98) 100%);
   padding: 25px;
   border-radius: 12px;
   width: 450px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(26, 115, 232, 0.3);
+  border: 1px solid rgba(100, 181, 246, 0.3);
   transform: translateY(0);
   animation: slideIn 0.3s ease;
   
@@ -174,11 +188,12 @@ const ModalHeader = styled.div`
   font-size: 22px;
   font-weight: bold;
   margin-bottom: 20px;
-  color: #1a237e;
-  border-bottom: 2px solid #e0e0e0;
+  color: #64b5f6;
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   padding-bottom: 15px;
   display: flex;
   align-items: center;
+  text-shadow: 0 0 10px rgba(100, 181, 246, 0.3);
   
   &::before {
     content: ${props => props.isEdit ? '"✏️"' : '"👤"'};
@@ -292,7 +307,7 @@ const StatsContainer = styled.div`
 
 const ChartsContainer = styled.div`
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 20px;
 `;
@@ -352,8 +367,7 @@ const UserContent = () => {
     totalUsers: 0,
     adminUsers: 0,
     operatorUsers: 0,
-    viewerUsers: 0,
-    onlineUsers: 0
+    viewerUsers: 0
   });
   const [activityData, setActivityData] = useState({
     dates: [],
@@ -632,8 +646,8 @@ const UserContent = () => {
           itemStyle: {
             color: item.operation_type === '清除操作' ? '#2e7d32' :
                   item.operation_type === '再利用' ? '#1565c0' :
-                  item.operation_type === 'DDoS攻击' ? '#c2185b' :
-                  item.operation_type === '抑制操作' ? '#e65100' :
+                  item.operation_type === '抑制操作' ? '#c2185b' :
+                  item.operation_type === '其他操作' ? '#e65100' :
                   '#6a1b9a'
           }
         })),
@@ -651,37 +665,57 @@ const UserContent = () => {
     };
   };
 
-  // 新增：用户操作统计表格
-  const renderUserOperationsTable = () => {
+  // 新增：用户操作统计表格（作为卡片样式）
+  const renderUserOperationsCard = () => {
     if (!operationStats.user_operations || operationStats.user_operations.length === 0) {
-      return null;
+      return (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%)',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '1px solid rgba(100, 181, 246, 0.2)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#64b5f6', fontWeight: '600', fontSize: '16px' }}>用户操作统计</h3>
+          <p style={{ color: '#8db4d8' }}>暂无数据</p>
+        </div>
+      );
     }
 
     return (
-      <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-        <h3 style={{ marginBottom: '15px', color: '#333', fontWeight: '600' }}>用户操作统计</h3>
-        <Table>
-          <thead>
-            <tr>
-              <Th>用户名</Th>
-              <Th>操作次数</Th>
-              <Th>活跃天数</Th>
-              <Th>操作僵尸网络类型</Th>
-              <Th>最后操作时间</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {operationStats.user_operations.map((op, index) => (
-              <Tr key={index}>
-                <Td>{op.username}</Td>
-                <Td>{op.operation_count}</Td>
-                <Td>{op.active_days}</Td>
-                <Td>{op.botnet_types}</Td>
-                <Td>{op.last_operation}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%)',
+        borderRadius: '12px',
+        padding: '20px',
+        border: '1px solid rgba(100, 181, 246, 0.2)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+        overflow: 'hidden'
+      }}>
+        <h3 style={{ marginBottom: '15px', color: '#64b5f6', fontWeight: '600', fontSize: '16px' }}>用户操作统计</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <Table style={{ marginBottom: 0 }}>
+            <thead>
+              <tr>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>用户名</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>操作次数</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>活跃天数</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>操作僵尸网络类型</Th>
+                <Th style={{ padding: '10px 12px', fontSize: '13px' }}>最后操作时间</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {operationStats.user_operations.map((op, index) => (
+                <Tr key={index}>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.username}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.operation_count}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.active_days}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.botnet_types}</Td>
+                  <Td style={{ padding: '10px 12px', fontSize: '13px' }}>{op.last_operation}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
       </div>
     );
   };
@@ -702,9 +736,9 @@ const UserContent = () => {
           background="linear-gradient(135deg, #303f9f 0%, #1a237e 100%)"
         />
         <StatCard
-          title="在线用户"
-          value={stats.onlineUsers}
-          trend={`${((stats.onlineUsers / stats.totalUsers) * 100).toFixed(1)}% 在线率`}
+          title="操作员"
+          value={stats.operatorUsers}
+          trend={`${((stats.operatorUsers / stats.totalUsers) * 100).toFixed(1)}% 占比`}
           background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
         />
         <StatCard
@@ -730,13 +764,13 @@ const UserContent = () => {
           background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
         />
         <StatCard
-          title="DDoS攻击"
-          value={operationStats.operation_types?.find(op => op.operation_type === 'DDoS攻击')?.count || 0}
-          trend="DDoS攻击次数"
+          title="抑制操作"
+          value={operationStats.operation_types?.find(op => op.operation_type === '抑制操作')?.count || 0}
+          trend="僵尸网络抑制次数"
           background="linear-gradient(135deg, #c62828 0%, #b71c1c 100%)"
         />
         <StatCard
-          title="操作僵尸网络"
+          title="已操作的僵尸网络数量"
           value={operationStats.user_operations?.reduce((sum, user) => Math.max(sum, user.botnet_types || 0), 0) || 0}
           trend="不同类型僵尸网络"
           background="linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%)"
@@ -744,12 +778,9 @@ const UserContent = () => {
       </StatsContainer>
 
       <ChartsContainer>
-        <ChartCard option={getActivityTrendOption()} height="300px" />
-        <ChartCard option={getRoleDistributionOption()} height="300px" />
         <ChartCard option={getOperationTypeOption()} height="300px" />
+        {renderUserOperationsCard()}
       </ChartsContainer>
-
-      {renderUserOperationsTable()}
 
       <TopBar>
         <Button onClick={() => {

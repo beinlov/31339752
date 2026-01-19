@@ -401,7 +401,7 @@ const AsruexLogViewer = () => {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/asruex/logs');
+      const response = await fetch('http://localhost:8000/api/asruex/logs');
       const data = await response.json();
       
       const groupedSessions = groupLogsIntoSessions(data);

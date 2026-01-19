@@ -88,7 +88,7 @@ const NetworkTitle = ({ selectedNetwork }) => {
   useEffect(() => {
     const fetchNetworkInfo = async () => {
       try {
-        const response = await axios.get('/api/botnet-info');
+        const response = await axios.get('http://localhost:8000/api/botnet-info');
         if (response.data.status === 'success') {
           setNetworkInfo(response.data.data);
         }

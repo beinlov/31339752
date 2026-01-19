@@ -1,0 +1,83 @@
+========================================
+Redis Detection Issue - SOLVED
+========================================
+
+PROBLEM:
+- Redis is running (port 6379 active)
+- But start_all.bat shows "Redis failed to start"
+- Reason: redis-cli not in system PATH
+
+SOLUTION APPLIED:
+- Updated start_all.bat to check port 6379 instead
+- Script now works even if redis-cli not in PATH
+- Added start_quick.bat for faster startup
+
+========================================
+HOW TO START (3 OPTIONS)
+========================================
+
+Option 1: Quick Start (Recommended if Redis already running)
+-------------------------------------------------------------
+1. Keep Redis Server window open
+2. Run: start_quick.bat
+3. Done!
+
+Option 2: Full Start (Now fixed)
+---------------------------------
+1. Run: start_all.bat
+2. Script will detect Redis by port 6379
+3. Continues even without redis-cli
+
+Option 3: Manual Start
+----------------------
+1. Redis Server (already running)
+2. cd backend && python worker.py
+3. cd backend && uvicorn main:app --host 0.0.0.0 --port 8000
+
+========================================
+TO ADD redis-cli TO PATH (Optional)
+========================================
+
+If you want full Redis management:
+
+1. Find redis-cli.exe location
+   Example: D:\Redis\
+
+2. Add to PATH:
+   - Right-click "This PC" -> Properties
+   - Advanced system settings
+   - Environment Variables
+   - Edit "Path" variable
+   - Add Redis directory
+   - Click OK
+
+3. Test: Open new CMD and run
+   redis-cli ping
+   Should return: PONG
+
+========================================
+VERIFY SERVICES
+========================================
+
+Run: check_status.bat
+
+Expected output:
+[OK] Redis detected on port 6379
+[OK] Web service is running
+[OK] Worker process is running
+
+========================================
+CURRENT STATUS (From your screenshot)
+========================================
+
+Redis Server: RUNNING ✓
+  - Port: 6379
+  - Ready to accept connections
+
+Next steps:
+1. Close failed start_all.bat window
+2. Keep Redis Server window open  
+3. Run: start_quick.bat
+4. Access: http://localhost:8000
+
+========================================

@@ -11,13 +11,25 @@ import chinaJson from "../../../china.json";
 // 注册中国地图数据
 registerMap('china', chinaJson);
 
+// 规范化省份名称
+const normalizeProvince = (rawName) => {
+  if (!rawName) return '';
+  let name = rawName.trim();
+  name = name.replace(/^中国/, '');
+  const match = name.match(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区|省|市)/);
+  if (match && match.index > 0) {
+    name = name.slice(0, match.index);
+  }
+  return name;
+};
+
 // 动态加载省份地图数据
 const loadProvinceMap = async (provinceName) => {
   try {
     if (provinceName === 'china') return 'china';
 
-    // 移除省份名称中的"省"、"市"、"自治区"等后缀
-    const shortName = provinceName.replace(/(省|市|自治区|特别行政区)$/, '');
+    // 使用 normalizeProvince 规范化省份名称
+    const shortName = normalizeProvince(provinceName);
 
     // 获取省份的地图文件名
     const mapCode = provinceMap[shortName];
@@ -202,10 +214,16 @@ class Map extends PureComponent {
     const provinceData = this.getProvinceDataForCurrentNetwork();
     if (!provinceData) return null;
 
-    // 找到对应省份的数据
-    const province = provinceData.find(p =>
-      provinceNameMap[p.province] === provinceName || p.province === provinceName
-    );
+    // 规范化省份名称以便匹配
+    const normalizedProvinceName = normalizeProvince(provinceName);
+    
+    // 找到对应省份的数据（支持多种匹配方式）
+    const province = provinceData.find(p => {
+      const normalizedP = normalizeProvince(p.province);
+      return normalizedP === normalizedProvinceName || 
+             p.province === provinceName ||
+             provinceNameMap[p.province] === provinceName;
+    });
     if (!province) return null;
 
     // 计算最大值用于相对比例

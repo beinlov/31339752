@@ -1,22 +1,31 @@
-from fastapi import FastAPI, HTTPException, Request
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'ip_location'))
+from fastapi import FastAPI, HTTPException, Request, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import List, Dict, Union, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import random
 from datetime import datetime, timedelta
 import asyncio
 from router.user import router as user_router
+from router.user_integration_apis import router as user_integration_router  # 集成接口（SSO和用户同步）
 from router.node import router as node_router
-from router.asruex import router as asruex_router
+# from router.asruex import router as asruex_router  # 已废弃，功能由log_processor替代
 from router.botnet import router as botnet_router
 from router.amount import router as amount_router
+from api_ip_upload import router as ip_upload_router
+from router.server import router as server_router
+from router.terminal import router as terminal_router
+from router.botnet_stats import router as botnet_stats_router
+from router.suppression import router as suppression_router
 
 import logging
 import re
 from ip_location.ip_query import ip_query  # 导入IP查询模块
+from config import API_KEY, ALLOWED_UPLOAD_IPS, MAX_LOGS_PER_UPLOAD, ALLOWED_BOTNET_TYPES, DB_CONFIG
 
 # 设置日志
 logging.basicConfig(
@@ -40,13 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 数据库配置
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",  # 替换为你的数据库用户名
-    "password": "root",  # 替换为你的数据库密码
-    "database": "botnet"
-}
 
 
 # 全局异常处理
@@ -71,17 +73,35 @@ async def general_exception_handler(request: Request, exc: Exception):
 # 包含用户路由
 app.include_router(user_router, prefix="/api/user", tags=["users"])
 
+# 包含用户集成接口路由（SSO免登录接口和用户数据同步接口）
+app.include_router(user_integration_router, prefix="/api/user", tags=["user-integration"])
+
 # 包含节点路由
 app.include_router(node_router, prefix="/api", tags=["nodes"])
 
-# 包含asruex路由
-app.include_router(asruex_router, prefix="/api/asruex", tags=["asruex"])
+# 包含asruex路由 - 已废弃，功能由log_processor模块替代
+# app.include_router(asruex_router, prefix="/api/asruex", tags=["asruex"])
 
 # 包含botnet路由
 app.include_router(botnet_router, prefix="/api", tags=["botnet"])
 
 # 包含amount路由
 app.include_router(amount_router, prefix="/api", tags=["amount"])
+
+# 包含IP上传路由（用于远端上传器）
+app.include_router(ip_upload_router, tags=["ip-upload"])
+
+# 包含服务器管理路由
+app.include_router(server_router, prefix="/api/server", tags=["server-management"])
+
+# 包含僵尸网络统计路由
+app.include_router(botnet_stats_router, prefix="/api/stats", tags=["botnet-statistics"])
+
+# 终端执行路由（受限）
+app.include_router(terminal_router, prefix="/api", tags=["terminal"])
+
+# 包含抑制阻断策略路由
+app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
 
 
 # 数据模型
@@ -106,136 +126,495 @@ class BotnetType(BaseModel):
     created_at: Optional[datetime] = None
 
 
+# ============================================================
+# 日志上传接口（用于接收远端传输的日志）
+# ============================================================
+
+# IP数据项模型（用于新格式）
+class IPDataItem(BaseModel):
+    ip: str
+    date: str
+    botnet_type: str
+    timestamp: str
+
+class LogUploadRequest(BaseModel):
+    """日志上传请求模型（兼容两种格式）"""
+    botnet_type: str = Field(..., description="僵尸网络类型，如：asruex, mozi, moobot等")
+    logs: Optional[List[str]] = Field(None, description="日志行列表（旧格式）")
+    ip_data: Optional[List[IPDataItem]] = Field(None, description="IP数据列表（新格式）")
+    source_ip: Optional[str] = Field(None, description="远端IP（可选）")
+    
+    @field_validator('botnet_type')
+    @classmethod
+    def validate_botnet_type(cls, v):
+        if v not in ALLOWED_BOTNET_TYPES:
+            raise ValueError(f'僵尸网络类型必须是以下之一: {", ".join(ALLOWED_BOTNET_TYPES)}')
+        return v
+    
+    @field_validator('logs')
+    @classmethod
+    def validate_logs(cls, v):
+        if v is not None:
+            if not v:
+                raise ValueError('日志列表不能为空')
+            if len(v) > MAX_LOGS_PER_UPLOAD:
+                raise ValueError(f'单次上传日志行数不能超过{MAX_LOGS_PER_UPLOAD}条')
+        return v
+    
+    @field_validator('ip_data')
+    @classmethod
+    def validate_ip_data(cls, v):
+        if v is not None:
+            if not v:
+                raise ValueError('IP数据列表不能为空')
+            if len(v) > 1000:
+                raise ValueError('单次上传IP数量不能超过1000个')
+        return v
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        # 确保至少有一种数据格式
+        if not self.logs and not self.ip_data:
+            raise ValueError('必须提供logs或ip_data中的一种')
+
+
+class LogUploadResponse(BaseModel):
+    """日志上传响应模型"""
+    status: str
+    message: str
+    received_count: int
+    saved_to: str
+    timestamp: str
+
+
+# 后台处理函数：异步处理IP数据（不阻塞Web请求）
+async def process_ip_data_background(botnet_type: str, ip_data: List, client_ip: str):
+    """后台任务：处理IP数据并写入数据库"""
+    try:
+        from log_processor.enricher import IPEnricher
+        from log_processor.db_writer import BotnetDBWriter
+        
+        logger.info(f"[后台任务] 开始处理 {len(ip_data)} 个IP，类型: {botnet_type}")
+        
+        # 获取处理器
+        enricher = IPEnricher(
+            cache_size=10000,
+            cache_ttl=86400,
+            max_concurrent=20
+        )
+        writer = BotnetDBWriter(
+            botnet_type, 
+            DB_CONFIG, 
+            batch_size=100,
+            use_connection_pool=True,
+            enable_monitoring=True
+        )
+        
+        # 记录批次开始
+        writer.start_batch(client_ip, len(ip_data))
+        
+        # 处理每个IP数据
+        for ip_item in ip_data:
+            try:
+                # 构造parsed_data格式
+                parsed_data = {
+                    'ip': ip_item.ip,
+                    'timestamp': datetime.fromisoformat(ip_item.timestamp.replace('Z', '+00:00')),
+                    'event_type': 'remote_upload',
+                    'source': 'remote_uploader',
+                    'date': ip_item.date,
+                    'botnet_type': ip_item.botnet_type
+                }
+                
+                # IP地理位置增强
+                ip_info = await enricher.enrich(ip_item.ip)
+                
+                # 写入数据库
+                writer.add_node(parsed_data, ip_info)
+                    
+            except Exception as e:
+                logger.error(f"[后台任务] 处理IP数据失败 {ip_item.ip}: {e}")
+        
+        # 强制刷新写入器
+        await writer.flush(force=True)
+        
+        logger.info(
+            f"[后台任务] 完成处理: 成功 {writer.processed_count}, "
+            f"重复 {writer.duplicate_count}, 写入 {writer.total_written}"
+        )
+        
+    except Exception as e:
+        logger.error(f"[后台任务] IP数据处理失败: {e}", exc_info=True)
+
+
+@app.post("/api/upload-logs", response_model=LogUploadResponse)
+async def upload_logs(
+    request: LogUploadRequest, 
+    client_request: Request,
+    background_tasks: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    接收远端上传的日志数据
+    
+    安全特性：
+    - API密钥认证（Header: X-API-Key）
+    - IP白名单验证
+    - 日志行数限制
+    - 僵尸网络类型验证
+    
+    示例请求:
+    curl -X POST "http://localhost:8000/api/upload-logs" \\
+         -H "Content-Type: application/json" \\
+         -H "X-API-Key: your-api-key" \\
+         -d '{
+           "botnet_type": "mozi",
+           "logs": [
+             "2025-10-30 12:00:00,1.2.3.4,infection,bot_v1.0",
+             "2025-10-30 12:01:00,1.2.3.5,beacon"
+           ]
+         }'
+    """
+    try:
+        client_ip = client_request.client.host
+        
+        # 安全检查1：验证API密钥
+        if x_api_key != API_KEY:
+            logger.warning(f"无效的API密钥尝试，来自IP: {client_ip}")
+            raise HTTPException(status_code=401, detail="无效的API密钥")
+        
+        # 安全检查2：IP白名单验证（如果配置了白名单）
+        if ALLOWED_UPLOAD_IPS and client_ip not in ALLOWED_UPLOAD_IPS:
+            logger.warning(f"未授权的IP尝试上传: {client_ip}")
+            raise HTTPException(status_code=403, detail="IP未授权")
+        
+        # 处理IP数据
+        if request.ip_data:
+            # 方案选择：根据配置选择后台任务或Redis队列
+            USE_REDIS_QUEUE = True  # ✅ 已启用Redis队列
+            
+            if USE_REDIS_QUEUE:
+                # 方案2：推送到Redis队列（需要独立Worker进程）
+                try:
+                    from task_queue import task_queue
+                    
+                    task_id = task_queue.push_task(
+                        request.botnet_type,
+                        [ip.__dict__ for ip in request.ip_data],  # 转为dict
+                        client_ip
+                    )
+                    
+                    queue_length = task_queue.get_queue_length()
+                    
+                    logger.info(f"任务已入队: {task_id}, 队列长度: {queue_length}")
+                    
+                    return LogUploadResponse(
+                        status="queued",
+                        message=f"已接收 {len(request.ip_data)} 个IP，任务ID: {task_id}，队列中有 {queue_length} 个任务",
+                        received_count=len(request.ip_data),
+                        saved_to="redis_queue",
+                        timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    )
+                except Exception as e:
+                    logger.error(f"推送到队列失败: {e}")
+                    raise HTTPException(status_code=500, detail=f"任务队列错误: {str(e)}")
+            
+            else:
+                # 方案1：FastAPI后台任务（默认）
+                logger.info(f"接收到 {len(request.ip_data)} 个IP数据，类型: {request.botnet_type}，已提交后台处理")
+                
+                # 添加后台任务
+                background_tasks.add_task(
+                    process_ip_data_background,
+                    request.botnet_type,
+                    request.ip_data,
+                    client_ip
+                )
+                
+                # 立即返回响应（不等待处理完成）
+                return LogUploadResponse(
+                    status="accepted",
+                    message=f"已接收 {len(request.ip_data)} 个IP，正在后台处理中...",
+                    received_count=len(request.ip_data),
+                    saved_to="background_task",
+                    timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                )
+        
+        elif request.logs:
+            # 旧格式：原始日志行，保存到文件
+            logger.info(f"收到来自 {client_ip} 的日志上传请求，类型: {request.botnet_type}, 行数: {len(request.logs)}")
+            
+            # 确定保存路径
+            logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
+            botnet_dir = os.path.join(logs_base_dir, request.botnet_type)
+            
+            # 创建目录（如果不存在）
+            os.makedirs(botnet_dir, exist_ok=True)
+            
+            # 生成文件名：YYYY-MM-DD.txt
+            today = datetime.now().strftime('%Y-%m-%d')
+            log_file = os.path.join(botnet_dir, f'{today}.txt')
+            
+            # 追加写入日志文件
+            with open(log_file, 'a', encoding='utf-8') as f:
+                for log_line in request.logs:
+                    # 确保每行以换行符结尾
+                    if not log_line.endswith('\n'):
+                        log_line += '\n'
+                    f.write(log_line)
+            
+            logger.info(f"✅ 成功保存 {len(request.logs)} 条日志到 {log_file}")
+            
+            return LogUploadResponse(
+                status="success",
+                message=f"成功接收并保存 {len(request.logs)} 条日志",
+                received_count=len(request.logs),
+                saved_to=log_file,
+                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+        
+        else:
+            raise HTTPException(status_code=400, detail="必须提供logs或ip_data中的一种")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 日志上传处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"日志上传失败: {str(e)}")
+
+
+@app.get("/")
+async def root_index():
+    return {
+        "status": "ok",
+        "message": "Botnet API is running",
+        "upload_endpoint": "/api/upload-logs",
+        "docs": "/docs"
+    }
+
+
+@app.post("/")
+async def root_upload_proxy(
+    request: LogUploadRequest,
+    client_request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    # 代理到正式上传接口，保持相同的认证与逻辑
+    return await upload_logs(request, client_request, x_api_key)
+
+
+@app.get("/api/upload-status")
+async def get_upload_status():
+    """
+    查询上传接口状态和统计信息
+    
+    返回各个僵尸网络的日志文件数量和总行数
+    """
+    try:
+        logs_base_dir = os.path.join(os.path.dirname(__file__), 'logs')
+        
+        status = {
+            "api_status": "running",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "security": {
+                "api_key_required": True,
+                "ip_whitelist_enabled": bool(ALLOWED_UPLOAD_IPS),
+                "max_logs_per_upload": MAX_LOGS_PER_UPLOAD
+            },
+            "botnet_types": []
+        }
+        
+        # 遍历各个僵尸网络目录
+        if os.path.exists(logs_base_dir):
+            for botnet_type in ALLOWED_BOTNET_TYPES:
+                botnet_dir = os.path.join(logs_base_dir, botnet_type)
+                if os.path.isdir(botnet_dir):
+                    files = [f for f in os.listdir(botnet_dir) if f.endswith('.txt')]
+                    total_lines = 0
+                    latest_file = None
+                    latest_mtime = 0
+                    
+                    for file in files:
+                        file_path = os.path.join(botnet_dir, file)
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                total_lines += sum(1 for _ in f)
+                            
+                            # 获取最新修改的文件
+                            mtime = os.path.getmtime(file_path)
+                            if mtime > latest_mtime:
+                                latest_mtime = mtime
+                                latest_file = file
+                        except:
+                            pass
+                    
+                    status["botnet_types"].append({
+                        "type": botnet_type,
+                        "log_files": len(files),
+                        "total_lines": total_lines,
+                        "latest_file": latest_file,
+                        "last_modified": datetime.fromtimestamp(latest_mtime).strftime('%Y-%m-%d %H:%M:%S') if latest_mtime > 0 else None
+                    })
+        
+        return JSONResponse(content=status)
+        
+    except Exception as e:
+        logger.error(f"获取上传状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/province-amounts")
 async def get_province_amounts(botnet_type: Optional[str] = None):
+    """获取省份数据 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        """在线程池中执行数据库查询"""
+        connection = None
+        cursor = None
+        try:
+            # 建立数据库连接
+            connection = pymysql.connect(**DB_CONFIG)
+            cursor = connection.cursor()
+            
+            # 获取僵尸网络类型
+            cursor.execute("SELECT name, table_name FROM botnet_types")
+            botnet_tables = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            # 如果指定了僵尸网络类型，只查询该类型
+            if botnet_type:
+                if botnet_type not in botnet_tables:
+                    raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
+                botnet_tables = {botnet_type: botnet_tables[botnet_type]}
+
+            # 构建动态查询
+            # 首先获取所有省份
+            provinces_query = " UNION ".join(
+                f"SELECT DISTINCT province FROM {table_name}"
+                for table_name in botnet_tables.values()
+            )
+            cursor.execute(f"SELECT DISTINCT province FROM ({provinces_query}) as provinces WHERE province IS NOT NULL")
+
+            provinces = [row[0] for row in cursor.fetchall()]
+            
+            # 然后为每个僵尸网络类型构建查询
+            query_parts = []
+            for province in provinces:
+                subqueries = []
+                for botnet_name, table_name in botnet_tables.items():
+                    # 使用china_botnet_xxx表
+                    china_table = f"china_botnet_{botnet_name}"
+                    subqueries.append(f"""
+                        SELECT 
+                            '{province}' as province,
+                            '{botnet_name}' as botnet_type,
+                            COALESCE(SUM(infected_num), 0) as total
+                        FROM {china_table}
+                        WHERE province = %s
+                    """)
+                query_parts.extend(subqueries)
+
+            # 执行查询
+            query = " UNION ALL ".join(query_parts)
+            params = [province for province in provinces for _ in botnet_tables]
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            # 转换为响应格式
+            province_amounts = {name: [] for name in botnet_tables.keys()}
+
+            for province, botnet_type_result, total in results:
+                province_amounts[botnet_type_result].append({
+                    "province": province,
+                    "amount": int(total)
+                })
+
+            return province_amounts
+            
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
     try:
-        # 获取所有注册的僵尸网络类型
-        botnet_tables = await get_botnet_tables()
-
-        # 如果指定了僵尸网络类型，只查询该类型
-        if botnet_type:
-            if botnet_type not in botnet_tables:
-                raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
-            botnet_tables = {botnet_type: botnet_tables[botnet_type]}
-
-        # 建立数据库连接
-        connection = pymysql.connect(**DB_CONFIG)
-        cursor = connection.cursor()
-
-        # 构建动态查询
-        # 首先获取所有省份
-        provinces_query = " UNION ".join(
-            f"SELECT DISTINCT province FROM {table_name}"
-            for table_name in botnet_tables.values()
-        )
-        cursor.execute(f"SELECT DISTINCT province FROM ({provinces_query}) as provinces WHERE province IS NOT NULL")
-
-        provinces = [row[0] for row in cursor.fetchall()]
-        print(provinces)
-        # 然后为每个僵尸网络类型构建查询
-        query_parts = []
-        for province in provinces:
-            subqueries = []
-            for botnet_name, table_name in botnet_tables.items():
-                # 使用china_botnet_xxx表
-                china_table = f"china_botnet_{botnet_name}"
-                subqueries.append(f"""
-                    SELECT 
-                        '{province}' as province,
-                        '{botnet_name}' as botnet_type,
-                        COALESCE(SUM(infected_num), 0) as total
-                    FROM {china_table}
-                    WHERE province = %s
-                """)
-            query_parts.extend(subqueries)
-
-        # 执行查询
-        query = " UNION ALL ".join(query_parts)
-        params = [province for province in provinces for _ in botnet_tables]
-        cursor.execute(query, params)
-        results = cursor.fetchall()
-
-        # 转换为响应格式
-        province_amounts = {name: [] for name in botnet_tables.keys()}
-
-        for province, botnet_type, total in results:
-            province_amounts[botnet_type].append({
-                "province": province,
-                "amount": int(total)
-            })
-
-        return province_amounts
-
+        # 在线程池中执行数据库查询，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _query_database)
+        return result
     except Exception as e:
         logger.error(f"Database error in get_province_amounts: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'connection' in locals():
-            connection.close()
-
 
 @app.get("/api/world-amounts")
 async def get_world_amounts(botnet_type: Optional[str] = None):
+    """获取全球数据 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        """在线程池中执行数据库查询"""
+        connection = None
+        cursor = None
+        try:
+            # 建立数据库连接
+            connection = pymysql.connect(**DB_CONFIG)
+            cursor = connection.cursor()
+
+            # 获取僵尸网络类型
+            cursor.execute("SELECT name, table_name FROM botnet_types")
+            botnet_tables = {row[0]: row[1] for row in cursor.fetchall()}
+
+            # 如果指定了僵尸网络类型，只查询该类型
+            if botnet_type:
+                if botnet_type not in botnet_tables:
+                    raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
+                botnet_types = [botnet_type]
+            else:
+                botnet_types = list(botnet_tables.keys())
+
+            # 构建查询
+            query_parts = []
+            for bot_type in botnet_types:
+                # 使用global_botnet_xxx表
+                global_table = f"global_botnet_{bot_type}"
+                query_parts.append(f"""
+                    SELECT 
+                        country,
+                        '{bot_type}' as botnet_type,
+                        infected_num
+                    FROM {global_table}
+                """)
+
+            # 执行查询
+            if query_parts:
+                query = " UNION ALL ".join(query_parts)
+                cursor.execute(query)
+                results = cursor.fetchall()
+            else:
+                results = []
+
+            # 转换为响应格式
+            world_amounts = {bot_type: [] for bot_type in botnet_types}
+
+            for country, bot_type_result, amount in results:
+                world_amounts[bot_type_result].append({
+                    "country": country,
+                    "amount": int(amount or 0)
+                })
+
+            return world_amounts
+            
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
+    
     try:
-        # 建立数据库连接
-        connection = pymysql.connect(**DB_CONFIG)
-        cursor = connection.cursor()
-
-        # 获取所有注册的僵尸网络类型
-        botnet_tables = await get_botnet_tables()
-
-        # 如果指定了僵尸网络类型，只查询该类型
-        if botnet_type:
-            if botnet_type not in botnet_tables:
-                raise HTTPException(status_code=404, detail=f"Botnet type {botnet_type} not found")
-            botnet_types = [botnet_type]
-        else:
-            botnet_types = list(botnet_tables.keys())
-
-        # 构建查询
-        query_parts = []
-        for bot_type in botnet_types:
-            # 使用global_botnet_xxx表
-            global_table = f"global_botnet_{bot_type}"
-            query_parts.append(f"""
-                SELECT 
-                    country,
-                    '{bot_type}' as botnet_type,
-                    infected_num
-                FROM {global_table}
-            """)
-
-        # 执行查询
-        if query_parts:
-            query = " UNION ALL ".join(query_parts)
-            cursor.execute(query)
-            results = cursor.fetchall()
-        else:
-            results = []
-
-        # 转换为响应格式
-        world_amounts = {bot_type: [] for bot_type in botnet_types}
-
-        for country, bot_type, amount in results:
-            world_amounts[bot_type].append({
-                "country": country,
-                "amount": int(amount or 0)
-            })
-
-        return world_amounts
-
+        # 在线程池中执行数据库查询，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _query_database)
+        return result
     except Exception as e:
         logger.error(f"Database error in get_world_amounts: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'connection' in locals():
-            connection.close()
 
 
 @app.get("/api/industry-distribution")
@@ -256,28 +635,40 @@ async def get_industry_distribution():
 
 @app.get("/api/user-events")
 async def get_user_events():
-    try:
-        conn = pymysql.connect(**DB_CONFIG)
-        cursor = conn.cursor(DictCursor)
+    """获取用户事件 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        conn = None
+        cursor = None
+        try:
+            conn = pymysql.connect(**DB_CONFIG)
+            cursor = conn.cursor(DictCursor)
 
-        query = """
-        SELECT 
-            DATE_FORMAT(event_time, '%Y-%m-%d %H:%i:%s') as time,
-            username,
-            ip,
-            location,
-            botnet_type,
-            command
-        FROM user_events
-        ORDER BY event_time DESC
-        LIMIT 20
-        """
-        cursor.execute(query)
-        results = cursor.fetchall()
-        return results
-    except Exception as e:
-        logger.error(f"Error fetching user events: {e}")
-        return []  # 返回空数组而不是抛出异常
+            query = """
+            SELECT 
+                DATE_FORMAT(event_time, '%Y-%m-%d %H:%i:%s') as time,
+                username,
+                ip,
+                location,
+                botnet_type,
+                command
+            FROM user_events
+            ORDER BY event_time DESC
+            LIMIT 20
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching user events: {e}")
+            return []  # 返回空数组而不是抛出异常
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query_database)
 
 
 # 添加异常报告模型
@@ -287,49 +678,56 @@ class AnomalyReport(BaseModel):
     location: str
     time: str
     description: str
-    severity: str
 
 
 @app.get("/api/anomaly-reports")
 async def get_anomaly_reports():
-    try:
-        # 查询数据库中的异常报告
-        conn = pymysql.connect(**DB_CONFIG)
-        cursor = conn.cursor(DictCursor)
-
-        # 尝试查询异常报告表
+    """获取异常报告 - 使用线程池避免阻塞事件循环"""
+    def _query_database():
+        conn = None
+        cursor = None
         try:
-            query = """
-            SELECT 
-                id, ip, location, 
-                DATE_FORMAT(report_time, '%Y/%m/%d %H:%i') as time,
-                description, severity
-            FROM anomaly_reports
-            ORDER BY report_time DESC
-            LIMIT 20
-            """
-            cursor.execute(query)
-            results = cursor.fetchall()
+            # 查询数据库中的异常报告
+            conn = pymysql.connect(**DB_CONFIG)
+            cursor = conn.cursor(DictCursor)
+
+            # 尝试查询异常报告表
+            try:
+                query = """
+                SELECT 
+                    id, ip, location, 
+                    DATE_FORMAT(report_time, '%Y/%m/%d %H:%i') as time,
+                    description
+                FROM anomaly_reports
+                ORDER BY report_time DESC
+                LIMIT 20
+                """
+                cursor.execute(query)
+                results = cursor.fetchall()
+            except Exception as e:
+                # 如果表不存在，返回模拟数据
+                logger.warning(f"异常报告表查询失败: {e}")
+                results = []
+            return results
         except Exception as e:
-            # 如果表不存在，返回模拟数据
-            logger.warning(f"异常报告表查询失败: {e}")
-            results = []
-        return results
-    except Exception as e:
-        logger.error(f"Error fetching anomaly reports: {e}")
-        # 发生错误时返回空数组
-        return []
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'conn' in locals():
-            conn.close()
+            logger.error(f"Error fetching anomaly reports: {e}")
+            # 发生错误时返回空数组
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query_database)
 
 
 class IPLocationRequest(BaseModel):
     ip: str
 
-    @validator('ip')
+    @field_validator('ip')
+    @classmethod
     def validate_ip(cls, v):
         pattern = r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
         if not re.match(pattern, v):
@@ -427,19 +825,25 @@ async def get_ip_location_fallback(request: Request):
 
 # 修改现有的获取数据的函数
 async def get_botnet_tables():
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor(DictCursor)
         cursor.execute("SELECT name, table_name FROM botnet_types")
         return {row['name']: row['table_name'] for row in cursor.fetchall()}
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # 更新全球僵尸网络数据
 @app.post("/api/update-global-botnet")
 async def update_global_botnet(country: str, botnet_type: str, infected_num: int):
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -470,15 +874,17 @@ async def update_global_botnet(country: str, botnet_type: str, infected_num: int
         logger.error(f"Error updating global botnet data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 
 # 获取特定国家的僵尸网络数据
 @app.get("/api/country-botnet/{country}")
 async def get_country_botnet(country: str):
+    conn = None
+    cursor = None
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -517,9 +923,9 @@ async def get_country_botnet(country: str):
         logger.error(f"Error getting country botnet data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if 'cursor' in locals():
+        if cursor:
             cursor.close()
-        if 'conn' in locals():
+        if conn:
             conn.close()
 
 

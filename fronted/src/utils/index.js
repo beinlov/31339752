@@ -129,7 +129,7 @@ export const getUserLocation = async () => {
 
     if (!realIP) {
       // 如果所有API都失败了，使用后端获取
-      const response = await fetch('/api/ip-location', {
+      const response = await fetch('http://localhost:8000/api/ip-location', {
         method: 'GET',
         credentials: 'include'
       });
@@ -145,7 +145,7 @@ export const getUserLocation = async () => {
     }
 
     // 使用获取到的IP调用后端地理位置API
-    const response = await fetch('/api/ip-location', {
+    const response = await fetch('http://localhost:8000/api/ip-location', {
       method: 'POST',
       credentials: 'include',
       headers: {

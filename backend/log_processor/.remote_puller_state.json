@@ -1,0 +1,11 @@
+{
+  "last_seq_ids": {
+    "C2-test-local": 250000,
+    "C2-test-remote": 569894
+  },
+  "last_timestamps": {
+    "C2-test-local": "2026-01-13T12:59:02",
+    "C2-test-remote": "2026-01-13T23:59:59"
+  },
+  "updated_at": "2026-01-15T17:14:13.541971"
+}

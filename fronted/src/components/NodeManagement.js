@@ -1,52 +1,90 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
-import { getUserLocation } from '../utils/index';
+import CommunicationModal from './CommunicationModal';
 
 // 样式定义
 const Container = styled.div`
   height: 100%;
   width: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   padding: 0px;
   box-sizing: border-box;
-  margin-top: -1.5%;
+  gap: 20px;
   position: relative;
+`;
+
+// 左侧面板 - 统计信息和图表
+const LeftPanel = styled.div`
+  width: 38%;
+  min-width: 540px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 10px;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(10, 25, 41, 0.3);
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(100, 181, 246, 0.3);
+    border-radius: 3px;
+  }
+`;
+
+// 右侧面板 - 搜索和表格
+const RightPanel = styled.div`
+  flex: 1;
+  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
 `;
 
 const TopBar = styled.div`
   display: flex;
   align-items: center;
-  gap: 15px;
-  margin-bottom: 0px;
-  padding: 20px;
+  gap: 12px;
+  margin-bottom: 16px;
   flex-shrink: 0;
 `;
 
 const Select = styled.select`
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  width: 180px;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
+  color: #e0e0e0;
+  width: 140px;
   appearance: none;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%23333"/></svg>');
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="6"><path d="M0 0l6 6 6-6z" fill="%2364b5f6"/></svg>');
   background-repeat: no-repeat;
-  background-position: right 15px center;
+  background-position: right 12px center;
   background-size: 12px;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.3s ease;
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.2);
 
   &:focus {
-    border-color: #1a237e;
+    border-color: #1a73e8;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.4);
   }
 
   &:disabled {
-    background-color: #f5f5f5;
+    background-color: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     opacity: 0.7;
   }
@@ -54,62 +92,66 @@ const Select = styled.select`
   option {
     padding: 10px;
     font-size: 14px;
+    background: #0d47a1;
+    color: white;
   }
 `;
 
 const SearchInput = styled.input`
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid #ddd;
-  width: 250px;
-  margin-left: -1.5%;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: rgba(26, 115, 232, 0.1);
+  color: #e0e0e0;
+  width: 220px;
   transition: all 0.3s ease;
-  font-size: 14px;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>');
+  font-size: 13px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2364b5f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>');
   background-repeat: no-repeat;
-  background-position: 12px center;
-  padding-left: 40px;
+  background-position: 10px center;
+  padding-left: 36px;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.2);
 
   &:focus {
-    border-color: #1a237e;
+    border-color: #1a73e8;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.2);
-    width: 280px;
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.4);
+    width: 260px;
   }
 
   &::placeholder {
-    color: #aaa;
+    color: rgba(255, 255, 255, 0.5);
   }
 `;
 
 const Button = styled.button`
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-radius: 8px;
-  border: none;
-  background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
-  color: ${props => props.active ? 'white' : '#333'};
+  border: 1px solid ${props => props.active ? 'rgba(100, 181, 246, 0.5)' : 'rgba(100, 181, 246, 0.2)'};
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
   transition: all 0.25s ease;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 500;
-  box-shadow: ${props => props.active ? '0 4px 10px rgba(26, 35, 126, 0.2)' : 'none'};
+  box-shadow: ${props => props.active ? '0 0 15px rgba(26, 115, 232, 0.4)' : '0 0 10px rgba(26, 115, 232, 0.1)'};
 
   &:hover {
-    background: ${props => props.active ? '#0d1642' : '#e0e0e0'};
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
+    border-color: rgba(100, 181, 246, 0.6);
   }
 
   &:active {
     transform: translateY(0);
-    box-shadow: none;
   }
 
   &:disabled {
-    background: #cccccc;
+    background: rgba(100, 100, 100, 0.3);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -124,32 +166,33 @@ const TableContainer = styled.div`
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   margin-bottom: 0;
   position: relative;
-  display: flex;
-  flex-direction: column;
 `;
 
 const Table = styled.div`
   width: 100%;
-  background: white;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(26, 115, 232, 0.2);
+  border: 1px solid rgba(100, 181, 246, 0.2);
 `;
 
 const TableHeader = styled.div`
   display: grid;
-  grid-template-columns: 60px 180px 160px 1fr 120px;
-  padding: 16px;
-  background: #f5f5f5;
-  border-bottom: 2px solid #ddd;
+  grid-template-columns: 40px 115px 160px 125px 125px;
+  padding: 10px 8px;
+  background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
+  border-bottom: 2px solid rgba(100, 181, 246, 0.3);
   font-weight: 600;
-  color: #333;
+  color: #64b5f6;
   position: sticky;
   top: 0;
   z-index: 1;
+  box-shadow: 0 2px 10px rgba(26, 115, 232, 0.2);
+  font-size: 11px;
 
   > div {
-    padding: 0 10px;
+    padding: 0 4px;
     display: flex;
     align-items: center;
 
@@ -163,50 +206,54 @@ const TableHeader = styled.div`
 
 const TableRow = styled.div`
   display: grid;
-  grid-template-columns: 60px 180px 160px 1fr 120px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
+  grid-template-columns: 40px 115px 160px 125px 125px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
   opacity: ${props => props.disabled ? 0.5 : 1};
-  background: ${props => props.disabled ? '#f9f9f9' : 'white'};
+  background: ${props => props.disabled ? 'rgba(26, 115, 232, 0.05)' : 'transparent'};
+  color: #e0e0e0;
+  font-size: 11px;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
 
   &:hover {
-    background: ${props => !props.disabled && '#f0f4ff'};
+    background: ${props => !props.disabled && 'rgba(26, 115, 232, 0.15)'};
     transform: ${props => !props.disabled && 'translateY(-1px)'};
-    box-shadow: ${props => !props.disabled && '0 2px 5px rgba(0, 0, 0, 0.05)'};
+    box-shadow: ${props => !props.disabled && '0 2px 8px rgba(26, 115, 232, 0.2)'};
   }
 
   > div {
-    padding: 0 10px;
+    padding: 0 4px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 3px;
   }
 `;
 
 const LocationInfo = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
 
   .location-primary {
     font-weight: 500;
-    color: #333;
+    color: #f5f9ff;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
+    font-size: 12px;
   }
 
   .location-secondary {
-    font-size: 0.85em;
-    color: #666;
-    margin-left: 22px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: 18px;
   }
 
   .coordinates {
-    font-size: 0.75em;
-    color: #888;
-    margin-left: 22px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-left: 18px;
     font-family: monospace;
   }
 `;
@@ -214,32 +261,34 @@ const LocationInfo = styled.div`
 const TimeInfo = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0px;
 
   .time-absolute {
-    font-size: 0.9em;
-    color: #333;
+    font-size: 11px;
+    color: #f5f9ff;
+    font-weight: 500;
   }
 
   .time-relative {
-    font-size: 0.8em;
-    color: #666;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
   }
 `;
 
 const IpContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 
   .ip-address {
     font-family: monospace;
     font-weight: 500;
+    font-size: 11px;
   }
 
   .ip-copy {
-    font-size: 0.75em;
-    color: #1a237e;
+    font-size: 9px;
+    color: #64b5f6;
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.2s ease;
@@ -254,31 +303,33 @@ const Pagination = styled.div`
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 10px;
-  padding: 20px;
+  gap: 8px;
+  padding: 16px;
   flex-shrink: 0;
-  background: white;
-  border-top: 1px solid #eee;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
+  border-top: 1px solid rgba(100, 181, 246, 0.2);
+  border-radius: 0 0 8px 8px;
 `;
 
 const PageButton = styled.button`
-  padding: 8px 14px;
-  border: 1px solid #ddd;
-  background: ${props => props.active ? '#1a237e' : 'white'};
-  color: ${props => props.active ? 'white' : '#333'};
+  padding: 6px 12px;
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  background: ${props => props.active ? 'linear-gradient(90deg, #1565c0, #1a73e8)' : 'rgba(26, 115, 232, 0.1)'};
+  color: ${props => props.active ? 'white' : '#8db4d8'};
   cursor: pointer;
   transition: all 0.25s ease;
   border-radius: 6px;
   font-weight: ${props => props.active ? '600' : '400'};
+  font-size: 12px;
 
   &:hover {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
-    transform: translateY(-2px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background: ${props => props.active ? 'linear-gradient(90deg, #0d47a1, #1565c0)' : 'rgba(26, 115, 232, 0.2)'};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(26, 115, 232, 0.3);
   }
 
   &:disabled {
-    background: ${props => props.active ? '#1a237e' : '#f5f5f5'};
+    background: rgba(100, 100, 100, 0.2);
     cursor: not-allowed;
     opacity: 0.6;
     transform: none;
@@ -287,60 +338,25 @@ const PageButton = styled.button`
 `;
 
 const StatsContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  margin-bottom: 20px;
-  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 0 0 35%;
+
+  > * {
+    flex: 1;
+  }
 `;
 
-const ChartsContainer = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-  flex-shrink: 0;
-`;
-
-const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 0.85em;
-  font-weight: 500;
-  background-color: ${props => props.status === '在线' ? '#e8f5e9' : '#ffebee'};
-  color: ${props => props.status === '在线' ? '#2e7d32' : '#c62828'};
-  border: 1px solid ${props => props.status === '在线' ? '#a5d6a7' : '#ef9a9a'};
-
-  &::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: ${props => props.status === '在线' ? '#2e7d32' : '#c62828'};
-    margin-right: 6px;
-    animation: ${props => props.status === '在线' ? 'pulse 2s infinite' : 'none'};
-  }
-
-  @keyframes pulse {
-    0% {
-      box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.7);
-    }
-    70% {
-      box-shadow: 0 0 0 6px rgba(46, 125, 50, 0);
-    }
-    100% {
-      box-shadow: 0 0 0 0 rgba(46, 125, 50, 0);
-    }
-  }
+const ChartSection = styled.div`
+  flex: 1;
+  display: flex;
 `;
 
 const CountryFlag = styled.span`
   display: inline-block;
-  margin-right: 8px;
-  font-size: 1.2em;
+  margin-right: 3px;
+  font-size: 1em;
 `;
 
 // 国家/地区对应的旗帜emoji
@@ -361,21 +377,13 @@ const countryFlags = {
   '马来西亚': '🇲🇾'
 };
 
-// 操作系统对应的图标
-const getOsIcon = (os) => {
-  if (os.includes('Windows')) return '🪟';
-  if (os.includes('Ubuntu') || os.includes('Linux')) return '🐧';
-  if (os.includes('macOS')) return '🍎';
-  return '💻';
-};
-
 const LoadingOverlay = styled.div`
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(15, 25, 35, 0.8);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -385,9 +393,9 @@ const LoadingOverlay = styled.div`
 `;
 
 const Spinner = styled.div`
-  border: 4px solid rgba(26, 35, 126, 0.1);
+  border: 4px solid rgba(100, 181, 246, 0.1);
   border-radius: 50%;
-  border-top: 4px solid #1a237e;
+  border-top: 4px solid #64b5f6;
   width: 40px;
   height: 40px;
   animation: spin 1s linear infinite;
@@ -402,9 +410,9 @@ const Spinner = styled.div`
 // 保留 Checkbox 样式组件
 const Checkbox = styled.input.attrs({ type: 'checkbox' })`
   cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
-  width: 20px;
-  height: 20px;
-  accent-color: #1a237e;
+  width: 16px;
+  height: 16px;
+  accent-color: #1a73e8;
   transition: all 0.2s ease;
 
   &:hover {
@@ -441,23 +449,39 @@ const getRelativeTime = (date) => {
   return '刚刚';
 };
 
+const formatDateTime = (value) => {
+  if (!value) return '未知';
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return '未知';
+
+  const pad = (num) => String(num).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
+};
+
 const NodeManagement = ({ networkType: propNetworkType }) => {
   const [nodes, setNodes] = useState([]);
   const [selectedNodes, setSelectedNodes] = useState([]);
-  const [operation, setOperation] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [filter, setFilter] = useState('all'); // 'all', 'online', 'offline'
-  const [isOnlineActive, setIsOnlineActive] = useState(false);
-  const [isOfflineActive, setIsOfflineActive] = useState(false);
+  const [sortBy, setSortBy] = useState(''); // 筛选方式: 'ip', 'country', 'last_active'
+  const [ipRangeStart, setIpRangeStart] = useState(''); // IP段起始
+  const [ipRangeEnd, setIpRangeEnd] = useState(''); // IP段结束
+  const [timeRangeStart, setTimeRangeStart] = useState(''); // 时间范围开始
+  const [timeRangeEnd, setTimeRangeEnd] = useState(''); // 时间范围结束
   const [isSelectAllActive, setIsSelectAllActive] = useState(false);
+  const [isSelectAllLoading, setIsSelectAllLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [networkType, setNetworkType] = useState(propNetworkType || 'asruex');
   const [error, setError] = useState(null);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [pageSize] = useState(100); // 符合API要求的最小页面大小
-  const [displayLimit] = useState(20); // 实际在UI中显示的条数
   const [nodeStats, setNodeStats] = useState({
     totalNodes: 0,
     onlineNodes: 0,
@@ -466,6 +490,19 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     selectedCount: 0
   });
 
+  // 独立的图表统计数据（完整数据，不受分页影响）
+  const [chartStats, setChartStats] = useState({
+    totalNodes: 0,
+    activeNodes: 0,
+    inactiveNodes: 0,
+    countryDistribution: {},
+    statusDistribution: {}
+  });
+
+  // 通信记录弹窗相关状态
+  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [selectedIp, setSelectedIp] = useState(null);
+
   // 当从 props 接收到新的 networkType 时更新本地状态
   useEffect(() => {
     if (propNetworkType && propNetworkType !== networkType) {
@@ -473,13 +510,55 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     }
   }, [propNetworkType]);
 
-  // 统一的数据获取 effect
+  // 获取图表统计数据（只在网络类型改变时获取，不受分页和勾选影响）
   useEffect(() => {
     if (networkType) {
-      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}, filter=${filter}`);
+      fetchChartStats();
+    }
+  }, [networkType]); // 只依赖 networkType
+
+  // 统一的数据获取 effect（节点列表数据）
+  useEffect(() => {
+    if (networkType) {
+      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}`);
       fetchNodesData();
     }
-  }, [networkType, currentPage, pageSize, filter]); // 依赖项包含所有会触发重新获取的状态
+  }, [networkType, currentPage, pageSize, ipRangeStart, ipRangeEnd, timeRangeStart, timeRangeEnd]); // 依赖项包含所有会触发重新获取的状态
+
+  // 获取完整的图表统计数据
+  const fetchChartStats = async () => {
+    try {
+      const endpoint = `http://localhost:8000/api/node-stats/${networkType}`;
+      console.log(`获取图表统计数据: ${endpoint}`);
+
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error(`获取统计数据失败: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.data) {
+        throw new Error('返回的统计数据格式不正确');
+      }
+
+      // 更新图表数据
+      const newChartStats = {
+        totalNodes: result.data.total_nodes || 0,
+        activeNodes: result.data.active_nodes || 0,
+        inactiveNodes: result.data.inactive_nodes || 0,
+        countryDistribution: result.data.country_distribution || {},
+        statusDistribution: result.data.status_distribution || {}
+      };
+      
+      console.log('图表统计数据更新完成:', result.data);
+      
+      setChartStats(newChartStats);
+
+    } catch (error) {
+      console.error('获取图表统计数据失败:', error);
+    }
+  };
 
   // 根据不同网络类型获取节点数据
   const fetchNodesData = async () => {
@@ -493,19 +572,28 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         page_size: pageSize,
       });
 
-      // 添加过滤条件
-      if (filter === 'online') {
-        params.append('status', 'active');
-      } else if (filter === 'offline') {
-        params.append('status', 'inactive');
-      }
-
       // 如果有搜索词且看起来是国家名，添加country过滤
       if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
         params.append('country', searchTerm);
       }
 
-      const endpoint = `/api/node-details?${params.toString()}`;
+      // 添加IP段筛选
+      if (ipRangeStart) {
+        params.append('ip_start', ipRangeStart);
+      }
+      if (ipRangeEnd) {
+        params.append('ip_end', ipRangeEnd);
+      }
+
+      // 添加时间范围筛选
+      if (timeRangeStart) {
+        params.append('time_start', timeRangeStart);
+      }
+      if (timeRangeEnd) {
+        params.append('time_end', timeRangeEnd);
+      }
+
+      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
       console.log(`请求接口: ${endpoint}`);
 
       const response = await fetch(endpoint);
@@ -520,17 +608,41 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       }
 
       // 转换数据格式
-      const formattedNodes = result.data.nodes.map(node => ({
-        id: node.id,
-        ip: node.ip,
-        country: node.country || '未知',
-        province: node.province || '',
-        city: node.city || '',
-        status: node.status === 'active' ? '在线' : '下线',
-        longitude: node.longitude,
-        latitude: node.latitude,
-        lastSeen: node.last_active
-      }));
+      // 去重：按 IP 保留最新记录
+      const mapByIp = new Map();
+      for (const node of result.data.nodes) {
+        const key = node.ip || '';
+        const current = mapByIp.get(key);
+        if (!current) {
+          mapByIp.set(key, node);
+        } else {
+          // 选择最近的 last_active
+          const curTime = new Date(current.last_active || 0).getTime();
+          const newTime = new Date(node.last_active || 0).getTime();
+          if (newTime >= curTime) {
+            mapByIp.set(key, node);
+          }
+        }
+      }
+
+      const formattedNodes = Array.from(mapByIp.values()).map(node => {
+        const lastSeenRaw = node.last_active;
+        const activeTimeRaw = node.active_time;
+        return {
+          id: node.id,
+          ip: node.ip,
+          country: node.country || '未知',
+          province: node.province || '',
+          city: node.city || '',
+          status: node.status === 'active' ? '在线' : '下线',
+          longitude: node.longitude,
+          latitude: node.latitude,
+          lastSeen: lastSeenRaw,
+          lastSeenFormatted: formatDateTime(lastSeenRaw),
+          activeTime: activeTimeRaw,
+          activeTimeFormatted: formatDateTime(activeTimeRaw)
+        };
+      });
 
       setNodes(formattedNodes);
       setTotalPages(result.data.pagination.total_pages);
@@ -539,9 +651,9 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       // 更新统计信息
       const statistics = result.data.statistics;
       setNodeStats({
-        totalNodes: statistics.active_nodes + statistics.inactive_nodes,
-        onlineNodes: statistics.active_nodes,
-        offlineNodes: statistics.inactive_nodes,
+        totalNodes: chartStats.totalNodes || result.data.pagination.total_count,
+        onlineNodes: chartStats.activeNodes || statistics.active_nodes,
+        offlineNodes: chartStats.inactiveNodes || statistics.inactive_nodes,
         countryDistribution: statistics.country_distribution,
         selectedCount: selectedNodes.length
       });
@@ -565,518 +677,513 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
 
   // 过滤和分页逻辑
   const filteredNodes = (nodes || []).filter(node => {
-    const matchesSearch =
-      node.country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      node.ip?.includes(searchTerm);
-    const matchesFilter =
-      filter === 'all' ? true :
-      filter === 'online' ? node.status === '在线' :
-      filter === 'offline' ? node.status === '下线' : true;
-    return matchesSearch && matchesFilter;
+    const rawTerm = searchTerm.trim();
+    const term = rawTerm.toLowerCase();
+
+    if (!rawTerm) {
+      return true;
+    }
+
+    if (sortBy === 'ip') {
+      return (node.ip || '').toLowerCase().includes(term);
+    }
+
+    if (sortBy === 'country') {
+      return [node.country, node.province, node.city]
+        .filter(Boolean)
+        .some(value => value.toLowerCase().includes(term));
+    }
+
+    if (sortBy === 'last_active') {
+      return (node.lastSeenFormatted || '').includes(rawTerm);
+    }
+
+    return (node.ip || '').toLowerCase().includes(term) ||
+      (node.country || '').toLowerCase().includes(term);
   });
 
-  // 本地分页，只显示前displayLimit条
-  const displayedNodes = filteredNodes.slice(0, displayLimit);
+  // 根据筛选方式调整排序
+  const displayedNodes = useMemo(() => {
+    const list = [...filteredNodes];
+    if (sortBy === 'last_active') {
+      list.sort((a, b) => {
+        const timeA = new Date(a.lastSeen || 0).getTime();
+        const timeB = new Date(b.lastSeen || 0).getTime();
+        return timeB - timeA;
+      });
+    }
+    return list;
+  }, [filteredNodes, sortBy]);
+
+  const searchPlaceholder = useMemo(() => {
+    switch (sortBy) {
+      case 'ip':
+        return '按IP搜索，例如：192.168';
+      case 'country':
+        return '按国家/省份/城市搜索';
+      case 'last_active':
+        return '按日期搜索，例如：2025/12/11';
+      default:
+        return '搜索IP/国家/操作系统';
+    }
+  }, [sortBy]);
 
   // 处理节点选择
   const handleNodeSelect = (nodeId) => {
-    if (selectedNodes.includes(nodeId)) {
-      setSelectedNodes(selectedNodes.filter(id => id !== nodeId));
-    } else {
-      setSelectedNodes([...selectedNodes, nodeId]);
-    }
+    setSelectedNodes(prev => {
+      if (prev.includes(nodeId)) {
+        return prev.filter(id => id !== nodeId);
+      }
+      return [...prev, nodeId];
+    });
+    setIsSelectAllActive(false);
   };
 
   // 处理全选
-  const handleSelectAll = () => {
-    const availableNodes = nodes.filter(node => node.status === '在线').map(node => node.id);
-    if (selectedNodes.length === availableNodes.length) {
+  const handleSelectAll = async () => {
+    if (isSelectAllActive) {
       setSelectedNodes([]);
       setIsSelectAllActive(false);
-    } else {
-      setSelectedNodes(availableNodes);
-      setIsSelectAllActive(true);
-    }
-  };
-
-  // 处理在线/下线过滤
-  const handleFilterChange = (newFilter) => {
-    if (newFilter === 'online') {
-      if (isOnlineActive) {
-        setFilter('all');
-        setIsOnlineActive(false);
-      } else {
-        setFilter('online');
-        setIsOnlineActive(true);
-        setIsOfflineActive(false);
-      }
-    } else if (newFilter === 'offline') {
-      if (isOfflineActive) {
-        setFilter('all');
-        setIsOfflineActive(false);
-      } else {
-        setFilter('offline');
-        setIsOfflineActive(true);
-        setIsOnlineActive(false);
-      }
-    }
-    setCurrentPage(1);
-  };
-
-  // 根据国家生成模拟操作系统数据
-  const getOSFromCountry = (country) => {
-    // 生成随机操作系统，但保持一定的分布规律
-    const rand = Math.random();
-    if (country === '中国') {
-      if (rand < 0.6) return 'Windows 10';
-      if (rand < 0.8) return 'Windows 7';
-      if (rand < 0.9) return 'Ubuntu 20.04';
-      return 'macOS';
-    } else if (country === '美国') {
-      if (rand < 0.4) return 'Windows 10';
-      if (rand < 0.6) return 'Windows 11';
-      if (rand < 0.8) return 'macOS';
-      return 'Ubuntu 22.04';
-    } else if (country === '日本' || country === '韩国') {
-      if (rand < 0.7) return 'Windows 10';
-      if (rand < 0.9) return 'macOS';
-      return 'Ubuntu 20.04';
-    } else if (country === '德国' || country === '法国' || country === '英国') {
-      if (rand < 0.5) return 'Windows 10';
-      if (rand < 0.7) return 'Windows 11';
-      if (rand < 0.9) return 'Ubuntu 22.04';
-      return 'macOS';
+      return;
     }
 
-    // 默认分布
-    if (rand < 0.5) return 'Windows 10';
-    if (rand < 0.7) return 'Windows 11';
-    if (rand < 0.9) return 'Ubuntu 20.04';
-    return 'macOS';
-  };
+    if (!networkType) return;
 
-  // 处理节点清除/抑制操作
-  const handleOperation = async () => {
-    if (!operation || selectedNodes.length === 0) return;
+    setIsSelectAllLoading(true);
+    setError(null);
 
-    setIsLoading(true);
     try {
-      const endpoint = '/api/clean-botnet';
-
-      // 获取选中节点的IP地址
-      const selectedIPs = selectedNodes.map(nodeId =>
-        nodes.find(node => node.id === nodeId)?.ip
-      ).filter(ip => ip);
-
-      // 获取操作者的IP地理位置
-      const locationInfo = await getUserLocation();
-      console.log('操作者IP地理位置:', locationInfo);
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          botnet_type: networkType,
-          target_machines: selectedIPs,
-          clean_method: operation,
-          username: localStorage.getItem('username') || 'admin',
-          location: locationInfo.location,
-          operator_ip: locationInfo.ip  // 添加操作者IP
-        })
+      const params = new URLSearchParams({
+        botnet_type: networkType,
+        ids_only: 'true',
+        status: 'active'
       });
 
+      if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
+        params.append('country', searchTerm);
+      }
+      if (ipRangeStart) {
+        params.append('ip_start', ipRangeStart);
+      }
+      if (ipRangeEnd) {
+        params.append('ip_end', ipRangeEnd);
+      }
+      if (timeRangeStart) {
+        params.append('time_start', timeRangeStart);
+      }
+      if (timeRangeEnd) {
+        params.append('time_end', timeRangeEnd);
+      }
+
+      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
+      const response = await fetch(endpoint);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Operation failed');
+        throw new Error(`批量选择失败: ${response.statusText}`);
       }
 
       const result = await response.json();
-
-      // 显示操作已开始的提示
-      alert(`操作已开始: ${result.message}\n影响节点数: ${result.affected_machines}\n\n清理过程将在后台继续，您可以继续使用系统。`);
-
-      // 重置选择状态
-      setSelectedNodes([]);
-      setOperation('');
-
-      // 延迟一段时间后刷新数据，让后台有时间处理一部分
-      setTimeout(async () => {
-        await fetchNodesData();
-      }, 5000);
-
-      // 设置定时刷新，以便看到后台处理的进度
-      const refreshInterval = setInterval(async () => {
-        await fetchNodesData();
-      }, 10000); // 每10秒刷新一次
-
-      // 60秒后停止自动刷新
-      setTimeout(() => {
-        clearInterval(refreshInterval);
-      }, 60000);
-
-    } catch (error) {
-      console.error('Error during operation:', error);
-      alert(`操作失败: ${error.message}`);
+      const ids = result.data?.node_ids || [];
+      setSelectedNodes(ids);
+      setIsSelectAllActive(true);
+      setNodeStats(prev => ({
+        ...prev,
+        selectedCount: ids.length
+      }));
+    } catch (err) {
+      console.error('批量勾选失败:', err);
+      setError(err.message || '批量勾选失败，请稍后重试');
     } finally {
-      setIsLoading(false);
+      setIsSelectAllLoading(false);
     }
   };
 
-  // 准备图表数据
-  const getLocationChartOption = () => ({
-    title: {
-      text: '节点地理分布',
-      left: 'center',
-      textStyle: {
-        fontWeight: 'normal',
-        fontSize: 16
-      }
-    },
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)'
-    },
-    legend: {
-      type: 'scroll',
-      orient: 'vertical',
-      right: 10,
-      top: 20,
-      bottom: 20,
-      data: Array.from(new Set(nodes.map(node => node.country)))
-    },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['40%', '50%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: '#fff',
-        borderWidth: 2
-      },
-      label: {
-        show: false,
-        position: 'center'
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: '18',
-          fontWeight: 'bold'
-        }
-      },
-      labelLine: {
-        show: false
-      },
-      data: Array.from(
-        nodes.reduce((acc, node) => {
-          acc.set(node.country, (acc.get(node.country) || 0) + 1);
-          return acc;
-        }, new Map())
-      ).map(([name, value]) => ({
+  // 准备图表数据 - 使用 useMemo 缓存，避免不必要的重新渲染
+  const getLocationChartOption = useMemo(() => {
+    // 使用完整的统计数据，而不是分页数据
+    const distribution = chartStats.countryDistribution || {};
+    
+    const countryData = Object.entries(distribution)
+      .map(([name, value]) => ({
         name,
         value,
         label: {
           formatter: '{b}: {c} ({d}%)'
         }
       }))
-    }]
-  });
+      .sort((a, b) => b.value - a.value); // 按数量排序
 
-  const getStatusChartOption = () => ({
-    title: {
-      text: '节点状态分布',
-      left: 'center',
-      textStyle: {
-        fontWeight: 'normal',
-        fontSize: 16
-      }
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'value'
-    },
-    yAxis: {
-      type: 'category',
-      data: ['在线', '下线'],
-      axisLabel: {
-        formatter: function(value) {
-          return value === '在线' ? '🟢 在线' : '🔴 下线';
+    // 如果没有数据，返回空状态配置
+    const buildEmptyState = () => ({
+      title: {
+        text: '节点地理分布',
+        left: 'center',
+        textStyle: {
+          fontWeight: 'normal',
+          fontSize: 16,
+          color: '#ffffff'
+        }
+      },
+      legend: {
+        show: false
+      },
+      graphic: {
+        type: 'text',
+        left: 'center',
+        top: 'middle',
+        style: {
+          text: '暂无数据',
+          fontSize: 16,
+          fill: '#999'
         }
       }
-    },
-    series: [{
-      name: '节点数量',
-      type: 'bar',
-      data: [
-        {
-          value: nodes.filter(node => node.status === '在线').length,
-          itemStyle: { color: '#2e7d32' }
-        },
-        {
-          value: nodes.filter(node => node.status === '下线').length,
-          itemStyle: { color: '#c62828' }
-        }
-      ],
-      showBackground: true,
-      backgroundStyle: {
-        color: 'rgba(180, 180, 180, 0.1)'
-      }
-    }]
-  });
+    });
 
-  useEffect(() => {
-    // 如果执行了操作，更新选择状态
-    if (operation && selectedNodes.length > 0) {
-      handleOperation();
+    if (countryData.length === 0) {
+      return buildEmptyState();
     }
-  }, [operation]);
+
+    return {
+      title: {
+        text: '节点地理分布',
+        left: 'center',
+        textStyle: {
+          fontWeight: 'normal',
+          fontSize: 14,
+          color: '#ffffff'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: (params) => {
+          return `${params.name}: ${params.value} (${params.percent}%)`;
+        }
+      },
+      legend: {
+        type: 'scroll',
+        orient: 'horizontal',
+        bottom: 0,
+        left: 'center',
+        data: countryData.map(item => item.name),
+        textStyle: {
+          color: '#ffffff',
+          fontSize: 12
+        },
+        itemWidth: 14,
+        itemHeight: 14,
+        itemGap: 10,
+        icon: 'circle'
+      },
+      series: [{
+        type: 'pie',
+        radius: ['45%', '70%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: '16',
+            fontWeight: 'bold'
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: countryData
+      }]
+    };
+  }, [chartStats.countryDistribution]);
 
   return (
     <Container>
-      <StatsContainer>
-        <StatCard
-          title="总节点数"
-          value={nodeStats.totalNodes}
-          trend="全部节点"
-          background="linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)"
-          titleIcon="📊"
-        />
-        <StatCard
-          title="在线节点"
-          value={nodeStats.onlineNodes}
-          trend={`${((nodeStats.onlineNodes / nodeStats.totalNodes) * 100).toFixed(1)}% 在线率`}
-          background="linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)"
-          titleIcon="🟢"
-        />
-        <StatCard
-          title="下线节点"
-          value={nodeStats.offlineNodes}
-          trend={`${((nodeStats.offlineNodes / nodeStats.totalNodes) * 100).toFixed(1)}% 下线率`}
-          background="linear-gradient(135deg, #c62828 0%, #b71c1c 100%)"
-          titleIcon="🔴"
-        />
-        <StatCard
-          title="已选节点"
-          value={nodeStats.selectedCount}
-          trend={`${nodeStats.onlineNodes > 0 ? ((nodeStats.selectedCount / nodeStats.onlineNodes) * 100).toFixed(1) : 0}% 选中率`}
-          background="linear-gradient(135deg, #f57c00 0%, #ef6c00 100%)"
-          titleIcon="✓"
-        />
-      </StatsContainer>
+      {/* 左侧面板 - 统计信息和图表 */}
+      <LeftPanel>
+        <StatsContainer>
+          <StatCard
+            title="总节点数"
+            value={nodeStats.totalNodes}
+            trend="全部节点"
+            background="linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)"
+            titleIcon="📊"
+          />
+          <StatCard
+            title="已选节点"
+            value={nodeStats.selectedCount}
+            trend={`${nodeStats.onlineNodes > 0 ? ((nodeStats.selectedCount / nodeStats.onlineNodes) * 100).toFixed(1) : 0}% 选中率`}
+            background="linear-gradient(135deg, #f57c00 0%, #ef6c00 100%)"
+            titleIcon="✓"
+          />
+        </StatsContainer>
 
-      <ChartsContainer>
         <ChartCard
-          option={getLocationChartOption()}
-          height="300px"
+          option={getLocationChartOption}
+          height="400px"
           accentColor="linear-gradient(90deg, #1a237e, #0d47a1)"
-          loading={isLoading ? true : undefined}
         />
-        <ChartCard
-          option={getStatusChartOption()}
-          height="300px"
-          accentColor="linear-gradient(90deg, #2e7d32, #1b5e20)"
-          loading={isLoading ? true : undefined}
-        />
-      </ChartsContainer>
+      </LeftPanel>
 
-      <TopBar>
-        <SearchInput
-          placeholder="搜索IP/国家/操作系统"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <Button
-          active={isOnlineActive}
-          onClick={() => handleFilterChange('online')}
-        >
-          <span>🟢</span> 在线节点
-        </Button>
-        <Button
-          active={isOfflineActive}
-          onClick={() => handleFilterChange('offline')}
-        >
-          <span>🔴</span> 下线节点
-        </Button>
-        <Button
-          active={isSelectAllActive}
-          onClick={handleSelectAll}
-        >
-          <span>✓</span> 一键勾选
-        </Button>
-        <Select
-          value={operation}
-          onChange={(e) => setOperation(e.target.value)}
-          disabled={isLoading || selectedNodes.length === 0}
-        >
-          <option value="">操作节点</option>
-          <option value="clear">清除</option>
-          <option value="reuse">再利用</option>
-          <option value="ddos">DDos攻击</option>
-        </Select>
-      </TopBar>
+      {/* 右侧面板 - 搜索和表格 */}
+      <RightPanel>
+        <TopBar>
+          <SearchInput
+            placeholder={searchPlaceholder}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <Button
+            active={isSelectAllActive}
+            onClick={handleSelectAll}
+            disabled={isLoading || isSelectAllLoading}
+          >
+            {isSelectAllLoading ? (
+              '处理中...'
+            ) : (
+              <>
+                <span>✓</span> {isSelectAllActive ? '取消全选' : '一键勾选'}
+              </>
+            )}
+          </Button>
+          <Select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            disabled={isLoading}
+          >
+            <option value="">筛选节点</option>
+            <option value="ip">IP</option>
+            <option value="country">国家</option>
+            <option value="last_active">最后活跃时间</option>
+          </Select>
+        </TopBar>
+        
+        <TopBar>
+          <SearchInput
+            placeholder="起始IP，例如：192.168.1.1"
+            value={ipRangeStart}
+            onChange={(e) => setIpRangeStart(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <span style={{ color: '#7a9cc6' }}>~</span>
+          <SearchInput
+            placeholder="结束IP，例如：192.168.1.254"
+            value={ipRangeEnd}
+            onChange={(e) => setIpRangeEnd(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <SearchInput
+            type="date"
+            placeholder="开始日期"
+            value={timeRangeStart}
+            onChange={(e) => setTimeRangeStart(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <span style={{ color: '#7a9cc6' }}>至</span>
+          <SearchInput
+            type="date"
+            placeholder="结束日期"
+            value={timeRangeEnd}
+            onChange={(e) => setTimeRangeEnd(e.target.value)}
+            style={{ width: '160px' }}
+          />
+          <Button
+            onClick={() => {
+              setIpRangeStart('');
+              setIpRangeEnd('');
+              setTimeRangeStart('');
+              setTimeRangeEnd('');
+            }}
+            style={{ background: 'linear-gradient(135deg, #f57c00 0%, #ef6c00 100%)' }}
+          >
+            清除筛选
+          </Button>
+        </TopBar>
 
-      <TableContainer>
-        <Table>
-          <TableHeader>
-            <div>选择</div>
-            <div>IP地址</div>
-            <div>状态</div>
-            <div>地理位置</div>
-            <div>最后活动</div>
-          </TableHeader>
-          {displayedNodes.map(node => (
-            <TableRow key={node.id} disabled={node.status === '下线'}>
-              <div>
-                <Checkbox
-                  checked={selectedNodes.includes(node.id)}
-                  onChange={() => handleNodeSelect(node.id)}
-                  disabled={node.status === '下线'}
-                />
-              </div>
-              <div>
-                <IpContainer>
-                  <span className="ip-address">{node.ip}</span>
-                  <span
-                    className="ip-copy"
-                    onClick={() => {
-                      navigator.clipboard.writeText(node.ip);
-                      alert('IP已复制到剪贴板');
-                    }}
-                  >
-                    复制IP
-                  </span>
-                </IpContainer>
-              </div>
-              <div>
-                <StatusBadge status={node.status}>
-                  {node.status}
-                </StatusBadge>
-              </div>
-              <LocationInfo>
-                <div className="location-primary">
-                  <CountryFlag>{countryFlags[node.country] || '🌐'}</CountryFlag>
-                  {node.country}
+        <TableContainer>
+          <Table>
+            <TableHeader>
+              <div>选择</div>
+              <div>IP地址</div>
+              <div>地理位置</div>
+              <div>最初记录时间</div>
+              <div>最近活跃时间</div>
+            </TableHeader>
+            {displayedNodes.map(node => (
+              <TableRow 
+                key={node.id} 
+                disabled={node.status === '下线'}
+                onClick={(e) => {
+                  // 避免点击复选框时触发
+                  if (!e.target.closest('input[type="checkbox"]') && !e.target.closest('.ip-copy')) {
+                    setSelectedIp(node.ip);
+                    setShowCommunicationModal(true);
+                  }
+                }}
+              >
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedNodes.includes(node.id)}
+                    onChange={() => handleNodeSelect(node.id)}
+                    disabled={node.status === '下线'}
+                  />
                 </div>
-                {(node.province || node.city) && (
-                  <div className="location-secondary">
-                    {[node.province, node.city].filter(Boolean).join(' - ')}
-                  </div>
-                )}
-                {(node.longitude && node.latitude) && (
-                  <div className="coordinates">
-                    {node.longitude.toFixed(4)}° E, {node.latitude.toFixed(4)}° N
-                  </div>
-                )}
-              </LocationInfo>
-              <TimeInfo>
-                <div className="time-absolute">
-                  {new Date(node.lastSeen).toLocaleString('zh-CN', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
+                <div>
+                  <IpContainer>
+                    <span className="ip-address">{node.ip}</span>
+                    <span
+                      className="ip-copy"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(node.ip);
+                        alert('IP已复制到剪贴板');
+                      }}
+                    >
+                      复制IP
+                    </span>
+                  </IpContainer>
                 </div>
-                <div className="time-relative">
-                  {getRelativeTime(new Date(node.lastSeen))}
+                <div>
+                  <LocationInfo>
+                    <div className="location-primary">
+                      <CountryFlag>{countryFlags[node.country] || '🌐'}</CountryFlag>
+                      {node.country}
+                    </div>
+                    {(node.province || node.city) && (
+                      <div className="location-secondary">
+                        {[node.province, node.city].filter(Boolean).join(' - ')}
+                      </div>
+                    )}
+                    {(node.longitude && node.latitude) && (
+                      <div className="coordinates">
+                        {node.longitude.toFixed(4)}° E, {node.latitude.toFixed(4)}° N
+                      </div>
+                    )}
+                  </LocationInfo>
                 </div>
-              </TimeInfo>
-            </TableRow>
-          ))}
-        </Table>
+                <div>
+                  <TimeInfo>
+                    <div className="time-absolute">
+                      {node.activeTimeFormatted}
+                    </div>
+                    <div className="time-relative">
+                      {getRelativeTime(new Date(node.activeTime))}
+                    </div>
+                  </TimeInfo>
+                </div>
+                <div>
+                  <TimeInfo>
+                    <div className="time-absolute">
+                      {node.lastSeenFormatted}
+                    </div>
+                    <div className="time-relative">
+                      {getRelativeTime(new Date(node.lastSeen))}
+                    </div>
+                  </TimeInfo>
+                </div>
+              </TableRow>
+            ))}
+          </Table>
 
-        {isLoading && (
-          <LoadingOverlay>
-            <Spinner />
-            <div style={{ fontWeight: 500, color: '#1a237e' }}>正在处理...</div>
-          </LoadingOverlay>
-        )}
-      </TableContainer>
+          {isLoading && (
+            <LoadingOverlay>
+              <Spinner />
+              <div style={{ fontWeight: 500, color: '#64b5f6' }}>正在处理...</div>
+            </LoadingOverlay>
+          )}
+        </TableContainer>
 
-      <Pagination>
-        <PageButton
-          onClick={() => setCurrentPage(1)}
-          disabled={currentPage === 1 || isLoading}
-        >
-          首页
-        </PageButton>
-        <PageButton
-          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-          disabled={currentPage === 1 || isLoading}
-        >
-          上一页
-        </PageButton>
-        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-          let pageToShow;
-          if (totalPages <= 5) {
-            pageToShow = i + 1;
-          } else if (currentPage <= 3) {
-            pageToShow = i + 1;
-          } else if (currentPage >= totalPages - 2) {
-            pageToShow = totalPages - 4 + i;
-          } else {
-            pageToShow = currentPage - 2 + i;
-          }
-          return (
-            <PageButton
-              key={pageToShow}
-              active={currentPage === pageToShow}
-              onClick={() => setCurrentPage(pageToShow)}
-              disabled={isLoading}
-            >
-              {pageToShow}
-            </PageButton>
-          );
-        })}
-        <PageButton
-          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-          disabled={currentPage === totalPages || isLoading}
-        >
-          下一页
-        </PageButton>
-        <PageButton
-          onClick={() => setCurrentPage(totalPages)}
-          disabled={currentPage === totalPages || isLoading}
-        >
-          末页
-        </PageButton>
-        <span style={{ marginLeft: '10px', color: '#666' }}>
-          共 {totalCount} 条记录，{totalPages} 页，每页 {displayLimit} 条显示（API加载 {pageSize} 条）
-        </span>
-      </Pagination>
+        <Pagination>
+          <PageButton
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1 || isLoading}
+          >
+            首页
+          </PageButton>
+          <PageButton
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1 || isLoading}
+          >
+            上一页
+          </PageButton>
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageToShow;
+            if (totalPages <= 5) {
+              pageToShow = i + 1;
+            } else if (currentPage <= 3) {
+              pageToShow = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageToShow = totalPages - 4 + i;
+            } else {
+              pageToShow = currentPage - 2 + i;
+            }
+            return (
+              <PageButton
+                key={pageToShow}
+                active={currentPage === pageToShow}
+                onClick={() => setCurrentPage(pageToShow)}
+                disabled={isLoading}
+              >
+                {pageToShow}
+              </PageButton>
+            );
+          })}
+          <PageButton
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages || isLoading}
+          >
+            下一页
+          </PageButton>
+          <PageButton
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages || isLoading}
+          >
+            末页
+          </PageButton>
+          <span style={{ marginLeft: '10px', color: '#7a9cc6', fontSize: '12px' }}>
+            共 {totalCount} 条记录，{totalPages} 页，当前页最多显示 {pageSize} 条
+          </span>
+        </Pagination>
+      </RightPanel>
 
       {error && (
         <div style={{
-          color: 'red',
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          color: '#f44336',
           textAlign: 'center',
-          padding: '20px',
-          backgroundColor: '#ffebee',
+          padding: '12px 24px',
+          backgroundColor: 'rgba(244, 67, 54, 0.1)',
           borderRadius: '8px',
-          margin: '10px 0',
-          border: '1px solid #ef9a9a',
+          border: '1px solid rgba(244, 67, 54, 0.3)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: '10px'
+          gap: '10px',
+          zIndex: 100
         }}>
-          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <span style={{ fontSize: '18px' }}>⚠️</span>
           {error}
         </div>
+      )}
+
+      {/* 通信记录弹窗 */}
+      {showCommunicationModal && selectedIp && (
+        <CommunicationModal
+          ip={selectedIp}
+          botnetType={networkType}
+          onClose={() => {
+            setShowCommunicationModal(false);
+            setSelectedIp(null);
+          }}
+        />
       )}
     </Container>
   );

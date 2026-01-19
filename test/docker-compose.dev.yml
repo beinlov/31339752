@@ -1,0 +1,108 @@
+version: '3.8'
+
+# =========================================
+# Docker Compose 开发模式配置
+# 适合频繁改动的开发阶段
+# 代码挂载，修改后重启即可
+# =========================================
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: botnet-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-botnet_db}
+      MYSQL_USER: ${MYSQL_USER:-botnet}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-botnet123}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - botnet-network
+
+  backend:
+    image: python:3.9-slim
+    container_name: botnet-backend
+    restart: unless-stopped
+    working_dir: /app
+    # 🔥 开发模式：直接挂载代码目录，修改立即生效
+    volumes:
+      - ../backend:/app:rw
+      - backend-logs:/app/logs
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-botnet}
+      - DB_PASSWORD=${MYSQL_PASSWORD:-botnet123}
+      - DB_NAME=${MYSQL_DATABASE:-botnet_db}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # 安装依赖并启动所有服务
+    command: >
+      sh -c "
+        echo '安装依赖...' &&
+        pip install --no-cache-dir -r requirements.txt &&
+        apt-get update && apt-get install -y curl &&
+        echo '等待MySQL就绪...' &&
+        sleep 10 &&
+        echo '启动后端服务...' &&
+        nohup python main.py > /app/logs/backend.log 2>&1 &
+        echo '启动日志处理器...' &&
+        nohup python log_processor/main.py > /app/logs/log_processor.log 2>&1 &
+        echo '启动聚合器（5分钟间隔）...' &&
+        python stats_aggregator/aggregator.py daemon 5
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - botnet-network
+
+  frontend:
+    image: nginx:alpine
+    container_name: botnet-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    # 挂载构建后的文件和nginx配置
+    volumes:
+      - ../fronted/dist:/usr/share/nginx/html:ro
+      - ../fronted/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - botnet-network
+
+volumes:
+  mysql-data:
+    driver: local
+  backend-logs:
+    driver: local
+
+networks:
+  botnet-network:
+    driver: bridge

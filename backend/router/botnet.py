@@ -1,7 +1,7 @@
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import List, Dict, Optional
@@ -13,6 +13,7 @@ from ip_location.ip_query import ip_query  # 导入IP查询模块
 import random
 
 from config import DB_CONFIG
+from auth_middleware import require_operator_or_admin, require_admin
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -37,7 +38,8 @@ class CleanBotnetRequest(BaseModel):
     location: str
     operator_ip: str = None
 
-    @validator('target_machines')
+    @field_validator('target_machines')
+    @classmethod
     def validate_target_machines(cls, v):
         pattern = r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$'
         for ip in v:
@@ -45,14 +47,16 @@ class CleanBotnetRequest(BaseModel):
                 raise ValueError(f'Invalid IP address format: {ip}')
         return v
 
-    @validator('botnet_type')
+    @field_validator('botnet_type')
+    @classmethod
     def validate_botnet_type(cls, v):
         valid_botnets = ["asruex", "andromeda", "mozi", "leethozer", "ramnit", "autoupdate"]
         if v not in valid_botnets:
             raise ValueError(f'Invalid botnet type: {v}')
         return v
 
-    @validator('clean_method')
+    @field_validator('clean_method')
+    @classmethod
     def validate_clean_method(cls, v):
         valid_methods = ["monitor", "clear", "suppress", "reuse", "ddos"]
         if v not in valid_methods:
@@ -61,7 +65,7 @@ class CleanBotnetRequest(BaseModel):
 
 # Helper functions
 async def ensure_botnet_table_exists(bot_name: str):
-    """确保僵尸网络数据表存在，如果不存在则创建"""
+    """确保僵尸网络数据表存在，如果不存在则创建（双表设计）"""
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -69,6 +73,7 @@ async def ensure_botnet_table_exists(bot_name: str):
         china_table = f"china_botnet_{bot_name}"
         global_table = f"global_botnet_{bot_name}"
         node_table = f"botnet_nodes_{bot_name}"
+        communication_table = f"botnet_communications_{bot_name}"  # 新增通信记录表
 
         # 检查表是否存在
         cursor.execute("""
@@ -78,75 +83,188 @@ async def ensure_botnet_table_exists(bot_name: str):
         """, (DB_CONFIG['database'], china_table))
         
         if cursor.fetchone()[0] == 0:
-            logger.info(f"Table {china_table} does not exist, creating...")
+            logger.info(f"Tables for {bot_name} do not exist, creating...")
             
             # 创建中国区域的僵尸网络表
             cursor.execute(f"""
-                CREATE TABLE {china_table} 
-                AS SELECT * FROM china_botnet_template
-            """)
-            
-            # 添加索引和主键（因为AS SELECT不会复制这些）
-            cursor.execute(f"""
-                ALTER TABLE {china_table}
-                ADD PRIMARY KEY (id),
-                ADD INDEX idx_province (province),
-                ADD INDEX idx_municipality (municipality),
-                MODIFY id INT AUTO_INCREMENT,
-                MODIFY created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                MODIFY updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                CREATE TABLE {china_table} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    province VARCHAR(50) NOT NULL,
+                    municipality VARCHAR(50) NOT NULL,
+                    infected_num INT DEFAULT 0 COMMENT '感染数量（节点数）',
+                    communication_count INT DEFAULT 0 COMMENT '通信总次数',
+                    created_at TIMESTAMP NULL DEFAULT NULL COMMENT '该地区第一个节点的创建时间',
+                    updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '该地区最新节点的更新时间',
+                    UNIQUE KEY idx_location (province, municipality),
+                    INDEX idx_province (province),
+                    INDEX idx_infected_num (infected_num),
+                    INDEX idx_communication_count (communication_count),
+                    INDEX idx_created_at (created_at),
+                    INDEX idx_updated_at (updated_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='中国地区僵尸网络统计表(按省市)'
             """)
             
             # 创建全球僵尸网络表
             cursor.execute(f"""
-                CREATE TABLE {global_table} 
-                AS SELECT * FROM global_botnet_template
+                CREATE TABLE {global_table} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    country VARCHAR(100) NOT NULL,
+                    infected_num INT DEFAULT 0 COMMENT '感染数量（节点数）',
+                    communication_count INT DEFAULT 0 COMMENT '通信总次数',
+                    created_at TIMESTAMP NULL DEFAULT NULL COMMENT '该国家第一个节点的创建时间',
+                    updated_at TIMESTAMP NULL DEFAULT NULL COMMENT '该国家最新节点的更新时间',
+                    UNIQUE KEY idx_country (country),
+                    INDEX idx_infected_num (infected_num),
+                    INDEX idx_communication_count (communication_count),
+                    INDEX idx_created_at (created_at),
+                    INDEX idx_updated_at (updated_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='全球僵尸网络统计表(按国家)'
             """)
             
-            # 添加索引和主键
-            cursor.execute(f"""
-                ALTER TABLE {global_table}
-                ADD PRIMARY KEY (id),
-                ADD INDEX idx_country (country),
-                ADD INDEX idx_botnet_type (botnet_type),
-                MODIFY id INT AUTO_INCREMENT,
-                MODIFY created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                MODIFY updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            """)
-            
-
-            # Create botnet_nodes table with proper schema
+            # 创建节点表（双表设计 - 汇总信息）
             cursor.execute(f"""
                 CREATE TABLE {node_table} (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    ip VARCHAR(15) NOT NULL,
-                    longitude FLOAT,
-                    latitude FLOAT,
-                    country VARCHAR(50),
-                    province VARCHAR(50),
-                    city VARCHAR(50),
-                    continent VARCHAR(50),
-                    isp VARCHAR(255),
-                    asn VARCHAR(50),
-                    status ENUM('active', 'inactive') DEFAULT 'active',
-                    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    is_china BOOLEAN DEFAULT FALSE,
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
+                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
+                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
+                    communication_count INT DEFAULT 0 COMMENT '通信次数',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
                     INDEX idx_ip (ip),
                     INDEX idx_location (country, province, city),
                     INDEX idx_status (status),
-                    INDEX idx_last_active (last_active),
-                    INDEX idx_is_china (is_china)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    INDEX idx_first_seen (first_seen),
+                    INDEX idx_last_seen (last_seen),
+                    INDEX idx_communication_count (communication_count),
+                    INDEX idx_is_china (is_china),
+                    UNIQUE KEY idx_unique_ip (ip)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点基本信息表（汇总）'
+            """)
+            
+            # 创建通信记录表（双表设计 - 详细历史）
+            cursor.execute(f"""
+                CREATE TABLE {communication_table} (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    node_id INT NOT NULL COMMENT '关联的节点ID',
+                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
+                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
+                    longitude FLOAT COMMENT '经度',
+                    latitude FLOAT COMMENT '纬度',
+                    country VARCHAR(50) COMMENT '国家',
+                    province VARCHAR(50) COMMENT '省份',
+                    city VARCHAR(50) COMMENT '城市',
+                    continent VARCHAR(50) COMMENT '洲',
+                    isp VARCHAR(255) COMMENT 'ISP运营商',
+                    asn VARCHAR(50) COMMENT 'AS号',
+                    event_type VARCHAR(50) COMMENT '事件类型',
+                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
+                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
+                    INDEX idx_node_id (node_id),
+                    INDEX idx_ip (ip),
+                    INDEX idx_communication_time (communication_time),
+                    INDEX idx_received_at (received_at),
+                    INDEX idx_location (country, province, city),
+                    INDEX idx_is_china (is_china),
+                    INDEX idx_composite (ip, communication_time),
+                    FOREIGN KEY (node_id) REFERENCES {node_table}(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
+                COMMENT='僵尸网络节点通信记录表'
             """)
             
             conn.commit()
-            logger.info(f"Tables {china_table} and {global_table} created and populated with template data successfully")
+            logger.info(f"All tables for {bot_name} created successfully: {china_table}, {global_table}, {node_table}, {communication_table}")
             
     except Exception as e:
         logger.error(f"Error ensuring table exists: {e}")
         raise
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+@router.get("/botnet-rankings")
+async def get_botnet_rankings(mode: str = "global"):
+    """
+    获取僵尸网络排序
+    mode:
+      - global: 按全球节点数量排序
+      - china:  按中国节点感染数量排序（country='中国'）
+    """
+    if mode not in ("global", "china"):
+        raise HTTPException(status_code=400, detail="mode must be 'global' or 'china'")
+
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+
+        cursor.execute("SELECT name, display_name FROM botnet_types")
+        botnets = cursor.fetchall()
+
+        results = []
+        for bot in botnets:
+            name = bot["name"]
+            display_name = bot.get("display_name") or name
+
+            # 计算全球节点数量
+            global_count = 0
+            node_table = f"botnet_nodes_{name}"
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], node_table))
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute(f"SELECT COUNT(*) AS total FROM {node_table}")
+                global_count = cursor.fetchone()["total"] or 0
+
+            # 计算中国影响程度（global表的中国 infected_num）
+            china_count = 0
+            global_table = f"global_botnet_{name}"
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], global_table))
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute(f"""
+                    SELECT infected_num FROM {global_table}
+                    WHERE country = %s
+                    LIMIT 1
+                """, ("中国",))
+                row = cursor.fetchone()
+                if row:
+                    china_count = row.get("infected_num") or 0
+
+            results.append({
+                "name": name,
+                "display_name": display_name,
+                "global_count": global_count,
+                "china_count": china_count
+            })
+
+        if mode == "china":
+            results.sort(key=lambda x: x["china_count"], reverse=True)
+        else:
+            results.sort(key=lambda x: x["global_count"], reverse=True)
+
+        return {"status": "success", "data": results}
+    except Exception as e:
+        logger.error(f"Error fetching botnet rankings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if 'cursor' in locals():
             cursor.close()
@@ -232,7 +350,7 @@ async def get_botnet_types():
             conn.close()
 
 @router.post("/botnet-types")
-async def register_botnet_type(botnet: BotnetType):
+async def register_botnet_type(botnet: BotnetType, current_user: dict = Depends(require_admin)):
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -251,13 +369,18 @@ async def register_botnet_type(botnet: BotnetType):
                 detail=f"Botnet type {botnet.name} already exists"
             )
         
-        # 确保表存在（会从模板复制结构和数据）
+        # 确保表存在
         await ensure_botnet_table_exists(botnet.name)
+        
+        # 准备clean_methods JSON字符串
+        import json
+        clean_methods_json = json.dumps(botnet.clean_methods) if botnet.clean_methods else json.dumps(["clear", "suppress"])
+        
         # 添加新的僵尸网络类型
         cursor.execute("""
-            INSERT INTO botnet_types (name, display_name, description, table_name)
-            VALUES (%s, %s, %s, %s)
-        """, (botnet.name, botnet.display_name, botnet.description, botnet.table_name))
+            INSERT INTO botnet_types (name, display_name, description, table_name, clean_methods)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (botnet.name, botnet.display_name, botnet.description, botnet.table_name, clean_methods_json))
         
 
         conn.commit()
@@ -551,7 +674,7 @@ async def poll_logs_and_store(username: str, location: str, botnet_type: str):
 
 # 替换原有的清理函数
 @router.post("/clean-botnet")
-async def clean_botnet(request: CleanBotnetRequest):
+async def clean_botnet(request: CleanBotnetRequest, current_user: dict = Depends(require_operator_or_admin)):
     try:
         # 获取操作者的真实IP和位置信息
         location = request.location

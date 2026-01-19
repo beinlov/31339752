@@ -1,3 +1,4 @@
-backend/ip_location/IP_city_single_WGS84.awdb
-botnet.sql
-botnet1.sql
+# 忽略大文件
+*.awdb
+*.log
+__pycache__/

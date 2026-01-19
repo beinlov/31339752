@@ -9,6 +9,8 @@ import ExtensionContent from './ExtensionContent';
 import AsruexLogViewer from './AsruexLogViewer';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
+import ServerManagement from './ServerManagement';
+import SuppressionStrategy from './SuppressionStrategy';
 import axios from 'axios';
 
 // 样式定义
@@ -18,43 +20,55 @@ const AdminContainer = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: linear-gradient(135deg, #0a1628 0%, #1a2332 50%, #0d1b2a 100%);
 `;
 
 const Header = styled.div`
   width: 100%;
   height: 64px;
-  background: #1a237e;
+  background: linear-gradient(90deg, #0a1f3d 0%, #0d2847 50%, #0f3057 100%);
   color: white;
   display: flex;
   align-items: center;
   padding: 0 2%;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 15px rgba(15, 48, 87, 0.3);
+  border-bottom: 2px solid rgba(30, 70, 120, 0.4);
 `;
 
 const HeaderTitle = styled.div`
   font-size: 2em;
   font-weight: bold;
   flex: 1;
+  background: linear-gradient(90deg, #ffffff 0%, #64b5f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(100, 181, 246, 0.5);
+  letter-spacing: 2px;
 `;
 
 const NetworkSelect = styled.select`
   padding: 8px 12px;
   margin-right: 20px;
-  border-radius: 4px;
-  border: 1px solid #ffffff;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 181, 246, 0.5);
   width: 200px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(26, 115, 232, 0.2);
   color: white;
   font-size: 14px;
   cursor: pointer;
   outline: none;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
+  transition: all 0.3s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(26, 115, 232, 0.3);
+    border-color: rgba(100, 181, 246, 0.8);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
   }
 
   option {
-    background: #1a237e;
+    background: #0d47a1;
     color: white;
     padding: 10px;
   }
@@ -63,22 +77,36 @@ const NetworkSelect = styled.select`
 const HeaderButton = styled.button`
   padding: 8px 16px;
   margin-left: 10px;
-  background: transparent;
-  border: 1px solid white;
+  background: rgba(26, 115, 232, 0.2);
+  border: 1px solid rgba(100, 181, 246, 0.5);
   color: white;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
+  transition: all 0.3s ease;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(26, 115, 232, 0.4);
+    border-color: rgba(100, 181, 246, 0.8);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
   }
 `;
 
 const LogoutButton = styled(HeaderButton)`
-  background: rgba(244, 67, 54, 0.1);
-  border-color: #f44336;
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.6);
 
   &:hover {
-    background: rgba(244, 67, 54, 0.2);
+    background: rgba(244, 67, 54, 0.3);
+    border-color: rgba(244, 67, 54, 0.9);
+    box-shadow: 0 0 15px rgba(244, 67, 54, 0.4);
   }
 `;
 
@@ -91,10 +119,10 @@ const MainContent = styled.div`
 
 const Sidebar = styled.div`
   width: 240px;
-  background: #ffffff;
+  background: linear-gradient(180deg, #0a1929 0%, #0d1f2d 100%);
   padding: 20px 0;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.02);
+  border-right: 1px solid rgba(30, 70, 120, 0.3);
+  box-shadow: 2px 0 15px rgba(0, 0, 0, 0.4), inset -1px 0 0 rgba(30, 70, 120, 0.2);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -107,8 +135,8 @@ const SidebarItem = styled.div`
   padding: 14px 24px;
   margin: 0 12px;
   cursor: pointer;
-  background: ${props => props.active ? 'linear-gradient(90deg, #1a237e, rgba(26, 35, 126, 0.9))' : 'transparent'};
-  color: ${props => props.active ? '#ffffff' : '#666'};
+  background: ${props => props.active ? 'linear-gradient(90deg, #0f3057, rgba(15, 48, 87, 0.9))' : 'transparent'};
+  color: ${props => props.active ? '#ffffff' : '#7a9cc6'};
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -118,11 +146,14 @@ const SidebarItem = styled.div`
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  border: 1px solid ${props => props.active ? 'rgba(30, 70, 120, 0.4)' : 'transparent'};
+  box-shadow: ${props => props.active ? '0 0 15px rgba(15, 48, 87, 0.4)' : 'none'};
 
   &:hover {
-    background: ${props => props.active ? 'linear-gradient(90deg, #1a237e, rgba(26, 35, 126, 0.9))' : 'rgba(26, 35, 126, 0.05)'};
-    color: ${props => props.active ? '#ffffff' : '#1a237e'};
+    background: ${props => props.active ? 'linear-gradient(90deg, #0f3057, rgba(15, 48, 87, 0.9))' : 'rgba(15, 48, 87, 0.2)'};
+    color: ${props => props.active ? '#ffffff' : '#5a8fc4'};
     transform: translateX(4px);
+    border-color: rgba(30, 70, 120, 0.4);
   }
 
   &::before {
@@ -133,9 +164,10 @@ const SidebarItem = styled.div`
     transform: translateY(-50%);
     width: 4px;
     height: 0;
-    background: #1a237e;
+    background: linear-gradient(180deg, #1e4678, #2d5a8f);
     border-radius: 0 2px 2px 0;
     transition: height 0.2s ease;
+    box-shadow: 0 0 10px rgba(30, 70, 120, 0.5);
   }
 
   &:hover::before {
@@ -147,25 +179,63 @@ const SidebarItem = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    color: ${props => props.active ? '#ffffff' : '#1a237e'};
+    color: ${props => props.active ? '#ffffff' : '#5a8fc4'};
     transition: all 0.3s ease;
+    filter: ${props => props.active ? 'drop-shadow(0 0 5px rgba(90, 143, 196, 0.5))' : 'none'};
   }
 
   &:hover .icon {
     transform: scale(1.1);
+    filter: drop-shadow(0 0 8px rgba(90, 143, 196, 0.6));
   }
 `;
 
 const SidebarDivider = styled.div`
   height: 1px;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.03));
+  background: linear-gradient(90deg, transparent, rgba(30, 70, 120, 0.4), transparent);
   margin: 8px 24px;
+  box-shadow: 0 0 5px rgba(30, 70, 120, 0.3);
+`;
+
+const SidebarGroupHeader = styled.button`
+  padding: 14px 24px 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #9fd3ff;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.95;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: color 0.2s ease;
+  text-shadow: 0 2px 12px rgba(100, 181, 246, 0.35);
+
+  span:first-child {
+    background: linear-gradient(90deg, #69b7ff, #8f8cff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  &:hover {
+    color: #8fb7e4;
+  }
+
+  .chevron {
+    transform: rotate(${props => (props.open ? '0deg' : '-90deg')});
+    transition: transform 0.2s ease;
+  }
 `;
 
 const Content = styled.div`
   flex: 1;
   padding: 20px;
-  background: white;
+  background: linear-gradient(135deg, #0f1923 0%, #1a2838 100%);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -185,11 +255,12 @@ const TutorialOverlay = styled.div`
 
 const TutorialHighlight = styled.div`
   position: absolute;
-  border: 2px solid #1a237e;
+  border: 2px solid #1a73e8;
   border-radius: 4px;
   z-index: 1001;
   transition: all 0.3s ease;
   pointer-events: none;
+  box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
 `;
 
 const TutorialTooltip = styled.div`
@@ -241,27 +312,36 @@ const TutorialTooltip = styled.div`
 `;
 
 const TutorialButton = styled.button`
-  background: #1a237e;
+  background: linear-gradient(90deg, #1565c0, #1a73e8);
   color: white;
   border: none;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-top: 10px;
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
+  transition: all 0.3s ease;
+  font-weight: 500;
 
   &:hover {
-    background: #0d1642;
+    background: linear-gradient(90deg, #0d47a1, #1565c0);
+    box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
+    transform: translateY(-1px);
   }
 `;
 
 const AdminPage = ({ history }) => {
   const [activeMenu, setActiveMenu] = useState('clear');
-  const [currentContent, setCurrentContent] = useState(<NodeManagement />);
   const [selectedNetwork, setSelectedNetwork] = useState('ramnit');
+  const [currentContent, setCurrentContent] = useState(<NodeManagement networkType="ramnit" />);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [networkTypes, setNetworkTypes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openGroups, setOpenGroups] = useState({
+    '僵尸网络管理': true,
+    '系统管理': true
+  });
 
   useEffect(() => {
     fetchNetworkTypes();
@@ -269,7 +349,7 @@ const AdminPage = ({ history }) => {
 
   const fetchNetworkTypes = async () => {
     try {
-      const response = await axios.get('/api/botnet-types');
+      const response = await axios.get('http://localhost:8000/api/botnet-types');
       if (response.data.status === 'success') {
         setNetworkTypes(response.data.data);
       }
@@ -281,92 +361,82 @@ const AdminPage = ({ history }) => {
     handleNetChange("ramnit")
   };
 
-  // 根据不同网络定义菜单项
-  const getMenuItems = (networkId) => {
-    const baseMenuItems = [
-      {
-        id: 'node_distribution',
-        name: '节点分布',
-        component: NodeDistribution,
-        icon: '📍'  // 使用地图标记图标
-      },
+  const getMenuGroups = (networkId) => {
+    const botnetItems = [
       {
         id: 'register_botnet',
-        name: '添加新僵尸网络',
+        name: '僵尸网络添加',
         component: BotnetRegistration,
-        icon: '✚'  // 十字加号，表示添加/新建
+        icon: '✚'
+      },
+      {
+        id: 'clear',
+        name: '受控节点监控',
+        component: NodeManagement,
+        icon: '&#xe88f;'
+      },
+      {
+        id: 'node_distribution',
+        name: '受控节点分布情况',
+        component: NodeDistribution,
+        icon: '📍'
+      },
+      {
+        id: 'suppression',
+        name: '抑制阻断策略',
+        component: SuppressionStrategy,
+        icon: '🛡️'
+      },
+      {
+        id: 'report',
+        name: '节点失控日志',
+        component: ReportContent,
+        icon: '&#xe86e;'
+      },
+      {
+        id: 'server',
+        name: 'C2状态监控',
+        component: ServerManagement,
+        icon: '💻'
+      }
+    ];
+
+    if (networkId === 'asruex') {
+      botnetItems.push({
+        id: 'monitor',
+        name: '交互监控',
+        component: AsruexLogViewer,
+        icon: '&#xe88e;'
+      });
+    }
+
+    const systemItems = [
+      {
+        id: 'user',
+        name: '用户管理',
+        component: UserContent,
+        icon: '&#xe7fb;'
       },
       {
         id: 'log',
         name: '操作日志',
         component: LogContent,
-        icon: '&#xe777;' // supervise icon
-      },
-      {
-        id: 'report',
-        name: '异常报告',
-        component: ReportContent,
-        icon: '&#xe86e;' // early-warning icon
-      },
-      {
-        id: 'user',
-        name: '用户管理',
-        component: UserContent,
-        icon: '&#xe7fb;' // lock icon
-      },
-      {
-        id: 'extension',
-        name: '扩展与应用',
-        component: ExtensionContent,
-        icon: '&#xe89e;' // application icon
-      },
+        icon: '&#xe777;'
+      }
     ];
 
-    // 根据网络类型添加特定的菜单项
-    if (networkId === 'leethozer') {
-      return [
-        {
-          id: 'clear',
-          name: '抑制阻断',
-          component: NodeManagement,
-          icon: '&#xe88e;' // monitoring icon
-        },
-        ...baseMenuItems
-      ];
-    }
-    else if (networkId === 'asruex') {
-      return [
-        {
-          id: 'clear',
-          name: '清除',
-          component: NodeManagement,
-          icon: '&#xe88f;' // clear icon
-        },
-        {
-          id: 'monitor',
-          name: '交互监控',
-          component: AsruexLogViewer,
-          icon: '&#xe88e;' // monitoring icon
-        },
-        ...baseMenuItems
-      ];
-    }
-    else {
-      return [
-        {
-          id: 'clear',
-          name: '清除',
-          component: NodeManagement,
-          icon: '&#xe88f;' // diagnose icon
-        },
-        ...baseMenuItems
-      ];
-    }
+    return [
+      { title: '僵尸网络管理', items: botnetItems },
+      { title: '系统管理', items: systemItems }
+    ];
   };
+
+  const getAllMenuItems = (networkId) =>
+    getMenuGroups(networkId).flatMap(group => group.items);
 
   const handleMenuClick = (menuId) => {
     setActiveMenu(menuId);
-    const menuItems = getMenuItems(selectedNetwork);
+    const menuItems = getAllMenuItems(selectedNetwork);
     const selectedItem = menuItems.find(item => item.id === menuId);
     if (selectedItem) {
       if (menuId === 'clear') {
@@ -397,7 +467,7 @@ const AdminPage = ({ history }) => {
     localStorage.setItem('selectedNetwork', newNetwork);
 
     // 无论当前在哪个菜单，都重新渲染当前内容组件
-    const menuItems = getMenuItems(newNetwork);
+    const menuItems = getAllMenuItems(newNetwork);
     const selectedItem = menuItems.find(item => item.id === activeMenu);
     if (selectedItem) {
       setCurrentContent(
@@ -508,16 +578,37 @@ const AdminPage = ({ history }) => {
       </Header>
       <MainContent>
         <Sidebar className="sidebar">
-          {getMenuItems(selectedNetwork).map((item, index) => (
-            <React.Fragment key={item.id}>
-              <SidebarItem
-                active={activeMenu === item.id}
-                onClick={() => handleMenuClick(item.id)}
+          {getMenuGroups(selectedNetwork).map((group, groupIndex) => (
+            <React.Fragment key={group.title}>
+              <SidebarGroupHeader
+                type="button"
+                open={openGroups[group.title]}
+                onClick={() =>
+                  setOpenGroups(prev => ({
+                    ...prev,
+                    [group.title]: !prev[group.title]
+                  }))
+                }
               >
-                <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
-                <span>{item.name}</span>
-              </SidebarItem>
-              {index === 0 && <SidebarDivider />}
+                <span>{group.title}</span>
+                <span className="chevron">⌄</span>
+              </SidebarGroupHeader>
+              {openGroups[group.title] &&
+                group.items.map(item => (
+                  <SidebarItem
+                    key={item.id}
+                    active={activeMenu === item.id}
+                    onClick={() => handleMenuClick(item.id)}
+                  >
+                    {item.icon.startsWith('&') ? (
+                      <span className="icon iconfont" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                    ) : (
+                      <span className="icon">{item.icon}</span>
+                    )}
+                    <span>{item.name}</span>
+                  </SidebarItem>
+                ))}
+              {groupIndex !== getMenuGroups(selectedNetwork).length - 1 && <SidebarDivider />}
             </React.Fragment>
           ))}
         </Sidebar>
@@ -581,7 +672,7 @@ const AdminPage = ({ history }) => {
             }}
             position={tutorialSteps[tutorialStep].position}
           >
-            <h3 style={{ margin: '0 0 10px 0', color: '#1a237e' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#1a73e8' }}>
               {tutorialSteps[tutorialStep].title}
             </h3>
             <p style={{ margin: '0 0 15px 0', lineHeight: '1.5' }}>
