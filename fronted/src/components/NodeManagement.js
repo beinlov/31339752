@@ -469,7 +469,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   const [selectedNodes, setSelectedNodes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState(''); // 筛选方式: 'ip', 'country', 'last_active'
+  const [sortBy, setSortBy] = useState('country'); // 固定为国家搜索
   const [ipRangeStart, setIpRangeStart] = useState(''); // IP段起始
   const [ipRangeEnd, setIpRangeEnd] = useState(''); // IP段结束
   const [timeRangeStart, setTimeRangeStart] = useState(''); // 时间范围开始
@@ -520,10 +520,16 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 统一的数据获取 effect（节点列表数据）
   useEffect(() => {
     if (networkType) {
-      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}`);
-      fetchNodesData();
+      console.log(`获取节点数据: networkType=${networkType}, page=${currentPage}, pageSize=${pageSize}, searchTerm=${searchTerm}`);
+      
+      // 使用防抖延迟搜索请求
+      const debounceTimer = setTimeout(() => {
+        fetchNodesData();
+      }, 500); // 500ms 防抖延迟
+      
+      return () => clearTimeout(debounceTimer);
     }
-  }, [networkType, currentPage, pageSize, ipRangeStart, ipRangeEnd, timeRangeStart, timeRangeEnd]); // 依赖项包含所有会触发重新获取的状态
+  }, [networkType, currentPage, pageSize, searchTerm, ipRangeStart, ipRangeEnd, timeRangeStart, timeRangeEnd]); // 添加 searchTerm 到依赖项
 
   // 获取完整的图表统计数据
   const fetchChartStats = async () => {
@@ -572,9 +578,9 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         page_size: pageSize,
       });
 
-      // 如果有搜索词且看起来是国家名，添加country过滤
-      if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
-        params.append('country', searchTerm);
+      // 添加搜索关键词（后端会在country/province/city中进行LIKE搜索）
+      if (searchTerm && searchTerm.trim()) {
+        params.append('keyword', searchTerm.trim());
       }
 
       // 添加IP段筛选
@@ -675,58 +681,12 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
     }));
   }, [selectedNodes]);
 
-  // 过滤和分页逻辑
-  const filteredNodes = (nodes || []).filter(node => {
-    const rawTerm = searchTerm.trim();
-    const term = rawTerm.toLowerCase();
-
-    if (!rawTerm) {
-      return true;
-    }
-
-    if (sortBy === 'ip') {
-      return (node.ip || '').toLowerCase().includes(term);
-    }
-
-    if (sortBy === 'country') {
-      return [node.country, node.province, node.city]
-        .filter(Boolean)
-        .some(value => value.toLowerCase().includes(term));
-    }
-
-    if (sortBy === 'last_active') {
-      return (node.lastSeenFormatted || '').includes(rawTerm);
-    }
-
-    return (node.ip || '').toLowerCase().includes(term) ||
-      (node.country || '').toLowerCase().includes(term);
-  });
-
-  // 根据筛选方式调整排序
+  // 后端已处理搜索过滤，直接使用返回的节点数据
   const displayedNodes = useMemo(() => {
-    const list = [...filteredNodes];
-    if (sortBy === 'last_active') {
-      list.sort((a, b) => {
-        const timeA = new Date(a.lastSeen || 0).getTime();
-        const timeB = new Date(b.lastSeen || 0).getTime();
-        return timeB - timeA;
-      });
-    }
-    return list;
-  }, [filteredNodes, sortBy]);
+    return nodes || [];
+  }, [nodes]);
 
-  const searchPlaceholder = useMemo(() => {
-    switch (sortBy) {
-      case 'ip':
-        return '按IP搜索，例如：192.168';
-      case 'country':
-        return '按国家/省份/城市搜索';
-      case 'last_active':
-        return '按日期搜索，例如：2025/12/11';
-      default:
-        return '搜索IP/国家/操作系统';
-    }
-  }, [sortBy]);
+  const searchPlaceholder = '按国家/省份搜索';
 
   // 处理节点选择
   const handleNodeSelect = (nodeId) => {
@@ -952,16 +912,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
               </>
             )}
           </Button>
-          <Select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">筛选节点</option>
-            <option value="ip">IP</option>
-            <option value="country">国家</option>
-            <option value="last_active">最后活跃时间</option>
-          </Select>
         </TopBar>
         
         <TopBar>
@@ -995,10 +945,12 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           />
           <Button
             onClick={() => {
+              setSearchTerm('');
               setIpRangeStart('');
               setIpRangeEnd('');
               setTimeRangeStart('');
               setTimeRangeEnd('');
+              setCurrentPage(1);
             }}
             style={{ background: 'linear-gradient(135deg, #f57c00 0%, #ef6c00 100%)' }}
           >

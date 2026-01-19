@@ -98,20 +98,33 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
   const nationalYRange = calculateYAxisRange(nationalData);
   const globalYRange = calculateYAxisRange(globalData);
 
+  // 根据数据点数量动态计算X轴标签间隔
+  const dataLength = timeData.length;
+  let xAxisInterval;
+  if (dataLength <= 10) {
+    xAxisInterval = 0; // 显示所有标签
+  } else if (dataLength <= 15) {
+    xAxisInterval = 1; // 每隔1个显示
+  } else if (dataLength <= 31) {
+    xAxisInterval = 2; // 每隔2个显示（30天约显示10个标签）
+  } else {
+    xAxisInterval = Math.floor(dataLength / 10); // 显示约10个标签
+  }
+
   return {
     grid: [
       {
-        top: '8%',
+        top: '9%',
         left: '3%',
         right: '4%',
-        height: '40%',  // 增加高度，因为不再需要为dataZoom留空间
+        bottom: '54%',
         containLabel: true
       },
       {
-        top: '58%',
+        top: '57%',
         left: '3%',
         right: '4%',
-        height: '40%',  // 增加高度，因为不再需要为dataZoom留空间
+        bottom: '6%',
         containLabel: true
       }
     ],
@@ -158,15 +171,15 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         axisLabel: {
           color: '#BCDCFF',
           fontSize: 14,
-          interval: 'auto', // 自动计算标签间隔
+          interval: xAxisInterval,
           rotate: 0,
           formatter: (value) => {
-            return value; // 显示时:分格式
+            return value;
           }
         },
         axisTick: {
           alignWithLabel: true,
-          interval: 'auto'
+          interval: xAxisInterval
         },
         splitLine: {
           show: true,
@@ -189,15 +202,15 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         axisLabel: {
           color: '#BCDCFF',
           fontSize: 14,
-          interval: 'auto', // 自动计算标签间隔
+          interval: xAxisInterval,
           rotate: 0,
           formatter: (value) => {
-            return value; // 显示时:分格式
+            return value;
           }
         },
         axisTick: {
           alignWithLabel: true,
-          interval: 'auto'
+          interval: xAxisInterval
         },
         splitLine: {
           show: true,
