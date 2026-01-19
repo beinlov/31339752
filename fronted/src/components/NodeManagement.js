@@ -572,9 +572,16 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         page_size: pageSize,
       });
 
-      // 如果有搜索词且看起来是国家名，添加country过滤
-      if (searchTerm && !searchTerm.match(/^[0-9.]+$/)) {
-        params.append('country', searchTerm);
+      // 根据搜索词类型添加不同的过滤条件
+      if (searchTerm) {
+        if (searchTerm.match(/^[0-9.]+$/)) {
+          // 如果是IP格式（数字和点），作为IP范围的起始和结束（实现精确匹配）
+          params.append('ip_start', searchTerm);
+          params.append('ip_end', searchTerm);
+        } else {
+          // 否则作为国家/地区搜索
+          params.append('country', searchTerm);
+        }
       }
 
       // 添加IP段筛选

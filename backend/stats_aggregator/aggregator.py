@@ -153,12 +153,13 @@ class StatsAggregator:
                         COALESCE(
                             TRIM(TRAILING '省' FROM 
                             TRIM(TRAILING '市' FROM 
+                            TRIM(TRAILING '自治区' FROM 
                             REPLACE(REPLACE(REPLACE(
                                 province, 
-                                '壮族自治区', ''), 
-                                '回族自治区', ''), 
-                                '维吾尔自治区', '')
-                            )), 
+                                '壮族自治区', '自治区'), 
+                                '回族自治区', '自治区'), 
+                                '维吾尔自治区', '自治区')
+                            ))), 
                             '未知'
                         ) as province,
                         COALESCE(
