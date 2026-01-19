@@ -103,7 +103,6 @@ app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 # 包含抑制阻断策略路由
 app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
 
-
 # 数据模型
 class ProvinceAmount(BaseModel):
     province: str
@@ -124,11 +123,6 @@ class BotnetType(BaseModel):
     description: str
     table_name: str
     created_at: Optional[datetime] = None
-
-
-# ============================================================
-# 日志上传接口（用于接收远端传输的日志）
-# ============================================================
 
 # IP数据项模型（用于新格式）
 class IPDataItem(BaseModel):
