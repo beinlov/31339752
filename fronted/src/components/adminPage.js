@@ -10,6 +10,7 @@ import AsruexLogViewer from './AsruexLogViewer';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
 import ServerManagement from './ServerManagement';
+import SuppressionStrategy from './SuppressionStrategy';
 import axios from 'axios';
 
 // 样式定义
@@ -85,14 +86,14 @@ const HeaderButton = styled.button`
   transition: all 0.3s ease;
   font-weight: 500;
   letter-spacing: 0.5px;
-  
+
   &:hover {
     background: rgba(26, 115, 232, 0.4);
     border-color: rgba(100, 181, 246, 0.8);
     box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
     transform: translateY(-1px);
   }
-  
+
   &:active {
     transform: translateY(0);
   }
@@ -379,6 +380,12 @@ const AdminPage = ({ history }) => {
         name: '受控节点分布情况',
         component: NodeDistribution,
         icon: '📍'
+      },
+      {
+        id: 'suppression',
+        name: '抑制阻断策略',
+        component: SuppressionStrategy,
+        icon: '🛡️'
       },
       {
         id: 'report',
