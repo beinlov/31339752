@@ -86,14 +86,14 @@ const HeaderButton = styled.button`
   transition: all 0.3s ease;
   font-weight: 500;
   letter-spacing: 0.5px;
-  
+
   &:hover {
     background: rgba(26, 115, 232, 0.4);
     border-color: rgba(100, 181, 246, 0.8);
     box-shadow: 0 0 15px rgba(26, 115, 232, 0.5);
     transform: translateY(-1px);
   }
-  
+
   &:active {
     transform: translateY(0);
   }

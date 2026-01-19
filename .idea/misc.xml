@@ -3,5 +3,9 @@
   <component name="Black">
     <option name="sdkName" value="botnet" />
   </component>
+<<<<<<< HEAD
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.10 (botnet)" project-jdk-type="Python SDK" />
+=======
+  <component name="ProjectRootManager" version="2" project-jdk-name="botnet (3)" project-jdk-type="Python SDK" />
+>>>>>>> 46b5376133a7f5b130f40fc59c24a04ef65bf9d4
 </project>
