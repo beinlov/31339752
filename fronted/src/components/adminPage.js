@@ -7,7 +7,6 @@ import LogContent from './LogContent';
 import UserContent from './UserContent';
 import ReportContent from './ReportContent';
 import ExtensionContent from './ExtensionContent';
-import AsruexLogViewer from './AsruexLogViewer';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
 import ServerManagement from './ServerManagement';
@@ -416,15 +415,6 @@ const AdminPage = ({ history }) => {
         icon: '💻'
       }
     ];
-
-    if (networkId === 'asruex') {
-      botnetItems.push({
-        id: 'monitor',
-        name: '交互监控',
-        component: AsruexLogViewer,
-        icon: '&#xe88e;'
-      });
-    }
 
     const systemItems = [
       {

@@ -109,9 +109,21 @@ class DiffusionTrend extends PureComponent {
         });
       } else {
         console.warn('API返回数据格式错误:', response);
+        // 即使数据格式错误，也设置空数组以显示空图表
+        this.setState({
+          timeData: [],
+          nationalData: [],
+          globalData: []
+        });
       }
     } catch (error) {
       console.error('获取节点历史数据失败:', error);
+      // 即使请求失败，也设置空数组以显示空图表
+      this.setState({
+        timeData: [],
+        nationalData: [],
+        globalData: []
+      });
     }
   };
 

@@ -93,13 +93,18 @@ export const IndustryDistributionOptions = (params) => ({
 });
 
 // 传播态势折线图配置
-export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) => {
+export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], timeData = [] }) => {
+  // 确保数据为数组，提供空数据时的默认显示
+  const safeNationalData = Array.isArray(nationalData) ? nationalData : [];
+  const safeGlobalData = Array.isArray(globalData) ? globalData : [];
+  const safeTimeData = Array.isArray(timeData) ? timeData : [];
+  
   // 计算动态Y轴范围
-  const nationalYRange = calculateYAxisRange(nationalData);
-  const globalYRange = calculateYAxisRange(globalData);
+  const nationalYRange = calculateYAxisRange(safeNationalData);
+  const globalYRange = calculateYAxisRange(safeGlobalData);
 
   // 根据数据点数量动态计算X轴标签间隔
-  const dataLength = timeData.length;
+  const dataLength = safeTimeData.length;
   let xAxisInterval;
   if (dataLength <= 10) {
     xAxisInterval = 0; // 显示所有标签
@@ -162,7 +167,7 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         gridIndex: 0,
         type: 'category',
         boundaryGap: false,
-        data: timeData,
+        data: safeTimeData,
         axisLine: {
           lineStyle: {
             color: '#BCDCFF'
@@ -193,7 +198,7 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         gridIndex: 1,
         type: 'category',
         boundaryGap: false,
-        data: timeData,
+        data: safeTimeData,
         axisLine: {
           lineStyle: {
             color: '#BCDCFF'
@@ -293,7 +298,7 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         type: 'line',
         xAxisIndex: 0,
         yAxisIndex: 0,
-        data: nationalData,
+        data: safeNationalData,
         smooth: true,
         symbol: 'circle',
         symbolSize: 5,
@@ -322,9 +327,9 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
           label: {
             show: false  // 不显示数字标签
           },
-          data: nationalData.map((value, index) => {
+          data: safeNationalData.map((value, index) => {
             // 只在每5个数据点（对应刻度）位置显示
-            if (index % 5 === 0 || index === nationalData.length - 1) {
+            if (index % 5 === 0 || index === safeNationalData.length - 1) {
               return {
                 value: value,
                 xAxis: index,
@@ -354,7 +359,7 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
         type: 'line',
         xAxisIndex: 1,
         yAxisIndex: 1,
-        data: globalData,
+        data: safeGlobalData,
         smooth: true,
         symbol: 'circle',
         symbolSize: 5,
@@ -383,9 +388,9 @@ export const DiffusionTrendOptions = ({ nationalData, globalData, timeData }) =>
           label: {
             show: false  // 不显示数字标签
           },
-          data: globalData.map((value, index) => {
+          data: safeGlobalData.map((value, index) => {
             // 只在每5个数据点（对应刻度）位置显示
-            if (index % 5 === 0 || index === globalData.length - 1) {
+            if (index % 5 === 0 || index === safeGlobalData.length - 1) {
               return {
                 value: value,
                 xAxis: index,
