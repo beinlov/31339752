@@ -354,6 +354,55 @@ const LoginPage = ({ history }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // 检查URL参数并自动登录
+  React.useEffect(() => {
+    const checkAutoLogin = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlUsername = urlParams.get('username');
+      const urlPassword = urlParams.get('password');
+
+      if (urlUsername && urlPassword) {
+        console.log('Auto-login detected with URL parameters');
+        setIsLoading(true);
+        
+        try {
+          const response = await axios.get(
+            `http://localhost:8000/api/user/auto-login?username=${encodeURIComponent(urlUsername)}&password=${encodeURIComponent(urlPassword)}`
+          );
+
+          console.log('Auto-login response:', response.data);
+
+          const { access_token, role, username: loggedInUsername } = response.data;
+
+          // 保存认证信息到localStorage
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('role', role);
+          localStorage.setItem('username', loggedInUsername);
+
+          // 清除URL参数（安全考虑）
+          window.history.replaceState({}, document.title, window.location.pathname);
+
+          // 根据角色重定向到不同页面
+          if (role === '管理员') {
+            history.push('/admin');
+          } else {
+            history.push('/index');
+          }
+        } catch (error) {
+          console.error('Auto-login error:', error);
+          if (error.response) {
+            setError(error.response.data.detail || '自动登录失败，请手动登录');
+          } else {
+            setError('自动登录失败，请手动登录');
+          }
+          setIsLoading(false);
+        }
+      }
+    };
+
+    checkAutoLogin();
+  }, [history]);
+
   const handleLogin = async () => {
     if (!username || !password) {
       setError('请输入用户名和密码');

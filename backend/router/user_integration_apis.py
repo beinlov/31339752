@@ -100,28 +100,6 @@ class Token(BaseModel):
     username: str
 
 
-class SSOLoginRequest(BaseModel):
-    """SSO登录请求模型"""
-    username: str = Field(..., description="用户名", min_length=1, max_length=50)
-    password: str = Field(..., description="用户密码", min_length=1)
-    role: Optional[str] = Field(default=None, description="用户角色：管理员、操作员、访客（可选）")
-    
-    @field_validator('role')
-    @classmethod
-    def validate_role(cls, v):
-        if v is None:
-            return v
-        valid_roles = ['管理员', '操作员', '访客', 'admin', 'operator', 'viewer']
-        role_mapping = {
-            'admin': '管理员',
-            'operator': '操作员',
-            'viewer': '访客'
-        }
-        if v in role_mapping:
-            return role_mapping[v]
-        if v not in valid_roles:
-            raise ValueError(f'角色必须是以下之一: {", ".join(valid_roles)}')
-        return v
 
 
 class UserSyncRequest(BaseModel):
@@ -180,124 +158,9 @@ class BatchUserDeleteRequest(BaseModel):
 
 
 # ============================================================
-# SSO免登录接口
+# SSO免登录接口已删除
+# 改用 /api/user/auto-login 接口（URL参数方式）
 # ============================================================
-
-@router.post("/sso-login", response_model=Token)
-async def sso_login(request_data: SSOLoginRequest, request: Request):
-    """
-    SSO免登录接口（单点登录）
-    
-    用于集成到其他系统中，通过传递用户名和密码实现免登录访问。
-    子系统可以调用此接口验证用户密码是否正确，验证通过后返回访问令牌。
-    
-    安全机制：
-    1. 密码验证：验证用户提供的密码是否正确
-    2. IP白名单：可选启用（默认关闭）
-    
-    **接口文档**: `another/botnet/backend/SSO_INTEGRATION.md`
-    """
-    conn = None
-    cursor = None
-    
-    try:
-        # 1. IP白名单验证（如果启用）
-        if not verify_client_ip(request, 'SSO_CONFIG'):
-            logger.warning(f"SSO login rejected: IP not in whitelist - {request.client.host}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="IP地址不在白名单中"
-            )
-        
-        # 2. 查询用户
-        conn = pymysql.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "SELECT id, username, password, role, status FROM users WHERE username = %s",
-            (request_data.username,)
-        )
-        user = cursor.fetchone()
-        
-        if not user:
-            logger.warning(f"SSO login rejected: User {request_data.username} not found")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误"
-            )
-        
-        user_id, username, stored_password, user_role, user_status = user
-        
-        # 3. 验证密码
-        if not verify_password(request_data.password, stored_password):
-            logger.warning(f"SSO login rejected: Invalid password for user {request_data.username}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误"
-            )
-        
-        # 4. 更新用户角色（如果提供）
-        final_role = user_role
-        if request_data.role:
-            final_role = request_data.role
-            cursor.execute(
-                "UPDATE users SET role = %s WHERE id = %s",
-                (final_role, user_id)
-            )
-        
-        # 5. 更新用户状态和最后登录时间
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute(
-            "UPDATE users SET last_login = %s, status = '在线' WHERE id = %s",
-            (now, user_id)
-        )
-        conn.commit()
-        
-        # 6. 创建访问令牌
-        sso_token_expire = SSO_CONFIG.get('sso_token_expire_minutes', 60)
-        to_encode = {
-            "sub": username,
-            "role": final_role,
-            "sso": True,  # 标记为SSO登录
-            "exp": datetime.utcnow() + timedelta(minutes=sso_token_expire)
-        }
-        access_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        
-        logger.info(f"SSO login successful: {username} with role {final_role}")
-        
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "role": final_role,
-            "username": username
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"SSO login error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"SSO登录失败: {str(e)}"
-        )
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-
-@router.get("/sso-config")
-async def get_sso_config():
-    """
-    获取SSO配置信息（用于集成方了解配置）
-    """
-    return {
-        "token_expire_minutes": SSO_CONFIG.get('sso_token_expire_minutes', 60),
-        "ip_whitelist_enabled": SSO_CONFIG.get('enable_ip_whitelist', False),
-        "authentication_method": "password",
-        "description": "通过用户名和密码进行身份验证"
-    }
 
 
 # ============================================================

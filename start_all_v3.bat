@@ -175,6 +175,12 @@ timeout /t 3 /nobreak >nul
 echo [OK] Platform Backend started - http://localhost:8000
 
 echo.
+echo [Starting 2.1/4] Ensure Timeset Data (30 days, every 3 hours)...
+start "Botnet Timeset Data Ensurer" cmd /k "cd /d %~dp0backend && python -u scripts\ensure_timeset_data.py"
+timeout /t 1 /nobreak >nul
+echo [OK] Timeset data ensure service started
+
+echo.
 echo [Starting 3/5] Stats Aggregator - Daemon Mode...
 start "Botnet Stats Aggregator" cmd /k "cd /d %~dp0backend\stats_aggregator && python aggregator.py daemon 30"
 timeout /t 1 /nobreak >nul

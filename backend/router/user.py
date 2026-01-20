@@ -156,6 +156,93 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         if conn:
             conn.close()
 
+@router.get("/auto-login", response_model=Token)
+async def auto_login(username: str, password: str):
+    """
+    URL参数免登录接口
+    
+    用于外部平台通过URL参数直接登录，绕过登录页面。
+    
+    使用方式：
+    http://localhost:9000/login?username=op1&password=123456
+    
+    前端会自动检测URL参数，调用此接口验证并自动登录。
+    
+    参数：
+    - username: 用户名
+    - password: 密码（明文）
+    
+    返回：
+    - access_token: JWT令牌
+    - token_type: bearer
+    - role: 用户角色
+    - username: 用户名
+    """
+    conn = None
+    cursor = None
+    try:
+        logger.info(f"Auto-login attempt for user: {username}")
+        
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # 查询用户
+        cursor.execute(
+            "SELECT id, username, password, role, status FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+        
+        if not user:
+            logger.warning(f"Auto-login failed: User not found - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 验证密码
+        if not verify_password(password, user[2]):
+            logger.warning(f"Auto-login failed: Invalid password for user - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 更新最后登录时间和状态
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "UPDATE users SET last_login = %s, status = '在线' WHERE id = %s",
+            (now, user[0])
+        )
+        conn.commit()
+        
+        # 创建访问令牌
+        access_token = create_access_token(
+            data={"sub": user[1], "role": user[3]}
+        )
+        
+        logger.info(f"Auto-login successful for user: {username}")
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": user[3],
+            "username": user[1]
+        }
+        
+    except Exception as e:
+        logger.error(f"Auto-login error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="自动登录失败"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 @router.post("/logout/{username}")
 async def logout(username: str):
     try:
