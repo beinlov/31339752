@@ -87,14 +87,14 @@ SSO_CONFIG = {
 
 SYNC_CONFIG = {
     # 是否启用API密钥验证
-    "enable_api_key": True,  # 开发环境可设为False，生产环境必须True
+    "enable_api_key": False,  # 开发环境可设为False，生产环境必须True
     
     # API密钥（集成平台调用同步接口时需要提供）
     # 生产环境请修改为强密钥（至少32个字符）
     "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
     
     # 是否启用IP白名单验证
-    "enable_ip_whitelist": True,  # 开发环境可设为False，生产环境建议True
+    "enable_ip_whitelist": False,  # 开发环境可设为False，生产环境建议True
     
     # IP白名单（集成平台的IP地址）
     "ip_whitelist": [
