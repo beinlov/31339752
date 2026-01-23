@@ -15,10 +15,19 @@ def _get_awdb_reader():
     
     filename = os.path.dirname(__file__) + os.sep + 'IP_city_single_WGS84.awdb'
     
+    # 检查文件是否存在
+    if not os.path.exists(filename):
+        print(f"警告: IP地理位置数据库文件不存在: {filename}")
+        return None
+    
     # 如果文件路径变了或还没初始化，重新打开
     if _awdb_reader is None or _awdb_filename != filename:
-        _awdb_reader = awdb.open_database(filename)
-        _awdb_filename = filename
+        try:
+            _awdb_reader = awdb.open_database(filename)
+            _awdb_filename = filename
+        except Exception as e:
+            print(f"错误: 无法打开IP地理位置数据库: {e}")
+            return None
     
     return _awdb_reader
 
@@ -28,6 +37,21 @@ def ip_query(ip):
 
     # 使用缓存的 reader，不再每次打开文件
     reader = _get_awdb_reader()
+    
+    # 如果数据库文件不存在，返回空的IP信息
+    if reader is None:
+        return {
+            'continent': '',
+            'country': '',
+            'province': '',
+            'city': '',
+            'isp': '',
+            'asn': '',
+            'prefix_len': '',
+            'longitude': '',
+            'latitude': '',
+        }
+    
     try:
         (record, prefix_len) = reader.get_with_prefix_len(ip)
 
