@@ -321,13 +321,14 @@ class BotnetDBWriter:
             insert_start_time = time.time()
             
             # 直接同步调用，不使用后台线程（因为连接和游标不是线程安全的）
+            # 注意：事务的commit已在_do_insert_nodes_batch_sync内部执行，确保节点表和通信表原子性
             self._do_insert_nodes_batch_sync(cursor, nodes_to_write)
             
             insert_duration = time.time() - insert_start_time
             self._record_performance('insert', insert_duration)
             
-            # 提交事务
-            conn.commit()
+            # 注意：commit已在内层函数执行，此处不再需要commit
+            # 这样可以确保节点表和通信表在同一事务中提交，避免数据不一致
             
             self.total_written += len(nodes_to_write)
             
@@ -359,8 +360,7 @@ class BotnetDBWriter:
             
         except Exception as e:
             logger.error(f"[{self.botnet_type}] Error flushing to database: {e}", exc_info=True)
-            if conn:
-                conn.rollback()
+            # 注意：rollback已在内层函数执行，此处不再需要rollback
             # 如果写入失败，将数据重新放回缓冲区
             with self.buffer_lock:
                 self.node_buffer.extend(nodes_to_write)
@@ -1075,10 +1075,20 @@ class BotnetDBWriter:
                 comm_time = time.time() - comm_start
                 logger.info(f"[{self.botnet_type}] 通信记录插入完成: {total_comm_inserted} 条, 耗时 {comm_time:.2f}秒 ({total_comm_inserted/comm_time:.0f} 条/秒)")
             
-            logger.info(f"[{self.botnet_type}] 批量插入全部完成!")
+            # ========================================
+            # Step 5: 提交事务（确保节点表和通信表同时提交）
+            # ========================================
+            cursor.connection.commit()
+            logger.info(f"[{self.botnet_type}] 批量插入全部完成并已提交事务!")
             
         except Exception as e:
             logger.error(f"[{self.botnet_type}] Error in batch insert: {e}", exc_info=True)
+            # 回滚事务，确保数据一致性
+            try:
+                cursor.connection.rollback()
+                logger.warning(f"[{self.botnet_type}] 事务已回滚")
+            except Exception as rollback_error:
+                logger.error(f"[{self.botnet_type}] 回滚失败: {rollback_error}")
             raise
     
     def _parse_timestamp(self, timestamp_str, current_time):
