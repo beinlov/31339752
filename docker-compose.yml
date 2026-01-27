@@ -2,7 +2,7 @@
 # 僵尸网络接管集成平台 - Docker Compose 配置
 # ============================================================
 
-version: '3.8'
+version: '3.3'
 
 services:
   # MySQL数据库
@@ -28,7 +28,7 @@ services:
     networks:
       - botnet-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,11 +52,10 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/logs:/app/logs
-      - ./backend/ip_location/IP_city_single_WGS84.awdb:/app/ip_location/IP_city_single_WGS84.awdb:ro
+      # - ./backend/ip_location/IP_city_single_WGS84.awdb:/app/ip_location/IP_city_single_WGS84.awdb:ro
       - backend-state:/app/log_processor/.state
     depends_on:
-      mysql:
-        condition: service_healthy
+      - mysql
     networks:
       - botnet-network
     healthcheck:
@@ -64,7 +63,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
 
   # 前端服务
   frontend:
