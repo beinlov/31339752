@@ -4,7 +4,7 @@ import os
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
-    "password": "123456",
+    "password": "Matrix123",
     "database": "botnet",
     "charset": "utf8mb4",
     # 连接超时设置（秒）- 增加超时时间以应对高并发写入

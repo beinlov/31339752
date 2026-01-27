@@ -4,3 +4,11 @@
 __pycache__/
 __pycache__/ 
 *.pyc 
+<<<<<<< HEAD
+=======
+
+# ignore large sql dumps
+botnet.sql
+data_only.sql
+data_optimized.sql
+>>>>>>> a8cdbf0d8c22c5dabef654d5f534f66ee3a589ec
