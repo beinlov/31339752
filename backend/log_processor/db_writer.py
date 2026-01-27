@@ -15,6 +15,10 @@ import threading
 import queue
 import time
 
+# 导入统一的表结构定义
+sys.path.insert(0, sys.path[0].replace('log_processor', ''))
+from database.schema import get_node_table_ddl, get_communication_table_ddl
+
 # Python 版本兼容性检查
 PYTHON_VERSION = sys.version_info
 HAS_TO_THREAD = PYTHON_VERSION >= (3, 9)
@@ -460,63 +464,14 @@ class BotnetDBWriter:
     def _ensure_tables_exist_sync(self, cursor):
         """确保数据表存在（双表设计：节点表+通信记录表）- 同步版本"""
         try:
+            # 使用统一的schema定义
             # 1. 创建节点表（汇总信息）
-            cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.node_table} (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
-                    longitude FLOAT COMMENT '经度',
-                    latitude FLOAT COMMENT '纬度',
-                    country VARCHAR(50) COMMENT '国家',
-                    province VARCHAR(50) COMMENT '省份',
-                    city VARCHAR(50) COMMENT '城市',
-                    continent VARCHAR(50) COMMENT '洲',
-                    isp VARCHAR(255) COMMENT 'ISP运营商',
-                    asn VARCHAR(50) COMMENT 'AS号',
-                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
-                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
-                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
-                    communication_count INT DEFAULT 0 COMMENT '通信次数',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
-                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    INDEX idx_ip (ip),
-                    INDEX idx_location (country, province, city),
-                    INDEX idx_status (status),
-                    INDEX idx_first_seen (first_seen),
-                    INDEX idx_last_seen (last_seen),
-                    INDEX idx_communication_count (communication_count),
-                    INDEX idx_is_china (is_china),
-                    UNIQUE KEY idx_unique_ip (ip)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点基本信息表（汇总）'
-            """)
+            node_ddl = get_node_table_ddl(self.botnet_type)
+            cursor.execute(node_ddl)
             
-            # 2. 创建通信记录表（详细历史）
-            cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.communication_table} (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    node_id INT NOT NULL COMMENT '关联的节点ID',
-                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
-                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
-                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
-                    longitude FLOAT COMMENT '经度',
-                    latitude FLOAT COMMENT '纬度',
-                    country VARCHAR(50) COMMENT '国家',
-                    province VARCHAR(50) COMMENT '省份',
-                    city VARCHAR(50) COMMENT '城市',
-                    continent VARCHAR(50) COMMENT '洲',
-                    isp VARCHAR(255) COMMENT 'ISP运营商',
-                    asn VARCHAR(50) COMMENT 'AS号',
-                    event_type VARCHAR(50) COMMENT '事件类型',
-                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
-                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    UNIQUE KEY idx_unique_communication (ip, communication_time) COMMENT '唯一约束：防止重复数据',
-                    INDEX idx_communication_time (communication_time) COMMENT '时间范围查询',
-                    INDEX idx_location (country, province, city) COMMENT '地理位置查询'
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点通信记录表（优化版：唯一约束+精简索引）'
-            """)
+            # 2. 创建通信记录表（详细历史）- 包含外键约束
+            comm_ddl = get_communication_table_ddl(self.botnet_type, self.node_table)
+            cursor.execute(comm_ddl)
             
             # 3. 升级表结构（处理旧表迁移）
             self._upgrade_table_structure_sync(cursor)

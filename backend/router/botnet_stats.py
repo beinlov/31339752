@@ -6,6 +6,7 @@ import pymysql
 from pymysql.cursors import DictCursor
 from datetime import datetime
 from config import DB_CONFIG
+from cache_manager import get_cache
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -72,7 +73,18 @@ async def get_botnet_summary():
     - 中国节点数
     - 全球节点数
     - 最后更新时间
+    
+    使用Redis缓存（5分钟），与聚合器更新频率一致
     """
+    # 检查缓存
+    cache = get_cache()
+    cache_key = cache.get_stats_summary()
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        logger.info("Returning cached botnet summary")
+        return cached_data
+    
     conn = None
     cursor = None
     try:
@@ -95,46 +107,55 @@ async def get_botnet_summary():
         
         botnet_names = [botnet['name'] for botnet in botnets]
         
-        # 统计节点数量
+        # 【优化】使用UNION ALL合并所有查询，从N+1查询优化为1次查询
+        # 构建动态UNION查询
+        union_queries = []
+        for botnet in botnets:
+            name = botnet['name']
+            union_queries.append(f"""
+                SELECT 
+                    '{name}' as botnet_name,
+                    'china' as region,
+                    COALESCE(SUM(infected_num), 0) as count
+                FROM china_botnet_{name}
+                UNION ALL
+                SELECT 
+                    '{name}' as botnet_name,
+                    'global' as region,
+                    COALESCE(SUM(infected_num), 0) as count
+                FROM global_botnet_{name}
+            """)
+        
+        # 一次性执行所有查询
+        final_query = " UNION ALL ".join(union_queries)
+        
+        try:
+            cursor.execute(final_query)
+            results = cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Error executing union query: {e}")
+            # 降级为旧逻辑
+            results = []
+        
+        # 整理数据
+        stats_map = {}
+        for row in results:
+            name = row['botnet_name']
+            if name not in stats_map:
+                stats_map[name] = {'china': 0, 'global': 0}
+            stats_map[name][row['region']] = int(row['count'] or 0)
+        
+        # 计算总计
         total_nodes = 0
         china_nodes = 0
         global_nodes = 0
+        for name in botnet_names:
+            if name in stats_map:
+                china_nodes += stats_map[name]['china']
+                global_nodes += stats_map[name]['global']
+                total_nodes += stats_map[name]['china'] + stats_map[name]['global']
         
-        for botnet_name in botnet_names:
-            # 检查中国节点表
-            china_table = f"china_botnet_{botnet_name}"
-            try:
-                cursor.execute(f"SELECT SUM(infected_num) as count FROM {china_table}")
-                result = cursor.fetchone()
-                if result and result['count']:
-                    china_count = int(result['count'])
-                    china_nodes += china_count
-                    total_nodes += china_count
-            except Exception as e:
-                logger.warning(f"Error counting china nodes for {botnet_name}: {e}")
-            
-            # 检查全球节点表
-            global_table = f"global_botnet_{botnet_name}"
-            try:
-                cursor.execute(f"SELECT SUM(infected_num) as count FROM {global_table}")
-                result = cursor.fetchone()
-                if result and result['count']:
-                    global_count = int(result['count'])
-                    # 减去中国节点数，避免重复计算
-                    try:
-                        cursor.execute(f"SELECT SUM(infected_num) as count FROM {global_table} WHERE country='中国'")
-                        china_in_global = cursor.fetchone()
-                        if china_in_global and china_in_global['count']:
-                            global_count -= int(china_in_global['count'])
-                    except:
-                        pass
-                    
-                    global_nodes += global_count
-                    total_nodes += global_count
-            except Exception as e:
-                logger.warning(f"Error counting global nodes for {botnet_name}: {e}")
-        
-        return {
+        result = {
             "total_botnets": len(botnets),
             "botnet_names": botnet_names,
             "total_nodes": total_nodes,
@@ -142,6 +163,11 @@ async def get_botnet_summary():
             "global_nodes": global_nodes,
             "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
+        
+        # 写入缓存（5分钟过期，与聚合器更新频率一致）
+        cache.set(cache_key, result, ttl=300)
+        
+        return result
         
     except Exception as e:
         logger.error(f"Error getting botnet summary: {e}")
