@@ -48,6 +48,54 @@ def get_cached_node_count(botnet_type: str) -> int:
         if 'conn' in locals():
             conn.close()
 
+
+@router.get("/active-botnet-communications")
+async def get_active_botnet_communications(botnet_type: str):
+    """获取活跃僵尸节点通信记录 - 从指定的botnet_communications_*表查询"""
+    conn = None
+    cursor = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+
+        safe_botnet_type = (botnet_type or '').strip().lower()
+        if not safe_botnet_type:
+            raise HTTPException(status_code=400, detail="botnet_type is required")
+
+        table_name = f"botnet_communications_{safe_botnet_type}"
+
+        cursor.execute(
+            """
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = %s
+            """,
+            (DB_CONFIG['database'], table_name),
+        )
+
+        if cursor.fetchone()['count'] == 0:
+            raise HTTPException(status_code=404, detail=f"Communication table for {safe_botnet_type} not found")
+
+        cursor.execute(
+            f"""
+            SELECT
+                DATE_FORMAT(communication_time, '%Y-%m-%d %H:%i:%s') as time,
+                ip,
+                COALESCE(country, '未知') as country
+            FROM {table_name}
+            ORDER BY communication_time DESC
+            LIMIT 200
+            """
+        )
+
+        return cursor.fetchall()
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 @router.get("/node-details")
 async def get_node_details(
     botnet_type: str,

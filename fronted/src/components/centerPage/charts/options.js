@@ -622,7 +622,7 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
 
 export const userOptions = (data) => {
   return {
-    header: ['时间', 'IP', '地区', '指令'],
+    header: ['时间', 'IP', '地区'],
     data: data || [],
   };
 };

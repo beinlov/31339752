@@ -448,7 +448,7 @@ class index extends PureComponent {
 
         <CenterBottom>
           <div className="user-situation">
-            <ActivityStream userSitua={userSitua} />
+            <ActivityStream userSitua={userSitua} selectedNetwork={this.state.selectedNetwork} />
           </div>
         </CenterBottom>
       </CenterPage>
@@ -462,6 +462,7 @@ const mapStateToProps = state => ({
   userSitua: state.centerPage.userSitua,
   worldMapData: state.leftPage.worldMapData,
   isSwapped: state.mapPosition.isSwapped,
+  selectedNetwork: state.mapState.selectedNetwork,
 });
 
 export default connect(mapStateToProps)(index);

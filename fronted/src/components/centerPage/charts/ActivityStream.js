@@ -3,48 +3,35 @@ import { userOptions } from './options';
 import { ScrollBoard } from '@jiaminghi/data-view-react';
 import request from '../../../utils/request';
 
-// 添加命令转换函数和对应的颜色
-const commandConfig = {
-  'clear': { text: '清除节点', color: '#FF6B6B' },
-  'reuse': { text: '节点再利用', color: '#4ECDC4' },
-  'ddos': { text: 'DDos攻击', color: '#FFD93D' },
-  'suppress': { text: '抑制阻断', color: '#6C5CE7' }
-};
-
-const translateCommand = (command) => {
-  for (const [key, value] of Object.entries(commandConfig)) {
-    if (command.includes(key)) return `<span style="color: ${value.color}">${value.text}</span>`;
-  }
-  return command;
-};
 
 class UserSituation extends PureComponent {
   constructor(props) {
     super(props);
+    this.containerRef = React.createRef();
     this.state = {
       userEvents: null,
       config: {
-        headerBGC: 'rgba(15, 19, 37, 0.6)',
-        oddRowBGC: 'rgba(15, 19, 37, 0.4)',
-        evenRowBGC: 'rgba(23, 28, 51, 0.4)',
+        headerBGC: 'rgba(0, 21, 41, 0.4)',
+        oddRowBGC: 'rgba(0, 40, 70, 0.3)',
+        evenRowBGC: 'rgba(0, 21, 41, 0.3)',
         index: false,
         columnWidth: [],
-        align: ['center'],
-        rowNum: 5,
-        headerHeight: 40,
-        rowHeight: 45,
-        waitTime: 2500,
+        align: ['center', 'center', 'center'],
+        rowNum: 4,
+        headerHeight: 60,
+        rowHeight: 70,
+        waitTime: 2000,
         carousel: 'single',
         hoverPause: true,
         scroll: false,
         loop: false,
-        headerFontSize: 14,
-        rowFontSize: 14,
+        headerFontSize: 22,
+        rowFontSize: 20,
         headerFontFamily: '"Microsoft YaHei", sans-serif',
         rowFontFamily: '"Microsoft YaHei", sans-serif',
         textAlign: 'center',
-        headerColor: '#BCDCFF',
-        rowColor: '#E6EFF8'
+        headerColor: '#00EAFF',
+        rowColor: '#FFFFFF'
       },
     };
   }
@@ -52,36 +39,79 @@ class UserSituation extends PureComponent {
   componentDidMount() {
     this.fetchUserEvents();
     this.timer = setInterval(this.fetchUserEvents, 30000);
+    
+    // 使用 ResizeObserver 监听容器大小变化
+    this.resizeObserver = new ResizeObserver(() => {
+      this.updateColumnWidth();
+    });
+    
+    if (this.containerRef.current) {
+      this.resizeObserver.observe(this.containerRef.current);
+    }
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.selectedNetwork !== this.props.selectedNetwork) {
+      this.fetchUserEvents();
+    }
   }
 
   componentWillUnmount() {
     if (this.timer) {
       clearInterval(this.timer);
     }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
   }
+
+  updateColumnWidth = () => {
+    if (this.containerRef.current) {
+      const width = this.containerRef.current.clientWidth;
+      const colWidth = Math.floor(width / 3);
+      this.setState(prevState => ({
+        config: {
+          ...prevState.config,
+          columnWidth: [colWidth, colWidth, colWidth]
+        }
+      }));
+    }
+  };
 
   fetchUserEvents = async () => {
     try {
-      const response = await request('http://localhost:8000/api/user-events');
-      if (Array.isArray(response)) {
-        const formattedData = response.map(event => [
-          `<span style="color: #BCDCFF">${event.time}</span>`,
-          `<span style="color: #4FACFE">${event.ip}</span>`,
-          `<span style="color: #E6EFF8">${event.location}</span>`,
-          translateCommand(event.command)
+      const { selectedNetwork } = this.props;
+      const botnetType = (selectedNetwork || 'asruex').toString().trim().toLowerCase();
+      const response = await request(`http://localhost:8000/api/active-botnet-communications?botnet_type=${botnetType}`);
+
+      const rows = Array.isArray(response)
+        ? response
+        : (response && Array.isArray(response.data) ? response.data : []);
+
+      const formattedData = rows.map(event => [
+          `<span style="color: #00EAFF; font-weight: bold;">${event.time}</span>`,
+          `<span style="color: #ffffff; font-weight: bold;">${event.ip}</span>`,
+          `<span style="color: #00EAFF; font-weight: bold;">${event.country}</span>`
         ]);
-        
-        this.setState(prevState => ({
-          userEvents: formattedData,
-          config: {
-            ...prevState.config,
-            scroll: formattedData.length > 5,
-            loop: formattedData.length > 5
-          }
-        }));
-      }
+      
+      this.setState(prevState => ({
+        userEvents: formattedData,
+        config: {
+          ...prevState.config,
+          scroll: formattedData.length > 4,
+          loop: formattedData.length > 4
+        }
+      }));
     } catch (error) {
-      console.error('获取用户事件数据失败:', error);
+      console.error('获取活跃僵尸节点通信数据失败:', error);
+      this.setState(prevState => ({
+        userEvents: [],
+        config: {
+          ...prevState.config,
+          scroll: false,
+          loop: false
+        }
+      }));
     }
   };
 
@@ -97,9 +127,9 @@ class UserSituation extends PureComponent {
       <div className="user-situation-container">
         <div className="user-situation-title">
           <i className="iconfont" style={{ marginRight: '8px', fontSize: '18px' }}>&#xe7fd;</i>
-          清除处理事件动态
+          活跃僵尸节点动态展示
         </div>
-        <div className="user-situation-content">
+        <div className="user-situation-content" ref={this.containerRef}>
           {userEvents ? (
             <ScrollBoard
               config={scrollBoardConfig}
