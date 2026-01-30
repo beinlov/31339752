@@ -2,13 +2,21 @@
 *.awdb
 *.log
 __pycache__/
-__pycache__/ 
-*.pyc 
-<<<<<<< HEAD
-=======
+*.pyc
 
 # ignore large sql dumps
 botnet.sql
 data_only.sql
 data_optimized.sql
->>>>>>> a8cdbf0d8c22c5dabef654d5f534f66ee3a589ec
+data_new_optimized.sql
+schema_only.sql
+schema_clean.sql
+schema_new.sql
+
+# ignore backup files
+backup_*.sql
+backup_*.json
+
+# ignore temp files
+temp_*.sql
+*.bak
