@@ -16,7 +16,7 @@ def check_data():
         
         # Check current server data
         print("=== Current Server Data ===")
-        cursor.execute("SELECT id, location, ip, domain, status, os, Botnet_Name FROM Server_Management")
+        cursor.execute("SELECT id, location, ip, domain, status, os, Botnet_Name FROM server_management")
         servers = cursor.fetchall()
         
         if not servers:
