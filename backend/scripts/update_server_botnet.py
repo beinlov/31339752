@@ -15,14 +15,14 @@ def update_servers():
         cursor = conn.cursor(pymysql.cursors.DictCursor)
         
         # Get all servers
-        cursor.execute("SELECT id, ip FROM Server_Management")
+        cursor.execute("SELECT id, ip FROM server_management")
         servers = cursor.fetchall()
         
         print("=== Updating Server Botnet Names ===\n")
         
         # Update server 8 with 'mozi' botnet
         cursor.execute("""
-            UPDATE Server_Management 
+            UPDATE server_management 
             SET Botnet_Name = %s 
             WHERE id = %s
         """, ('mozi', 8))
@@ -30,7 +30,7 @@ def update_servers():
         
         # Update server 9 with 'andromeda' botnet
         cursor.execute("""
-            UPDATE Server_Management 
+            UPDATE server_management 
             SET Botnet_Name = %s 
             WHERE id = %s
         """, ('andromeda', 9))
@@ -42,7 +42,7 @@ def update_servers():
         print("\n=== Verification ===\n")
         cursor.execute("""
             SELECT id, ip, Botnet_Name 
-            FROM Server_Management 
+            FROM server_management 
             ORDER BY id
         """)
         servers = cursor.fetchall()

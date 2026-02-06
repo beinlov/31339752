@@ -356,7 +356,7 @@ C2_ENDPOINTS = [
     # 示例配置1 - 远程C2服务器
     {
          'name': 'C2-test-remote',
-         'url': os.environ.get('C2_ENDPOINT_1', 'http://124.156.139.63:8888'),  # ⬅️ 改为你的公网IP
+         'url': os.environ.get('C2_ENDPOINT_1', 'http://150.109.158.175:8888'),  # ⬅️ 改为你的公网IP
          'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
          'enabled': True,
          'pull_interval': C2_PULL_INTERVAL_MINUTES * 60,  # 使用统一配置（转换为秒）

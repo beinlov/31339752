@@ -163,18 +163,18 @@ class IncrementalStatsAggregator:
         """获取受影响的省市组合"""
         cursor.execute(f"""
             SELECT DISTINCT
-                COALESCE(
-                    TRIM(TRAILING '省' FROM 
-                    TRIM(TRAILING '市' FROM 
-                    TRIM(TRAILING '自治区' FROM 
-                    REPLACE(REPLACE(REPLACE(
-                        province, 
-                        '壮族自治区', '自治区'), 
-                        '回族自治区', '自治区'), 
-                        '维吾尔自治区', '自治区')
-                    ))), 
-                    '未知'
-                ) as province,
+                CASE
+                    WHEN province IN ('内蒙古自治区', '内蒙古壮族自治区') THEN '内蒙古'
+                    WHEN province IN ('广西自治区', '广西壮族自治区') THEN '广西'
+                    WHEN province = '西藏自治区' THEN '西藏'
+                    WHEN province IN ('宁夏自治区', '宁夏回族自治区') THEN '宁夏'
+                    WHEN province IN ('新疆自治区', '新疆维吾尔自治区') THEN '新疆'
+                    ELSE COALESCE(
+                        TRIM(TRAILING '省' FROM 
+                        TRIM(TRAILING '市' FROM province)),
+                        '未知'
+                    )
+                END as province,
                 CASE 
                     WHEN city IN ('北京', '天津', '上海', '重庆') THEN city
                     WHEN city IS NOT NULL THEN TRIM(TRAILING '市' FROM city)
@@ -213,18 +213,18 @@ class IncrementalStatsAggregator:
                     MAX(updated_at) as updated_at
                 FROM {node_table}
                 WHERE country = '中国' 
-                    AND COALESCE(
-                        TRIM(TRAILING '省' FROM 
-                        TRIM(TRAILING '市' FROM 
-                        TRIM(TRAILING '自治区' FROM 
-                        REPLACE(REPLACE(REPLACE(
-                            province, 
-                            '壮族自治区', '自治区'), 
-                            '回族自治区', '自治区'), 
-                            '维吾尔自治区', '自治区')
-                        ))), 
-                        '未知'
-                    ) = %s
+                    AND CASE
+                        WHEN province IN ('内蒙古自治区', '内蒙古壮族自治区') THEN '内蒙古'
+                        WHEN province IN ('广西自治区', '广西壮族自治区') THEN '广西'
+                        WHEN province = '西藏自治区' THEN '西藏'
+                        WHEN province IN ('宁夏自治区', '宁夏回族自治区') THEN '宁夏'
+                        WHEN province IN ('新疆自治区', '新疆维吾尔自治区') THEN '新疆'
+                        ELSE COALESCE(
+                            TRIM(TRAILING '省' FROM 
+                            TRIM(TRAILING '市' FROM province)),
+                            '未知'
+                        )
+                    END = %s
                     AND CASE 
                         WHEN city IN ('北京', '天津', '上海', '重庆') THEN city
                         WHEN city IS NOT NULL THEN TRIM(TRAILING '市' FROM city)
