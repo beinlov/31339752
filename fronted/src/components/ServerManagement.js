@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { Table, Button, Modal, Form, Input, Select, message, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, CodeOutlined, ClearOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import { getApiUrl } from '../config/api';
 
 const { Option } = Select;
 
@@ -476,7 +477,7 @@ const ServerManagement = () => {
     setHistory(prev => [...prev, { type: 'command', text: `PS C:\\> ${cmd}` }]);
     
     try {
-      const res = await axios.post('http://localhost:8000/api/terminal/exec', {
+      const res = await axios.post(getApiUrl('/api/terminal/exec'), {
         command: cmd,
         timeout_seconds: 300
       });

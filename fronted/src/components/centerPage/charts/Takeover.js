@@ -6,6 +6,7 @@ import {
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import { getUserLocation } from '../../../utils/index';
+import { getApiUrl } from '../../../config/api';
 
 const useStyles = makeStyles((theme) => ({
   buttonContainer: {
@@ -68,7 +69,7 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
 
       // 调用清除API
       const token = localStorage.getItem('token');
-      fetch('http://localhost:8000/api/clean-botnet', {
+      fetch(getApiUrl('/api/clean-botnet'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

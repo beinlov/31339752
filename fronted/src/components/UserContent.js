@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import axios from 'axios';
+import { getApiUrl } from '../config/api';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
-import axios from 'axios';
 
 // 样式定义
 const Container = styled.div`
@@ -394,7 +395,7 @@ const UserContent = () => {
   // 获取用户列表
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/user/users', { headers });
+      const response = await axios.get(getApiUrl('/api/user/users'), { headers });
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -404,7 +405,7 @@ const UserContent = () => {
   // 获取统计数据
   const fetchStats = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/user/statistics', { headers });
+      const response = await axios.get(getApiUrl('/api/user/statistics'), { headers });
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching statistics:', error);
@@ -414,7 +415,7 @@ const UserContent = () => {
   // 获取活动数据
   const fetchActivity = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/user/activity', { headers });
+      const response = await axios.get(getApiUrl('/api/user/activity'), { headers });
       setActivityData(response.data);
     } catch (error) {
       console.error('Error fetching activity:', error);
@@ -424,7 +425,7 @@ const UserContent = () => {
   // 获取用户操作统计
   const fetchOperationStats = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/user/user-operations', { headers });
+      const response = await axios.get(getApiUrl('/api/user/user-operations'), { headers });
       setOperationStats(response.data);
     } catch (error) {
       console.error('Error fetching operation statistics:', error);
@@ -460,7 +461,7 @@ const UserContent = () => {
   const handleDelete = async (userId) => {
     if (window.confirm('确定要删除此用户吗？')) {
       try {
-        await axios.delete(`http://localhost:8000/api/user/users/${userId}`, { headers });
+        await axios.delete(getApiUrl(`/api/user/users/${userId}`), { headers });
         fetchUsers();  // 重新获取用户列表
       } catch (error) {
         console.error('Error deleting user:', error);
@@ -475,14 +476,14 @@ const UserContent = () => {
       if (isEditMode) {
         // 编辑现有用户
         await axios.put(
-          `http://localhost:8000/api/user/users/${editingUser.id}`,
+          getApiUrl(`/api/user/users/${editingUser.id}`),
           formData,
           { headers }
         );
       } else {
         // 创建新用户
         await axios.post(
-          'http://localhost:8000/api/user/users',
+          getApiUrl('/api/user/users'),
           formData,
           { headers }
         );

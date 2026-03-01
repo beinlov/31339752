@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { getApiUrl } from '../config/api';
 import * as d3 from 'd3';
 
 const ViewerContainer = styled.div`
@@ -401,7 +402,7 @@ const AsruexLogViewer = () => {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/asruex/logs');
+      const response = await fetch(getApiUrl('/api/asruex/logs'));
       const data = await response.json();
       
       const groupedSessions = groupLogsIntoSessions(data);

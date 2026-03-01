@@ -631,6 +631,61 @@ async def get_industry_distribution():
     return {"data": results}
 
 
+@app.get("/api/active-botnet-communications")
+async def get_active_botnet_communications(botnet_type: str = 'asruex'):
+    """获取活跃僵尸节点通信记录 - 从指定的botnet_communications_*表查询"""
+    def _query_database():
+        conn = None
+        cursor = None
+        try:
+            conn = pymysql.connect(**DB_CONFIG)
+            cursor = conn.cursor(DictCursor)
+
+            # 验证僵尸网络类型
+            if botnet_type not in ALLOWED_BOTNET_TYPES:
+                logger.warning(f"Invalid botnet type: {botnet_type}")
+                return []
+            
+            table_name = f"botnet_communications_{botnet_type}"
+            
+            # 检查表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables 
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], table_name))
+            
+            if cursor.fetchone()['count'] == 0:
+                logger.warning(f"Table {table_name} does not exist")
+                return []
+            
+            # 查询指定表的最新通信记录
+            query = f"""
+                SELECT 
+                    DATE_FORMAT(communication_time, '%Y-%m-%d %H:%i:%s') as time,
+                    ip,
+                    COALESCE(country, '未知') as country
+                FROM {table_name}
+                ORDER BY communication_time DESC
+                LIMIT 20
+            """
+            
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching active botnet communications for {botnet_type}: {e}")
+            return []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _query_database)
+
+
 @app.get("/api/user-events")
 async def get_user_events():
     """获取用户事件 - 使用线程池避免阻塞事件循环"""

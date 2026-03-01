@@ -2,6 +2,7 @@ import React, { PureComponent } from 'react';
 import Chart from '../../../utils/chart';
 import { affectedOptions } from './options';
 import request from '../../../utils/request';
+import { getApiUrl } from '../../../config/api';
 import { connect } from 'dva';  // 添加 connect 以获取全局状态
 
 class AffectedSituation extends PureComponent {
@@ -129,7 +130,7 @@ class AffectedSituation extends PureComponent {
   fetchCountryData = async (botnetType) => {
     try {
       const network = botnetType || this.props.selectedNetwork;
-      const url = `http://localhost:8000/api/world-amounts?botnet_type=${network}`;
+      const url = getApiUrl(`/api/world-amounts?botnet_type=${network}`);
       const response = await request(url);
       
       if (response) {

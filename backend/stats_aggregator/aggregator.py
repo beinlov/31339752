@@ -127,13 +127,13 @@ class StatsAggregator:
             cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS {temp_table}")
             cursor.execute(f"""
                 CREATE TEMPORARY TABLE {temp_table} (
-                    province VARCHAR(100),
-                    municipality VARCHAR(100),
+                    province VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
+                    municipality VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
                     infected_num INT,
                     created_at DATETIME,
                     updated_at DATETIME,
                     PRIMARY KEY (province, municipality)
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
             """)
             
             # Step 1.2: 聚合到临时表（优化：简化字符串操作）
@@ -150,18 +150,19 @@ class StatsAggregator:
                     MAX(t.updated_at) as updated_at
                 FROM (
                     SELECT 
-                        COALESCE(
-                            TRIM(TRAILING '省' FROM 
-                            TRIM(TRAILING '市' FROM 
-                            TRIM(TRAILING '自治区' FROM 
-                            REPLACE(REPLACE(REPLACE(
-                                province, 
-                                '壮族自治区', '自治区'), 
-                                '回族自治区', '自治区'), 
-                                '维吾尔自治区', '自治区')
-                            ))), 
-                            '未知'
-                        ) as province,
+                        -- 显式标准化省份名称，确保自治区格式统一
+                        CASE
+                            WHEN province IN ('内蒙古自治区', '内蒙古壮族自治区') THEN '内蒙古'
+                            WHEN province IN ('广西自治区', '广西壮族自治区') THEN '广西'
+                            WHEN province = '西藏自治区' THEN '西藏'
+                            WHEN province IN ('宁夏自治区', '宁夏回族自治区') THEN '宁夏'
+                            WHEN province IN ('新疆自治区', '新疆维吾尔自治区') THEN '新疆'
+                            ELSE COALESCE(
+                                TRIM(TRAILING '省' FROM 
+                                TRIM(TRAILING '市' FROM province)),
+                                '未知'
+                            )
+                        END as province,
                         COALESCE(
                             TRIM(TRAILING '市' FROM city),
                             '未知'
@@ -221,11 +222,11 @@ class StatsAggregator:
             cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS {temp_global_table}")
             cursor.execute(f"""
                 CREATE TEMPORARY TABLE {temp_global_table} (
-                    country VARCHAR(100) PRIMARY KEY,
+                    country VARCHAR(100) COLLATE utf8mb4_0900_ai_ci PRIMARY KEY,
                     infected_num INT,
                     created_at DATETIME,
                     updated_at DATETIME
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
             """)
             
             # Step 2.2: 聚合到临时表

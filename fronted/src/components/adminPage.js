@@ -12,6 +12,7 @@ import NodeDistribution from './NodeDistribution';
 import ServerManagement from './ServerManagement';
 import SuppressionStrategy from './SuppressionStrategy';
 import axios from 'axios';
+import { getApiUrl } from '../config/api';
 
 const { Option } = Select;
 
@@ -362,9 +363,23 @@ const AdminPage = ({ history }) => {
     fetchNetworkTypes();
   }, []);
 
+  // 检查是否有初始菜单参数（用于免登录接口直接跳转到指定功能）
+  useEffect(() => {
+    const initialMenu = localStorage.getItem('initialMenu');
+    if (initialMenu) {
+      console.log('Detected initial menu parameter:', initialMenu);
+      // 延迟执行以确保组件已完全加载
+      setTimeout(() => {
+        handleMenuClick(initialMenu);
+        // 清除已使用的参数
+        localStorage.removeItem('initialMenu');
+      }, 100);
+    }
+  }, [networkTypes]); // 依赖 networkTypes 确保数据已加载
+
   const fetchNetworkTypes = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/botnet-types');
+      const response = await axios.get(getApiUrl('/api/botnet-types'));
       if (response.data.status === 'success') {
         setNetworkTypes(response.data.data);
       }
