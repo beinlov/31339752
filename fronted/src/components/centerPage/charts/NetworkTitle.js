@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import axios from 'axios';
+import { getApiUrl } from '../../../config/api';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(-10px); }
@@ -88,7 +89,7 @@ const NetworkTitle = ({ selectedNetwork }) => {
   useEffect(() => {
     const fetchNetworkInfo = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/botnet-info');
+        const response = await axios.get(getApiUrl('/api/botnet-info'));
         if (response.data.status === 'success') {
           setNetworkInfo(response.data.data);
         }

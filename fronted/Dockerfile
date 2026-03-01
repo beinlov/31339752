@@ -16,6 +16,12 @@ RUN npm install --registry=https://registry.npmmirror.com
 # 复制源代码
 COPY . .
 
+# 定义构建参数（可在构建时传入）
+ARG VITE_API_BASE_URL=""
+
+# 设置环境变量供Vite构建使用
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # 构建生产版本
 RUN npm run build
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
+import { getApiUrl } from '../config/api';
 
 const Container = styled.div`
   padding: 40px 50px;
@@ -428,7 +429,7 @@ const BotnetRegistration = () => {
       console.log('发送请求，token:', token ? '存在' : '不存在');
       console.log('请求数据:', { ...formData, table_name });
       
-      const response = await axios.post('http://localhost:8000/api/botnet-types', {
+      const response = await axios.post(getApiUrl('/api/botnet-types'), {
         ...formData,
         table_name,
         clean_methods: ["clear", "suppress"]  // 默认清理方法

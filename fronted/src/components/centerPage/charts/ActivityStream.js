@@ -2,6 +2,7 @@ import React, { PureComponent } from 'react';
 import { userOptions } from './options';
 import { ScrollBoard } from '@jiaminghi/data-view-react';
 import request from '../../../utils/request';
+import { getApiUrl } from '../../../config/api';
 
 
 class UserSituation extends PureComponent {
@@ -82,7 +83,7 @@ class UserSituation extends PureComponent {
     try {
       const { selectedNetwork } = this.props;
       const botnetType = (selectedNetwork || 'asruex').toString().trim().toLowerCase();
-      const response = await request(`http://localhost:8000/api/active-botnet-communications?botnet_type=${botnetType}`);
+      const response = await request(getApiUrl(`/api/active-botnet-communications?botnet_type=${botnetType}`));
 
       const rows = Array.isArray(response)
         ? response

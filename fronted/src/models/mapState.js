@@ -1,5 +1,6 @@
 import { delay } from '../utils';
 import request from '../utils/request';
+import { getApiUrl } from '../config/api';
 
 // 规范化省份名称（与options.js中的逻辑保持一致）
 const normalizeProvince = (rawName) => {
@@ -104,7 +105,7 @@ export default {
         const networkToUse = payload || state.selectedNetwork || '`asruex`';
 
         // Fetch province data
-        const response = yield call(request, `http://localhost:8000/api/province-amounts?botnet_type=${networkToUse}`);
+        const response = yield call(request, getApiUrl(`/api/province-amounts?botnet_type=${networkToUse}`));
 
         if (response) {
           yield put({
@@ -120,7 +121,7 @@ export default {
     *fetchBotnetDistribution({ payload }, { call, put, select }) {
       try {
         // Fetch botnet distribution data
-        const response = yield call(request, 'http://localhost:8000/api/botnet-distribution');
+        const response = yield call(request, getApiUrl('/api/botnet-distribution'));
 
         if (response) {
           // Update the full distribution data
@@ -153,7 +154,7 @@ export default {
         const networkToUse = payload || state.selectedNetwork || 'asruex';
 
         // Fetch world map data
-        const response = yield call(request, `http://localhost:8000/api/world-amounts?botnet_type=${networkToUse}`);
+        const response = yield call(request, getApiUrl(`/api/world-amounts?botnet_type=${networkToUse}`));
 
         if (response) {
           yield put({
@@ -182,7 +183,7 @@ export default {
 
         const response = yield call(
           request,
-          `http://localhost:8000/api/city-amounts/${encodeURIComponent(shortName)}?botnet_type=${networkToUse}`
+          getApiUrl(`/api/city-amounts/${encodeURIComponent(shortName)}?botnet_type=${networkToUse}`)
         );
 
         if (response && response.data) {

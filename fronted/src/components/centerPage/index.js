@@ -9,6 +9,7 @@ import { Select } from 'antd';
 import { ModuleTitle } from '../../style/globalStyledSet';
 import { connect } from '../../utils/ModernConnect';
 import axios from 'axios';
+import { getApiUrl } from '../../config/api';
 import styled, { createGlobalStyle } from 'styled-components';
 
 const { Option } = Select;
@@ -244,8 +245,8 @@ class index extends PureComponent {
   fetchRankings = async () => {
     try {
       const [globalRes, chinaRes] = await Promise.all([
-        axios.get('http://localhost:8000/api/botnet-rankings', { params: { mode: 'global' } }),
-        axios.get('http://localhost:8000/api/botnet-rankings', { params: { mode: 'china' } }),
+        axios.get(getApiUrl('/api/botnet-rankings'), { params: { mode: 'global' } }),
+        axios.get(getApiUrl('/api/botnet-rankings'), { params: { mode: 'china' } }),
       ]);
 
       if (globalRes.data.status === 'success' && chinaRes.data.status === 'success') {
