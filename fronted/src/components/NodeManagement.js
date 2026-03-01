@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
+import { getApiUrl } from '../config/api';
 import StatCard from './common/StatCard';
 import ChartCard from './common/ChartCard';
 import CommunicationModal from './CommunicationModal';
@@ -534,7 +535,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 获取完整的图表统计数据
   const fetchChartStats = async () => {
     try {
-      const endpoint = `http://localhost:8000/api/node-stats/${networkType}`;
+      const endpoint = getApiUrl(`/api/node-stats/${networkType}`);
       console.log(`获取图表统计数据: ${endpoint}`);
 
       const response = await fetch(endpoint);
@@ -599,7 +600,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         params.append('time_end', timeRangeEnd);
       }
 
-      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
+      const endpoint = getApiUrl(`/api/node-details?${params.toString()}`);
       console.log(`请求接口: ${endpoint}`);
 
       const response = await fetch(endpoint);
@@ -735,7 +736,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         params.append('time_end', timeRangeEnd);
       }
 
-      const endpoint = `http://localhost:8000/api/node-details?${params.toString()}`;
+      const endpoint = getApiUrl(`/api/node-details?${params.toString()}`);
       const response = await fetch(endpoint);
 
       if (!response.ok) {

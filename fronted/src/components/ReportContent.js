@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { getApiUrl } from '../config/api';
 
 // 样式定义
 const Container = styled.div`
@@ -268,7 +269,7 @@ const ReportContent = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/api/anomaly-reports');
+      const response = await fetch(getApiUrl('/api/anomaly-reports'));
       if (!response.ok) {
         throw new Error('Failed to fetch reports');
       }

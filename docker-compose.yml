@@ -69,6 +69,11 @@ services:
     build:
       context: ./fronted
       dockerfile: Dockerfile
+      args:
+        # 构建时传入API地址
+        # 留空表示使用当前访问域名（生产环境推荐）
+        # 或指定完整地址如: http://your-domain.com:8000
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     container_name: botnet-frontend
     restart: always
     ports:

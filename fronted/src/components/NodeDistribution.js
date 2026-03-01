@@ -4,6 +4,7 @@ import { registerMap } from 'echarts/core';
 import worldJson from "../world.zh.json";
 import chinaJson from "../china.json";
 import request from '../utils/request';
+import { getApiUrl } from '../config/api';
 
 // 确保在使用地图之前完成注册
 try {
@@ -214,7 +215,7 @@ class NodeDistribution extends PureComponent {
       this.setState({ loading: true });
       
       // 首先获取统计数据
-      const statsResponse = await request(`http://localhost:8000/api/node-stats/${this.props.networkType}`);
+      const statsResponse = await request(getApiUrl(`/api/node-stats/${this.props.networkType}`));
       if (!statsResponse || !statsResponse.data) {
         throw new Error('获取统计数据失败');
       }
@@ -227,7 +228,7 @@ class NodeDistribution extends PureComponent {
         page_size: 20000
       });
       
-      const response = await request(`http://localhost:8000/api/node-details?${params.toString()}`);
+      const response = await request(getApiUrl(`/api/node-details?${params.toString()}`));
       if (!response || !response.data || !response.data.nodes) {
         throw new Error('获取节点数据失败');
       }

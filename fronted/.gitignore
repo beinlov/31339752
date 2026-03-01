@@ -9,3 +9,7 @@
 # misc
 .DS_Store
 npm-debug.log*
+
+# local env files
+.env.local
+.env.*.local

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 const Container = styled.div`
   width: 100%;
@@ -388,7 +389,7 @@ const PageInfo = styled.span`
   margin: 0 10px;
 `;
 
-const API_URL = 'http://localhost:8000';
+const API_URL = API_BASE_URL;
 
 const SuppressionStrategy = () => {
   const [activeTab, setActiveTab] = useState('port-consume');

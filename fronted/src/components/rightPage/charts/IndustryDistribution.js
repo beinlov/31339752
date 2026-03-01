@@ -1,7 +1,8 @@
 import React, { PureComponent } from 'react';
-import Chart from '../../../utils/chart';
+import Chart from '../../../components/chart';
 import { IndustryDistributionOptions } from './options';
 import request from '../../../utils/request';
+import { getApiUrl } from '../../../config/api';
 
 class IndustryDistribution extends PureComponent {
   constructor(props) {
@@ -18,7 +19,7 @@ class IndustryDistribution extends PureComponent {
 
   fetchIndustryData = async () => {
     try {
-      const response = await request('http://localhost:8000/api/industry-distribution');
+      const response = await request(getApiUrl('/api/industry-distribution'));
       if (response && response.data) {
         // 将数据转换为饼图所需格式
         const formattedData = response.data.map(item => ({

@@ -842,6 +842,25 @@ class BotnetDBWriter:
                 })
             logger.debug(f"[{self.botnet_type}] 数据准备完成: {len(prepared_nodes)} 条")
             
+            # Step 1.5: 对同一批次内的数据按IP去重（保留最新记录）
+            original_count = len(prepared_nodes)
+            ip_to_node = {}  # 使用字典去重，后面的记录会覆盖前面的
+            for item in prepared_nodes:
+                ip = item['node']['ip']
+                # 如果IP已存在，比较时间戳，保留较新的
+                if ip in ip_to_node:
+                    existing_time = ip_to_node[ip]['log_time']
+                    new_time = item['log_time']
+                    if new_time > existing_time:
+                        ip_to_node[ip] = item
+                else:
+                    ip_to_node[ip] = item
+            
+            prepared_nodes = list(ip_to_node.values())
+            dedup_count = original_count - len(prepared_nodes)
+            if dedup_count > 0:
+                logger.info(f"[{self.botnet_type}] 批次内去重: 原始 {original_count} 条, 去重后 {len(prepared_nodes)} 条, 去除 {dedup_count} 条重复")
+            
             # ========================================
             # Step 2: 优化插入/更新节点表（分离INSERT和UPDATE）
             # ========================================
@@ -894,13 +913,26 @@ class BotnetDBWriter:
                 for i in range(0, len(insert_values), batch_size):
                     batch = insert_values[i:i+batch_size]
                     
-                    # 构建真正的批量INSERT语句
+                    # 构建真正的批量INSERT语句（处理并发插入的竞态条件）
                     placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s)'] * len(batch))
                     insert_sql = f"""
                         INSERT INTO {self.node_table} 
                         (ip, longitude, latitude, country, province, city, continent, isp, asn, 
                          status, first_seen, last_seen, communication_count, is_china)
                         VALUES {placeholders}
+                        ON DUPLICATE KEY UPDATE
+                            longitude = VALUES(longitude),
+                            latitude = VALUES(latitude),
+                            country = VALUES(country),
+                            province = VALUES(province),
+                            city = VALUES(city),
+                            continent = VALUES(continent),
+                            isp = VALUES(isp),
+                            asn = VALUES(asn),
+                            status = VALUES(status),
+                            last_seen = GREATEST(last_seen, VALUES(last_seen)),
+                            communication_count = communication_count + 1,
+                            is_china = VALUES(is_china)
                     """
                     
                     # 展平参数列表
@@ -979,8 +1011,10 @@ class BotnetDBWriter:
                 node_id = ip_to_node_id.get(node['ip'])
                 
                 if node_id is None:
-                    logger.error(f"[{self.botnet_type}] Cannot find node_id for IP: {node['ip']}")
-                    continue
+                    error_msg = f"[{self.botnet_type}] CRITICAL: Cannot find node_id for IP: {node['ip']} after inserting into node table. This indicates a data consistency issue."
+                    logger.error(error_msg)
+                    # 抛出异常以触发事务回滚，保证节点表和通信表的一致性
+                    raise Exception(error_msg)
                 
                 comm_values.append((
                     node_id,

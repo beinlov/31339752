@@ -1,5 +1,5 @@
 """
-Migration script to add/update Botnet_Name field in Server_Management table
+Migration script to add/update Botnet_Name field in server_management table
 """
 import pymysql
 import sys
@@ -10,22 +10,22 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DB_CONFIG
 
 def migrate():
-    """Add or update Botnet_Name field in Server_Management table"""
+    """Add or update Botnet_Name field in server_management table"""
     try:
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
         
-        # Check if Server_Management table exists
+        # Check if server_management table exists
         cursor.execute("""
             SELECT COUNT(*) as count 
             FROM information_schema.tables 
             WHERE table_schema = %s AND table_name = %s
-        """, (DB_CONFIG['database'], 'Server_Management'))
+        """, (DB_CONFIG['database'], 'server_management'))
         
         if cursor.fetchone()[0] == 0:
-            print("Server_Management table does not exist. Creating it...")
+            print("server_management table does not exist. Creating it...")
             cursor.execute("""
-                CREATE TABLE Server_Management (
+                CREATE TABLE server_management (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     location VARCHAR(255) NOT NULL,
                     ip VARCHAR(50) NOT NULL,
@@ -38,21 +38,21 @@ def migrate():
                 )
             """)
             conn.commit()
-            print("Server_Management table created successfully with Botnet_Name field")
+            print("server_management table created successfully with Botnet_Name field")
         else:
             # Check if Botnet_Name column exists
             cursor.execute("""
                 SELECT COUNT(*) as count
                 FROM information_schema.columns
                 WHERE table_schema = %s 
-                AND table_name = 'Server_Management'
+                AND table_name = 'server_management'
                 AND column_name = 'Botnet_Name'
             """, (DB_CONFIG['database'],))
             
             if cursor.fetchone()[0] == 0:
                 print("Botnet_Name column does not exist. Adding it...")
                 cursor.execute("""
-                    ALTER TABLE Server_Management 
+                    ALTER TABLE server_management 
                     ADD COLUMN Botnet_Name VARCHAR(255) DEFAULT NULL COMMENT '所控制的僵尸网络名称'
                 """)
                 conn.commit()
@@ -61,15 +61,15 @@ def migrate():
                 print("Botnet_Name column already exists")
                 # Update column comment if needed
                 cursor.execute("""
-                    ALTER TABLE Server_Management 
+                    ALTER TABLE server_management 
                     MODIFY COLUMN Botnet_Name VARCHAR(255) DEFAULT NULL COMMENT '所控制的僵尸网络名称'
                 """)
                 conn.commit()
                 print("Botnet_Name column comment updated")
         
         # Show current table structure
-        cursor.execute("DESCRIBE Server_Management")
-        print("\nCurrent Server_Management table structure:")
+        cursor.execute("DESCRIBE server_management")
+        print("\nCurrent server_management table structure:")
         for row in cursor.fetchall():
             print(f"  {row}")
         

@@ -142,19 +142,19 @@ export const CenterBottom = styled.div`
 
   .user-situation {
     width: 100%;
-    height: 3.2rem;
-    background-color: rgba(19, 25, 47, 0.8);
+    height: 4.2rem;
+    background-color: rgba(19, 25, 47, 0.6);
     padding: 0rem;
     margin-top: 0.2rem;
     border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(52, 63, 75, 0.6);
+    border: 1px solid rgba(0, 234, 255, 0.2);
     backdrop-filter: blur(5px);
     transition: all 0.3s ease;
     
     &:hover {
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-      border-color: rgba(91, 192, 222, 0.4);
+      border-color: rgba(0, 234, 255, 0.5);
     }
     
     .user-situation-container {
@@ -169,10 +169,10 @@ export const CenterBottom = styled.div`
         font-size: 0.25rem;
         color: #fff;
         text-align: center;
-        margin-bottom: 0.22rem;
+        margin-bottom: 0.1rem;
         font-weight: 600;
         letter-spacing: 2px;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        text-shadow: 0 0 10px rgba(0, 234, 255, 0.5);
         position: relative;
         display: flex;
         align-items: center;
@@ -180,7 +180,8 @@ export const CenterBottom = styled.div`
         
         i {
           margin-right: 8px;
-          color: #4db6e5;
+          color: #00EAFF;
+          font-size: 0.28rem;
         }
         
         &:after {
@@ -189,9 +190,10 @@ export const CenterBottom = styled.div`
           bottom: -8px;
           left: 50%;
           transform: translateX(-50%);
-          width: 30%;
+          width: 60%;
           height: 2px;
-          background: linear-gradient(90deg, transparent, rgba(91, 192, 222, 0.8), transparent);
+          background: linear-gradient(90deg, transparent, rgba(0, 234, 255, 0.8), transparent);
+          box-shadow: 0 0 10px rgba(0, 234, 255, 0.5);
         }
       }
       
@@ -205,8 +207,8 @@ export const CenterBottom = styled.div`
           width: 20px;
           height: 20px;
           margin-right: 10px;
-          border: 2px solid rgba(91, 192, 222, 0.3);
-          border-top-color: #4db6e5;
+          border: 2px solid rgba(0, 234, 255, 0.3);
+          border-top-color: #00EAFF;
           border-radius: 50%;
           animation: ${rotate} 1s linear infinite;
         }
@@ -216,36 +218,37 @@ export const CenterBottom = styled.div`
     :global {
       .dv-scroll-board {
         width: 100% !important;
-        height: calc(100% - 40px) !important;
+        height: calc(100% - 20px) !important;
         
         .header {
           display: flex !important;
-          font-size: 14px !important;
+          font-size: 20px !important;
           font-weight: bold;
-          background: rgba(15, 19, 37, 0.9) !important;
-          color: #BCDCFF;
+          background: rgba(0, 21, 41, 0.5) !important;
+          color: #00EAFF;
           width: 100% !important;
-          height: 35px !important;
-          line-height: 35px !important;
-          border-bottom: 1px solid rgba(91, 192, 222, 0.3);
+          height: 60px !important;
+          line-height: 60px !important;
+          border-bottom: 1px solid rgba(0, 234, 255, 0.2);
           box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
           backdrop-filter: blur(5px);
+          margin-bottom: 5px;
         }
         
         .rows {
-          font-size: 14px !important;
-          color: #E6EFF8;
           width: 100% !important;
 
           .row-item {
-            height: 45px !important;
-            line-height: 45px !important;
+            height: 70px !important;
+            line-height: 70px !important;
+            background-color: transparent !important;
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            margin-bottom: 2px;
             
             &:hover {
-              background-color: rgba(91, 192, 222, 0.1) !important;
+              background-color: rgba(0, 234, 255, 0.1) !important;
               
               &:before {
                 content: '';
@@ -257,7 +260,7 @@ export const CenterBottom = styled.div`
                 background: linear-gradient(
                   90deg,
                   transparent,
-                  rgba(91, 192, 222, 0.2),
+                  rgba(0, 234, 255, 0.1),
                   transparent
                 );
                 animation: ${shimmer} 1.5s ease-in-out;
@@ -276,8 +279,7 @@ export const CenterBottom = styled.div`
           overflow: hidden;
           text-overflow: ellipsis;
           min-width: 0;
-          height: 45px !important;
-          line-height: 45px !important;
+          font-size: 20px !important;
         }
 
         .header-item {
@@ -286,10 +288,11 @@ export const CenterBottom = styled.div`
           justify-content: center;
           flex: 1;
           padding: 0 10px;
-          height: 35px !important;
-          line-height: 35px !important;
-          letter-spacing: 1px;
-          font-weight: 600;
+          height: 60px !important;
+          line-height: 60px !important;
+          letter-spacing: 2px;
+          font-weight: bold;
+          font-size: 22px !important;
         }
       }
     }

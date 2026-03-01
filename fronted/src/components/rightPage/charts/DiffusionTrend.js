@@ -3,6 +3,7 @@ import { connect } from '../../../utils/ModernConnect';
 import Chart from '../../../utils/chart';
 import { DiffusionTrendOptions } from './options';
 import request from '../../../utils/request';
+import { getApiUrl } from '../../../config/api';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import {
@@ -89,7 +90,7 @@ class DiffusionTrend extends PureComponent {
       }
       
       const response = await request(
-        `http://localhost:8000/api/node-count-history/${selectedNetwork}?${queryParams}`
+        getApiUrl(`/api/node-count-history/${selectedNetwork}?${queryParams}`)
       );
       
       if (response && Array.isArray(response)) {

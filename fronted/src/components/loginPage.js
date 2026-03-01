@@ -3,6 +3,7 @@ import { withRouter } from 'dva/router';
 import styled, { keyframes } from 'styled-components';
 import backgroundImage from '../assets/pageBg.png';
 import axios from 'axios';
+import { getApiUrl } from '../config/api';
 
 const pulseBackground = keyframes`
   0% {
@@ -360,6 +361,7 @@ const LoginPage = ({ history }) => {
       const urlParams = new URLSearchParams(window.location.search);
       const urlUsername = urlParams.get('username');
       const urlPassword = urlParams.get('password');
+      const menuParam = urlParams.get('menu'); // 获取要跳转的菜单参数
 
       if (urlUsername && urlPassword) {
         console.log('Auto-login detected with URL parameters');
@@ -367,7 +369,7 @@ const LoginPage = ({ history }) => {
         
         try {
           const response = await axios.get(
-            `http://localhost:8000/api/user/auto-login?username=${encodeURIComponent(urlUsername)}&password=${encodeURIComponent(urlPassword)}`
+            getApiUrl(`/api/user/auto-login?username=${encodeURIComponent(urlUsername)}&password=${encodeURIComponent(urlPassword)}`)
           );
 
           console.log('Auto-login response:', response.data);
@@ -378,6 +380,12 @@ const LoginPage = ({ history }) => {
           localStorage.setItem('token', access_token);
           localStorage.setItem('role', role);
           localStorage.setItem('username', loggedInUsername);
+
+          // 如果有menu参数，保存到localStorage供AdminPage使用
+          if (menuParam && role === '管理员') {
+            localStorage.setItem('initialMenu', menuParam);
+            console.log('Saved initial menu:', menuParam);
+          }
 
           // 清除URL参数（安全考虑）
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -425,7 +433,7 @@ const LoginPage = ({ history }) => {
       });
 
       const response = await axios.post(
-        'http://localhost:8000/api/user/login',
+        getApiUrl('/api/user/login'),
         formData.toString(),
         {
           headers: {

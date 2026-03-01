@@ -56,12 +56,12 @@ def init_server_table():
             SELECT COUNT(*) as count 
             FROM information_schema.tables 
             WHERE table_schema = %s AND table_name = %s
-        """, (DB_CONFIG['database'], "Server_Management"))
+        """, (DB_CONFIG['database'], "server_management"))
         
         if cursor.fetchone()[0] == 0:
             # 创建表
             cursor.execute("""
-                CREATE TABLE Server_Management (
+                CREATE TABLE server_management (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     location VARCHAR(255) NOT NULL,
                     ip VARCHAR(50) NOT NULL,
@@ -74,7 +74,7 @@ def init_server_table():
                 )
             """)
             conn.commit()
-            logger.info("Server_Management table created successfully")
+            logger.info("server_management table created successfully")
         
     except Exception as e:
         logger.error(f"Error initializing server table: {e}")
@@ -98,12 +98,12 @@ async def get_servers(
         cursor = conn.cursor(DictCursor)
         
         # 获取总记录数
-        cursor.execute("SELECT COUNT(*) as total FROM Server_Management")
+        cursor.execute("SELECT COUNT(*) as total FROM server_management")
         total_count = cursor.fetchone()['total']
         
         # 获取分页数据
         cursor.execute("""
-            SELECT * FROM Server_Management
+            SELECT * FROM server_management
             ORDER BY id DESC
             LIMIT %s OFFSET %s
         """, (page_size, (page - 1) * page_size))
@@ -169,7 +169,7 @@ async def get_server(server_id: int):
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor(DictCursor)
         
-        cursor.execute("SELECT * FROM Server_Management WHERE id = %s", (server_id,))
+        cursor.execute("SELECT * FROM server_management WHERE id = %s", (server_id,))
         server = cursor.fetchone()
         
         if not server:
@@ -220,7 +220,7 @@ async def create_server(server: CreateServerRequest):
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO Server_Management (location, ip, domain, status, os, Botnet_Name)
+            INSERT INTO server_management (location, ip, domain, status, os, Botnet_Name)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (server.location, server.ip, server.domain, server.status, server.os, server.botnet_name))
         
@@ -252,7 +252,7 @@ async def update_server(server_id: int, server_update: UpdateServerRequest):
         cursor = conn.cursor()
         
         # 检查服务器是否存在
-        cursor.execute("SELECT COUNT(*) FROM Server_Management WHERE id = %s", (server_id,))
+        cursor.execute("SELECT COUNT(*) FROM server_management WHERE id = %s", (server_id,))
         if cursor.fetchone()[0] == 0:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
         
@@ -293,8 +293,8 @@ async def update_server(server_id: int, server_update: UpdateServerRequest):
         # 执行更新
         params.append(server_id)
         cursor.execute(f"""
-            UPDATE Server_Management
-            SET {", ".join(update_fields)}
+            UPDATE server_management
+            SET {', '.join(update_fields)}
             WHERE id = %s
         """, tuple(params))
         
@@ -324,12 +324,12 @@ async def delete_server(server_id: int):
         cursor = conn.cursor()
         
         # 检查服务器是否存在
-        cursor.execute("SELECT COUNT(*) FROM Server_Management WHERE id = %s", (server_id,))
+        cursor.execute("SELECT COUNT(*) FROM server_management WHERE id = %s", (server_id,))
         if cursor.fetchone()[0] == 0:
             raise HTTPException(status_code=404, detail=f"Server with ID {server_id} not found")
         
         # 执行删除
-        cursor.execute("DELETE FROM Server_Management WHERE id = %s", (server_id,))
+        cursor.execute("DELETE FROM server_management WHERE id = %s", (server_id,))
         conn.commit()
         
         return {
