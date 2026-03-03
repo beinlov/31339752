@@ -28,7 +28,7 @@ services:
     networks:
       - botnet-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pMatrix123"]
       interval: 10s
       timeout: 5s
       retries: 5
