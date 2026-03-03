@@ -191,15 +191,27 @@ const StatusBadge = styled.span`
   font-size: 12px;
   font-weight: 500;
   
-  ${props => props.status === 'active' ? `
-    background: rgba(76, 175, 80, 0.2);
-    color: #81c784;
-    border: 1px solid rgba(76, 175, 80, 0.3);
-  ` : `
-    background: rgba(158, 158, 158, 0.2);
-    color: #9e9e9e;
-    border: 1px solid rgba(158, 158, 158, 0.3);
-  `}
+  ${props => {
+    if (props.status === 'active') {
+      return `
+        background: rgba(76, 175, 80, 0.2);
+        color: #81c784;
+        border: 1px solid rgba(76, 175, 80, 0.3);
+      `;
+    } else if (props.status === 'cleaned') {
+      return `
+        background: rgba(255, 152, 0, 0.2);
+        color: #ffb74d;
+        border: 1px solid rgba(255, 152, 0, 0.3);
+      `;
+    } else {
+      return `
+        background: rgba(158, 158, 158, 0.2);
+        color: #9e9e9e;
+        border: 1px solid rgba(158, 158, 158, 0.3);
+      `;
+    }
+  }}
 `;
 
 // 分页栏
@@ -391,7 +403,7 @@ const CommunicationModal = ({ ip, botnetType, onClose }) => {
                     <td>{comm.isp || '-'}</td>
                     <td className="status">
                       <StatusBadge status={comm.status}>
-                        {comm.status === 'active' ? '在线' : '离线'}
+                        {comm.status === 'active' ? '在线' : comm.status === 'cleaned' ? '已清除' : '离线'}
                       </StatusBadge>
                     </td>
                     <td className="time">{formatTime(comm.received_at)}</td>

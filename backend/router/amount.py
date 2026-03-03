@@ -17,8 +17,10 @@ router = APIRouter()
 
 class BotnetDistribution(BaseModel):
     name: str
-    china_amount: int 
-    global_amount: int
+    china_active: int
+    global_active: int
+    china_cleaned: int
+    global_cleaned: int
 
 @router.get("/botnet-distribution", response_model=List[BotnetDistribution])
 async def get_botnet_distribution():
@@ -37,30 +39,36 @@ async def get_botnet_distribution():
             botnet_name = botnet['name']
             
             try:
-                # 计算中国总量
+                # 计算中国总量（只包括active、cleaned）
                 china_query = f"""
-                    SELECT COALESCE(SUM(infected_num), 0) as china_total
+                    SELECT 
+                        COALESCE(SUM(active_num), 0) as china_active,
+                        COALESCE(SUM(cleaned_num), 0) as china_cleaned
                     FROM china_botnet_{botnet_name}
                 """
                 cursor.execute(china_query)
-                china_total = cursor.fetchone()['china_total']
+                china_result = cursor.fetchone()
                 
-                # 计算全球总量
+                # 计算全球总量（只包括active、cleaned）
                 global_query = f"""
-                    SELECT COALESCE(SUM(infected_num), 0) as global_total
+                    SELECT 
+                        COALESCE(SUM(active_num), 0) as global_active,
+                        COALESCE(SUM(cleaned_num), 0) as global_cleaned
                     FROM global_botnet_{botnet_name}
                 """
                 cursor.execute(global_query)
-                global_total = cursor.fetchone()['global_total']
+                global_result = cursor.fetchone()
                 
                 # 添加到响应数据
                 response_data.append({
                     "name": botnet_name,
-                    "china_amount": int(china_total),
-                    "global_amount": int(global_total)
+                    "china_active": int(china_result['china_active']),
+                    "global_active": int(global_result['global_active']),
+                    "china_cleaned": int(china_result['china_cleaned']),
+                    "global_cleaned": int(global_result['global_cleaned'])
                 })
                 
-                logger.info(f"Botnet {botnet_name} stats - China: {china_total}, Global: {global_total}")
+                logger.info(f"Botnet {botnet_name} stats - Active: C{china_result['china_active']}/G{global_result['global_active']}, Cleaned: C{china_result['china_cleaned']}/G{global_result['global_cleaned']}")
             
             except Exception as e:
                 # 如果表不存在或查询失败，跳过该僵尸网络并记录警告
@@ -97,16 +105,21 @@ async def get_city_amounts(province_name: str, botnet_type: str = None):
         # 使用china_botnet_xxx表
         china_table = f"china_botnet_{botnet_type}"
         
-        # 获取该省份下所有城市的感染数据，使用 GROUP BY 去重
+        # 获取该省份下所有城市的active和cleaned数据，使用 GROUP BY 去重
+        # 只统计active和cleaned状态，不统计inactive
+        # 使用组合索引 idx_province_municipality 优化查询性能
         cursor.execute(f"""
             SELECT 
                 municipality as city,
-                SUM(infected_num) as total
+                SUM(active_num) as active_total,
+                SUM(cleaned_num) as cleaned_total
             FROM {china_table}
             WHERE province = %s 
             AND municipality IS NOT NULL
+            AND municipality != ''
             GROUP BY municipality
-            ORDER BY municipality
+            ORDER BY active_total DESC, cleaned_total DESC
+            LIMIT 100
         """, (province_name,))
         
         city_data = cursor.fetchall()
@@ -114,9 +127,11 @@ async def get_city_amounts(province_name: str, botnet_type: str = None):
             botnet_type: [
                 {
                     "city": city,
-                    "amount": int(total)
+                    "active": int(active_total) if active_total else 0,
+                    "cleaned": int(cleaned_total) if cleaned_total else 0,
+                    "amount": int(active_total or 0) + int(cleaned_total or 0)  # 总数 = active + cleaned
                 }
-                for city, total in city_data
+                for city, active_total, cleaned_total in city_data
             ]
         }
 

@@ -478,7 +478,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   const [isSelectAllActive, setIsSelectAllActive] = useState(false);
   const [isSelectAllLoading, setIsSelectAllLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [networkType, setNetworkType] = useState(propNetworkType || 'utg-q-008');
+  const [networkType, setNetworkType] = useState(propNetworkType || 'utg_q_008');
   const [error, setError] = useState(null);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -635,13 +635,25 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       const formattedNodes = Array.from(mapByIp.values()).map(node => {
         const lastSeenRaw = node.last_active;
         const activeTimeRaw = node.active_time;
+        
+        // 根据status字段设置显示文本
+        let statusText;
+        if (node.status === 'active') {
+          statusText = '在线';
+        } else if (node.status === 'cleaned') {
+          statusText = '已清除';
+        } else {
+          statusText = '离线';
+        }
+        
         return {
           id: node.id,
           ip: node.ip,
           country: node.country || '未知',
           province: node.province || '',
           city: node.city || '',
-          status: node.status === 'active' ? '在线' : '下线',
+          status: statusText,
+          rawStatus: node.status, // 保存原始状态用于判断
           longitude: node.longitude,
           latitude: node.latitude,
           lastSeen: lastSeenRaw,
@@ -971,7 +983,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
             {displayedNodes.map(node => (
               <TableRow 
                 key={node.id} 
-                disabled={node.status === '下线'}
+                disabled={node.status === '离线' || node.status === '已清除'}
                 onClick={(e) => {
                   // 避免点击复选框时触发
                   if (!e.target.closest('input[type="checkbox"]') && !e.target.closest('.ip-copy')) {
@@ -984,7 +996,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
                   <Checkbox
                     checked={selectedNodes.includes(node.id)}
                     onChange={() => handleNodeSelect(node.id)}
-                    disabled={node.status === '下线'}
+                    disabled={node.status === '离线' || node.status === '已清除'}
                   />
                 </div>
                 <div>

@@ -21,7 +21,8 @@ class index extends PureComponent {
       onSwitchMap,
       affectedData,
       selectedNetwork,
-      currentMap
+      currentMap,
+      displayMode
     } = this.props;
 
     const MapComponent = isSwapped ? Map : WorldMap;
@@ -36,10 +37,10 @@ class index extends PureComponent {
                 <i className='iconfont'>&#xe78f;</i>
                 <span>
                   {isSwapped 
-                    ? '各国家受影响情况--僵尸节点数量/个'
+                    ? `各国家受影响情况--${displayMode === 'cleaned' ? '已清理节点数量' : '活跃节点数量'}/个`
                     : currentMap === 'china'
-                      ? '各省(市)受影响情况--僵尸节点数量/个'
-                      : `${currentMap}各城市受影响情况--僵尸节点数量/个`
+                      ? `各省(市)受影响情况--${displayMode === 'cleaned' ? '已清理节点数量' : '活跃节点数量'}/个`
+                      : `${currentMap}各城市受影响情况--${displayMode === 'cleaned' ? '已清理节点数量' : '活跃节点数量'}/个`
                   }
                 </span>
               </ModuleTitle>
@@ -81,7 +82,8 @@ const mapStateToProps = state => ({
   isSwapped: state.mapPosition.isSwapped,
   affectedData: state.leftPage.affectedData,
   selectedNetwork: state.mapState.selectedNetwork,
-  currentMap: state.mapState.currentMap
+  currentMap: state.mapState.currentMap,
+  displayMode: state.mapState.displayMode
 });
 
 export default connect(mapStateToProps)(index);

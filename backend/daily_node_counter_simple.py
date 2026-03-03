@@ -43,14 +43,10 @@ def count_and_record_nodes():
                     logger.warning(f"[跳过] {botnet_type}: 节点表不存在")
                     continue
                 
-                # 统计全球节点总数
-                cursor.execute(f"SELECT COUNT(*) as total FROM {node_table}")
-                result = cursor.fetchone()
-                global_count = result['total'] if result else 0
-                
-                # 从global_botnet表读取中国节点数
+                # 从global_botnet表读取全球active和cleaned节点数
                 global_table = f"global_botnet_{botnet_type}"
-                china_count = 0
+                global_active = 0
+                global_cleaned = 0
                 
                 cursor.execute(f"""
                     SELECT COUNT(*) as count 
@@ -60,33 +56,65 @@ def count_and_record_nodes():
                 """, (global_table,))
                 
                 if cursor.fetchone()['count'] > 0:
-                    # 查询infected_num字段为"中国"的记录
+                    # 统计全球active和cleaned节点数
                     cursor.execute(f"""
-                        SELECT infected_num 
-                        FROM {global_table} 
-                        WHERE country = '中国'
+                        SELECT 
+                            COALESCE(SUM(active_num), 0) as total_active,
+                            COALESCE(SUM(cleaned_num), 0) as total_cleaned
+                        FROM {global_table}
                     """)
                     result = cursor.fetchone()
-                    if result and result['infected_num']:
-                        china_count = int(result['infected_num'])
+                    if result:
+                        global_active = int(result['total_active'])
+                        global_cleaned = int(result['total_cleaned'])
                 else:
-                    logger.warning(f"[警告] {botnet_type}: global_botnet表不存在，中国节点数设为0")
+                    logger.warning(f"[警告] {botnet_type}: global_botnet表不存在")
+                
+                # 从china_botnet表读取中国active和cleaned节点数
+                china_table = f"china_botnet_{botnet_type}"
+                china_active = 0
+                china_cleaned = 0
+                
+                cursor.execute(f"""
+                    SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = %s
+                """, (china_table,))
+                
+                if cursor.fetchone()['count'] > 0:
+                    # 统计中国active和cleaned节点数
+                    cursor.execute(f"""
+                        SELECT 
+                            COALESCE(SUM(active_num), 0) as total_active,
+                            COALESCE(SUM(cleaned_num), 0) as total_cleaned
+                        FROM {china_table}
+                    """)
+                    result = cursor.fetchone()
+                    if result:
+                        china_active = int(result['total_active'])
+                        china_cleaned = int(result['total_cleaned'])
+                else:
+                    logger.warning(f"[警告] {botnet_type}: china_botnet表不存在")
                 
                 # 写入或更新timeset表
                 timeset_table = f"botnet_timeset_{botnet_type}"
                 cursor.execute(f"""
-                    INSERT INTO {timeset_table} (date, global_count, china_count)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO {timeset_table} (date, china_active, global_active, china_cleaned, global_cleaned)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON DUPLICATE KEY UPDATE 
-                        global_count = %s, 
-                        china_count = %s,
+                        china_active = %s,
+                        global_active = %s,
+                        china_cleaned = %s,
+                        global_cleaned = %s,
                         updated_at = CURRENT_TIMESTAMP
-                """, (today, global_count, china_count, global_count, china_count))
+                """, (today, china_active, global_active, china_cleaned, global_cleaned,
+                      china_active, global_active, china_cleaned, global_cleaned))
                 
                 conn.commit()
-                logger.info(f"[成功] {botnet_type}: 全球 {global_count:,} 个节点, 中国 {china_count:,} 个节点")
+                logger.info(f"[成功] {botnet_type}: 全球活跃 {global_active:,}, 全球清理 {global_cleaned:,}, 中国活跃 {china_active:,}, 中国清理 {china_cleaned:,}")
                 success_count += 1
-                total_nodes += global_count
+                total_nodes += global_active
                 
             except Exception as e:
                 logger.error(f"[失败] {botnet_type}: {e}")

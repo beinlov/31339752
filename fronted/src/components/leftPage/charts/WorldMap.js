@@ -28,6 +28,7 @@ class WorldMap extends PureComponent {
     if (prevProps.selectedNetwork !== this.props.selectedNetwork ||
         prevProps.worldData !== this.props.worldData ||
         prevProps.mapData !== this.props.mapData ||
+        prevProps.displayMode !== this.props.displayMode ||
         prevProps.isLeftPage !== this.props.isLeftPage) {
       this.updateChart();
     }
@@ -37,6 +38,9 @@ class WorldMap extends PureComponent {
     if (this.chart) {
       this.chart.dispose();
       this.chart = null;
+    }
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
     }
   }
 
@@ -50,18 +54,27 @@ class WorldMap extends PureComponent {
   updateChart = () => {
     if (!this.chart) return;
 
-    const { worldData, selectedNetwork, mapData, isLeftPage } = this.props;
-    if (!worldData) return;
+    // 清除之前的更新定时器
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+    }
 
-    const networkToUse = selectedNetwork || 'utg-q-008';
-    const countryData = worldData[networkToUse] || [];
+    // 使用防抖，避免频繁更新
+    this.updateTimer = setTimeout(() => {
+      const { worldData, selectedNetwork, mapData, isLeftPage, displayMode } = this.props;
+      if (!worldData) return;
 
-    const option = worldMapOptions({
-      ...mapData,
-      countryData
-    }, isLeftPage !== false);
+      const networkToUse = selectedNetwork || 'utg_q_008';
+      const countryData = worldData[networkToUse] || [];
 
-    this.chart.setOption(option);
+      const option = worldMapOptions({
+        ...mapData,
+        countryData
+      }, isLeftPage !== false, displayMode || 'active');
+
+      // 使用notMerge: false来提升性能，只更新变化的部分
+      this.chart.setOption(option, { notMerge: false, lazyUpdate: true });
+    }, 100); // 100ms防抖延迟
   };
 
   render() {
@@ -124,8 +137,9 @@ class WorldMap extends PureComponent {
 
 // 从全局状态中获取选择的网络类型和世界数据
 const mapStateToProps = state => ({
-  selectedNetwork: state.mapState.selectedNetwork || 'utg-q-008',
-  worldData: state.mapState.worldData
+  selectedNetwork: state.mapState.selectedNetwork || 'utg_q_008',
+  worldData: state.mapState.worldData,
+  displayMode: state.mapState.displayMode
 });
 
 export default connect(mapStateToProps)(WorldMap);

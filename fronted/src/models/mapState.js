@@ -29,11 +29,14 @@ export default {
 
   state: {
     currentMap: 'china',
-    selectedNetwork: 'utg-q-008',
+    selectedNetwork: 'utg_q_008',
     botnetData: {
-      china_amount: 0,
-      global_amount: 0
+      china_active: 0,
+      global_active: 0,
+      china_cleaned: 0,
+      global_cleaned: 0
     },
+    displayMode: 'active', // 'active' or 'cleaned' - 默认显示活跃节点
     showFlyLines: false,
     provinceData: null,  // Store province data here
     lastFetchTime: 0,     // Track last fetch time
@@ -55,6 +58,9 @@ export default {
     },
     updateBotnetData(state, { payload }) {
       return { ...state, botnetData: payload };
+    },
+    setDisplayMode(state, { payload }) {
+      return { ...state, displayMode: payload };
     },
     triggerFlyLines(state, { payload }) {
       return { ...state, showFlyLines: payload };
@@ -102,7 +108,7 @@ export default {
     *fetchProvinceData({ payload }, { call, put, select }) {
       try {
         const state = yield select(state => state.mapState);
-        const networkToUse = payload || state.selectedNetwork || 'utg-q-008';
+        const networkToUse = payload || state.selectedNetwork || 'utg_q_008';
 
         // Fetch province data
         const response = yield call(request, getApiUrl(`/api/province-amounts?botnet_type=${networkToUse}`));
@@ -132,10 +138,12 @@ export default {
 
           // Also update the selected network's data
           const state = yield select(state => state.mapState);
-          const networkToUse = payload || state.selectedNetwork || 'utg-q-008';
+          const networkToUse = payload || state.selectedNetwork || 'utg_q_008';
           const matchedData = response.find(item => item.name === networkToUse) || {
-            china_amount: 0,
-            global_amount: 0
+            china_active: 0,
+            global_active: 0,
+            china_cleaned: 0,
+            global_cleaned: 0
           };
 
           yield put({
@@ -151,7 +159,7 @@ export default {
     *fetchWorldData({ payload }, { call, put, select }) {
       try {
         const state = yield select(state => state.mapState);
-        const networkToUse = payload || state.selectedNetwork || 'utg-q-008';
+        const networkToUse = payload || state.selectedNetwork || 'utg_q_008';
 
         // Fetch world map data
         const response = yield call(request, getApiUrl(`/api/world-amounts?botnet_type=${networkToUse}`));
@@ -170,7 +178,7 @@ export default {
     *fetchCityData({ payload }, { call, put, select }) {
       try {
         const state = yield select(state => state.mapState);
-        const networkToUse = state.selectedNetwork || 'utg-q-008';
+        const networkToUse = state.selectedNetwork || 'utg_q_008';
         const provinceName = payload || state.currentProvince;
 
         if (!provinceName || provinceName === 'china') {

@@ -130,6 +130,8 @@ class StatsAggregator:
                     province VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
                     municipality VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
                     infected_num INT,
+                    active_num INT DEFAULT 0,
+                    cleaned_num INT DEFAULT 0,
                     created_at DATETIME,
                     updated_at DATETIME,
                     PRIMARY KEY (province, municipality)
@@ -141,11 +143,13 @@ class StatsAggregator:
             logger.info(f"[{botnet_type}] 开始聚合到临时表（这可能需要几秒钟）...")
             
             cursor.execute(f"""
-                INSERT INTO {temp_table} (province, municipality, infected_num, created_at, updated_at)
+                INSERT INTO {temp_table} (province, municipality, infected_num, active_num, cleaned_num, created_at, updated_at)
                 SELECT 
                     t.province,
                     t.municipality,
                     COUNT(DISTINCT t.ip) as infected_num,
+                    COUNT(DISTINCT CASE WHEN t.status = 'active' THEN t.ip END) as active_num,
+                    COUNT(DISTINCT CASE WHEN t.status = 'cleaned' THEN t.ip END) as cleaned_num,
                     MIN(t.created_time) as created_at,
                     MAX(t.updated_at) as updated_at
                 FROM (
@@ -168,6 +172,7 @@ class StatsAggregator:
                             '未知'
                         ) as municipality,
                         ip,
+                        status,
                         created_time,
                         updated_at
                     FROM {node_table}
@@ -193,8 +198,8 @@ class StatsAggregator:
             # Step 1.4: 插入新记录（纯INSERT，快）
             if temp_count > len(existing_keys):
                 cursor.execute(f"""
-                    INSERT INTO {china_table} (province, municipality, infected_num, created_at, updated_at)
-                    SELECT t.province, t.municipality, t.infected_num, t.created_at, t.updated_at
+                    INSERT INTO {china_table} (province, municipality, infected_num, active_num, cleaned_num, created_at, updated_at)
+                    SELECT t.province, t.municipality, t.infected_num, t.active_num, t.cleaned_num, t.created_at, t.updated_at
                     FROM {temp_table} t
                     LEFT JOIN {china_table} c ON t.province = c.province AND t.municipality = c.municipality
                     WHERE c.province IS NULL
@@ -208,6 +213,8 @@ class StatsAggregator:
                     UPDATE {china_table} c
                     INNER JOIN {temp_table} t ON c.province = t.province AND c.municipality = t.municipality
                     SET c.infected_num = t.infected_num,
+                        c.active_num = t.active_num,
+                        c.cleaned_num = t.cleaned_num,
                         c.created_at = t.created_at,
                         c.updated_at = t.updated_at
                 """)
@@ -224,6 +231,8 @@ class StatsAggregator:
                 CREATE TEMPORARY TABLE {temp_global_table} (
                     country VARCHAR(100) COLLATE utf8mb4_0900_ai_ci PRIMARY KEY,
                     infected_num INT,
+                    active_num INT DEFAULT 0,
+                    cleaned_num INT DEFAULT 0,
                     created_at DATETIME,
                     updated_at DATETIME
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
@@ -231,7 +240,7 @@ class StatsAggregator:
             
             # Step 2.2: 聚合到临时表
             cursor.execute(f"""
-                INSERT INTO {temp_global_table} (country, infected_num, created_at, updated_at)
+                INSERT INTO {temp_global_table} (country, infected_num, active_num, cleaned_num, created_at, updated_at)
                 SELECT 
                     CASE
                         WHEN country = '中国台湾' THEN '台湾'
@@ -241,6 +250,8 @@ class StatsAggregator:
                         ELSE '未知'
                     END as country,
                     COUNT(DISTINCT ip) as infected_num,
+                    COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_num,
+                    COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
@@ -259,8 +270,8 @@ class StatsAggregator:
             # Step 2.4: 插入新国家
             if temp_global_count > len(existing_countries):
                 cursor.execute(f"""
-                    INSERT INTO {global_table} (country, infected_num, created_at, updated_at)
-                    SELECT t.country, t.infected_num, t.created_at, t.updated_at
+                    INSERT INTO {global_table} (country, infected_num, active_num, cleaned_num, created_at, updated_at)
+                    SELECT t.country, t.infected_num, t.active_num, t.cleaned_num, t.created_at, t.updated_at
                     FROM {temp_global_table} t
                     LEFT JOIN {global_table} g ON t.country = g.country
                     WHERE g.country IS NULL
@@ -273,6 +284,8 @@ class StatsAggregator:
                     UPDATE {global_table} g
                     INNER JOIN {temp_global_table} t ON g.country = t.country
                     SET g.infected_num = t.infected_num,
+                        g.active_num = t.active_num,
+                        g.cleaned_num = t.cleaned_num,
                         g.created_at = t.created_at,
                         g.updated_at = t.updated_at
                 """)

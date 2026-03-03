@@ -82,7 +82,7 @@ class UserSituation extends PureComponent {
   fetchUserEvents = async () => {
     try {
       const { selectedNetwork } = this.props;
-      const botnetType = (selectedNetwork || 'utg-q-008').toString().trim().toLowerCase();
+      const botnetType = (selectedNetwork || 'utg_q_008').toString().trim().toLowerCase();
       const response = await request(getApiUrl(`/api/active-botnet-communications?botnet_type=${botnetType}`));
 
       const rows = Array.isArray(response)

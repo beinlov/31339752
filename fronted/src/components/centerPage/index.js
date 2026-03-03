@@ -229,7 +229,7 @@ const GlobalSelectStyle = createGlobalStyle`
 
 class index extends PureComponent {
   state = {
-    selectedNetwork: 'utg-q-008',  // 默认选择
+    selectedNetwork: 'utg_q_008',  // 默认选择
     rankings: { global: [], china: [] },
     activeRanking: null,
     dropdownOpen: false,
@@ -250,10 +250,10 @@ class index extends PureComponent {
       ]);
 
       if (globalRes.data.status === 'success' && chinaRes.data.status === 'success') {
-        // 自定义排序函数，确保utg-q-008排在第一位
+        // 自定义排序函数，确保utg_q_008排在第一位
         const sortWithUtgFirst = (data) => {
-          const utgItem = data.find(item => item.name === 'utg-q-008');
-          const otherItems = data.filter(item => item.name !== 'utg-q-008');
+          const utgItem = data.find(item => item.name === 'utg_q_008');
+          const otherItems = data.filter(item => item.name !== 'utg_q_008');
           return utgItem ? [utgItem, ...otherItems] : otherItems;
         };
 
@@ -265,7 +265,7 @@ class index extends PureComponent {
           loading: false
         });
       }
-      this.handleNetworkChange("utg-q-008")
+      this.handleNetworkChange("utg_q_008")
     } catch (error) {
       console.error('Error fetching botnet rankings:', error);
       this.setState({ loading: false });

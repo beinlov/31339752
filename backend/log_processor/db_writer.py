@@ -1244,6 +1244,167 @@ class BotnetDBWriter:
         
         return report
 
+    async def update_nodes_to_cleaned(self, ip_list: List[str], cleanup_time_map: Dict[str, datetime]) -> int:
+        """
+        批量更新节点状态为cleaned（在事务中执行）
+        
+        Args:
+            ip_list: 要更新的IP列表
+            cleanup_time_map: IP到清除时间的映射
+        
+        Returns:
+            实际更新的记录数
+        """
+        if not ip_list:
+            return 0
+        
+        logger.info(f"[{self.botnet_type}] [清除] 开始批量更新 {len(ip_list)} 个节点状态...")
+        start_time = time.time()
+        
+        # 将整个操作放到后台线程执行
+        if HAS_TO_THREAD:
+            updated_count = await asyncio.to_thread(
+                self._do_update_nodes_to_cleaned_sync,
+                ip_list,
+                cleanup_time_map
+            )
+        else:
+            loop = asyncio.get_event_loop()
+            updated_count = await loop.run_in_executor(
+                None,
+                self._do_update_nodes_to_cleaned_sync,
+                ip_list,
+                cleanup_time_map
+            )
+        
+        duration = time.time() - start_time
+        logger.info(
+            f"[{self.botnet_type}] [清除] 批量更新完成: "
+            f"{updated_count}/{len(ip_list)} 条, 耗时 {duration:.2f}秒"
+        )
+        
+        return updated_count
+    
+    def _do_update_nodes_to_cleaned_sync(self, ip_list: List[str], cleanup_time_map: Dict[str, datetime]) -> int:
+        """
+        同步执行批量更新状态操作（在后台线程中运行，在事务中执行）
+        
+        Args:
+            ip_list: IP列表
+            cleanup_time_map: IP到清除时间的映射
+            
+        Returns:
+            实际更新的记录数
+        """
+        conn = None
+        cursor = None
+        updated_count = 0
+        
+        try:
+            # 获取数据库连接
+            if self.use_connection_pool:
+                conn = self.connection_pool.get_connection()
+            else:
+                conn = pymysql.connect(**self.db_config)
+            
+            cursor = conn.cursor()
+            
+            # ========================================
+            # 开启事务
+            # ========================================
+            conn.begin()
+            logger.info(f"[{self.botnet_type}] [清除] 事务已开启")
+            
+            # ========================================
+            # Step 1: 检查哪些IP存在且状态为active
+            # ========================================
+            placeholders = ','.join(['%s'] * len(ip_list))
+            check_sql = f"""
+                SELECT ip FROM {self.node_table}
+                WHERE ip IN ({placeholders}) AND status = 'active'
+            """
+            cursor.execute(check_sql, ip_list)
+            active_ips = {row[0] for row in cursor.fetchall()}
+            
+            logger.info(
+                f"[{self.botnet_type}] [清除] 状态检查: "
+                f"{len(active_ips)}/{len(ip_list)} 个节点状态为active"
+            )
+            
+            if not active_ips:
+                logger.warning(f"[{self.botnet_type}] [清除] 没有需要更新的节点")
+                conn.rollback()
+                return 0
+            
+            # ========================================
+            # Step 2: 批量更新状态为cleaned
+            # ========================================
+            # 构建批量UPDATE语句
+            update_values = []
+            for ip in active_ips:
+                cleanup_time = cleanup_time_map.get(ip, datetime.now())
+                update_values.append((cleanup_time, ip))
+            
+            # 使用executemany批量更新
+            update_sql = f"""
+                UPDATE {self.node_table}
+                SET status = 'cleaned',
+                    cleaned_time = %s,
+                    updated_at = NOW()
+                WHERE ip = %s AND status = 'active'
+            """
+            
+            cursor.executemany(update_sql, update_values)
+            updated_count = cursor.rowcount
+            
+            logger.info(
+                f"[{self.botnet_type}] [清除] SQL执行完成: "
+                f"受影响行数 {updated_count}"
+            )
+            
+            # ========================================
+            # Step 3: 提交事务
+            # ========================================
+            conn.commit()
+            logger.info(f"[{self.botnet_type}] [清除] 事务已提交")
+            
+            return updated_count
+            
+        except Exception as e:
+            logger.error(
+                f"[{self.botnet_type}] [清除] 批量更新失败: {e}",
+                exc_info=True
+            )
+            
+            # 回滚事务
+            if conn:
+                try:
+                    conn.rollback()
+                    logger.warning(f"[{self.botnet_type}] [清除] 事务已回滚")
+                except Exception as rollback_error:
+                    logger.error(
+                        f"[{self.botnet_type}] [清除] 回滚失败: {rollback_error}"
+                    )
+            
+            return 0
+            
+        finally:
+            # 清理资源
+            if cursor:
+                try:
+                    cursor.close()
+                except:
+                    pass
+            
+            if conn:
+                try:
+                    if self.use_connection_pool:
+                        self.connection_pool.return_connection(conn)
+                    else:
+                        conn.close()
+                except:
+                    pass
+
     def close(self):
         """关闭写入器"""
         # 注意：不在这里刷新，因为close()通常在事件循环外调用
