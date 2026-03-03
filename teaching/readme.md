@@ -1,138 +1,124 @@
-# combined-stream
+<h1 align="center">
+Ant Design Icons
+</h1>
 
-A stream that emits multiple other streams one after another.
+<p align="center">
+⭐ The abstract node of the Ant Design SVG icons.
+</p>
 
-**NB** Currently `combined-stream` works with streams version 1 only. There is ongoing effort to switch this library to streams version 2. Any help is welcome. :) Meanwhile you can explore other libraries that provide streams2 support with more or less compatibility with `combined-stream`.
+<div align="center">
 
-- [combined-stream2](https://www.npmjs.com/package/combined-stream2): A drop-in streams2-compatible replacement for the combined-stream module.
+[![NPM version](https://img.shields.io/npm/v/@ant-design/icons-svg.svg?style=flat)](https://npmjs.org/package/@ant-design/icons-svg)
+[![NPM downloads](http://img.shields.io/npm/dm/@ant-design/icons-svg.svg?style=flat)](https://npmjs.org/package/@ant-design/icons-svg)
 
-- [multistream](https://www.npmjs.com/package/multistream): A stream that emits multiple other streams one after another.
+</div>
 
-## Installation
+Check [all icons list](https://github.com/ant-design/ant-design-icons/issues/227).
 
-``` bash
-npm install combined-stream
+## Install
+
+```bash
+# use yarn
+$ yarn add @ant-design/icons-svg
+
+# or use npm
+$ npm install @ant-design/icons-svg --save
 ```
 
-## Usage
+## Use Library Adapter
 
-Here is a simple example that shows how you can use combined-stream to combine
-two files into one:
+- React: See [@ant-design/icons](../icons-react) to learn about detail usage.
 
-``` javascript
-var CombinedStream = require('combined-stream');
-var fs = require('fs');
+## Contribution Guide 贡献指南
 
-var combinedStream = CombinedStream.create();
-combinedStream.append(fs.createReadStream('file1.txt'));
-combinedStream.append(fs.createReadStream('file2.txt'));
+See contribution guide. [English](./docs/ContributionGuide.md) ｜ [中文](./docs/ContributionGuide.zh-CN.md)
 
-combinedStream.pipe(fs.createWriteStream('combined.txt'));
+## Get started
+
+```ts
+import { AccountBookOutlined } from '@ant-design/icons-svg';
+// or
+// import AccountBookOutlined from '@ant-design/icons-svg/es/asn/AccountBookOutlined';
+
+console.log(AccountBookOutlined);
+// ==>
+// {
+//   name: 'account-book',
+//   theme: 'outlined',
+//   icon: {
+//     tag: 'svg',
+//     attrs: {
+//       viewBox: '64 64 896 896',
+//       focusable: 'false'
+//     },
+//     children: [
+//       {
+//         tag: 'path',
+//         attrs: {
+//           d:
+//             'M880 184H712v-64c0-4.4-3.6-8-8-8h- ...'
+//         }
+//       }
+//     ]
+//   }
+// };
 ```
 
-While the example above works great, it will pause all source streams until
-they are needed. If you don't want that to happen, you can set `pauseStreams`
-to `false`:
+- Interfaces
 
-``` javascript
-var CombinedStream = require('combined-stream');
-var fs = require('fs');
+This library export all SVG files as `IconDefinition`.
 
-var combinedStream = CombinedStream.create({pauseStreams: false});
-combinedStream.append(fs.createReadStream('file1.txt'));
-combinedStream.append(fs.createReadStream('file2.txt'));
+```ts
+// types.d.ts
+export declare type ThemeType = 'filled' | 'outlined' | 'twotone';
 
-combinedStream.pipe(fs.createWriteStream('combined.txt'));
+export interface AbstractNode {
+  tag: string;
+  attrs: {
+    [key: string]: string;
+  };
+  children?: AbstractNode[];
+}
+
+export interface IconDefinition {
+  name: string; // kebab-case-style
+  theme: ThemeType;
+  icon:
+    | ((primaryColor: string, secondaryColor: string) => AbstractNode)
+    | AbstractNode;
+}
 ```
 
-However, what if you don't have all the source streams yet, or you don't want
-to allocate the resources (file descriptors, memory, etc.) for them right away?
-Well, in that case you can simply provide a callback that supplies the stream
-by calling a `next()` function:
+## Render Helpers
 
-``` javascript
-var CombinedStream = require('combined-stream');
-var fs = require('fs');
+```ts
+import { AccountBookFilled } from '@ant-design/icons-svg';
+import { renderIconDefinitionToSVGElement } from '@ant-design/icons-svg/es/helpers';
 
-var combinedStream = CombinedStream.create();
-combinedStream.append(function(next) {
-  next(fs.createReadStream('file1.txt'));
+const svgHTMLString = renderIconDefinitionToSVGElement(AccountBookFilled, {
+  extraSVGAttrs: { width: '1em', height: '1em', fill: 'currentColor' }
 });
-combinedStream.append(function(next) {
-  next(fs.createReadStream('file2.txt'));
-});
 
-combinedStream.pipe(fs.createWriteStream('combined.txt'));
+console.log(svgHTMLString);
+// ==>
+// '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor"><path d="M880 184H712v-64c0-4.4-3.6-8-8-8h-56c-4.4 0-8 3.6-8 8v64H384v-64c0-4.4-3.6-8-8-8h-56c-4.4 0-8 3.6-8 8v64H144c-17.7 0-32 14.3-32 32v664c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V216c0-17.7-14.3-32-32-32zM648.3 426.8l-87.7 161.1h45.7c5.5 0 10 4.5 10 10v21.3c0 5.5-4.5 10-10 10h-63.4v29.7h63.4c5.5 0 10 4.5 10 10v21.3c0 5.5-4.5 10-10 10h-63.4V752c0 5.5-4.5 10-10 10h-41.3c-5.5 0-10-4.5-10-10v-51.8h-63.1c-5.5 0-10-4.5-10-10v-21.3c0-5.5 4.5-10 10-10h63.1v-29.7h-63.1c-5.5 0-10-4.5-10-10v-21.3c0-5.5 4.5-10 10-10h45.2l-88-161.1c-2.6-4.8-.9-10.9 4-13.6 1.5-.8 3.1-1.2 4.8-1.2h46c3.8 0 7.2 2.1 8.9 5.5l72.9 144.3 73.2-144.3a10 10 0 0 1 8.9-5.5h45c5.5 0 10 4.5 10 10 .1 1.7-.3 3.3-1.1 4.8z" /></svg>'
 ```
 
-## API
+- Interfaces
 
-### CombinedStream.create([options])
+```ts
+declare function renderIconDefinitionToSVGElement(
+  icon: IconDefinition,
+  options?: HelperRenderOptions
+): string;
 
-Returns a new combined stream object. Available options are:
-
-* `maxDataSize`
-* `pauseStreams`
-
-The effect of those options is described below.
-
-### combinedStream.pauseStreams = `true`
-
-Whether to apply back pressure to the underlaying streams. If set to `false`,
-the underlaying streams will never be paused. If set to `true`, the
-underlaying streams will be paused right after being appended, as well as when
-`delayedStream.pipe()` wants to throttle.
-
-### combinedStream.maxDataSize = `2 * 1024 * 1024`
-
-The maximum amount of bytes (or characters) to buffer for all source streams.
-If this value is exceeded, `combinedStream` emits an `'error'` event.
-
-### combinedStream.dataSize = `0`
-
-The amount of bytes (or characters) currently buffered by `combinedStream`.
-
-### combinedStream.append(stream)
-
-Appends the given `stream` to the combinedStream object. If `pauseStreams` is
-set to `true, this stream will also be paused right away.
-
-`streams` can also be a function that takes one parameter called `next`. `next`
-is a function that must be invoked in order to provide the `next` stream, see
-example above.
-
-Regardless of how the `stream` is appended, combined-stream always attaches an
-`'error'` listener to it, so you don't have to do that manually.
-
-Special case: `stream` can also be a String or Buffer.
-
-### combinedStream.write(data)
-
-You should not call this, `combinedStream` takes care of piping the appended
-streams into itself for you.
-
-### combinedStream.resume()
-
-Causes `combinedStream` to start drain the streams it manages. The function is
-idempotent, and also emits a `'resume'` event each time which usually goes to
-the stream that is currently being drained.
-
-### combinedStream.pause();
-
-If `combinedStream.pauseStreams` is set to `false`, this does nothing.
-Otherwise a `'pause'` event is emitted, this goes to the stream that is
-currently being drained, so you can use it to apply back pressure.
-
-### combinedStream.end();
-
-Sets `combinedStream.writable` to false, emits an `'end'` event, and removes
-all streams from the queue.
-
-### combinedStream.destroy();
-
-Same as `combinedStream.end()`, except it emits a `'close'` event instead of
-`'end'`.
-
-## License
-
-combined-stream is licensed under the MIT license.
+interface HelperRenderOptions {
+  placeholders?: {
+    primaryColor?: string; // default #333
+    secondaryColor?: string; // default #E6E6E6
+  };
+  extraSVGAttrs?: {
+    [key: string]: string;
+  };
+}
+```
