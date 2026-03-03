@@ -4,15 +4,25 @@
     "C:\\Users\\74138\\Desktop\\31339752\\backend\\logs\\asruex\\2025-10-30.txt": 165,
     "/home/spider/31339752/backend/logs/asruex/2025-10-30.txt": 165,
     "/home/spider/31339752/backend/logs/asruex/2025-10-29.txt": 312,
+<<<<<<< HEAD
+    "C:\\Users\\Budi\\Desktop\\botnet\\backend\\logs\\asruex\\2025-10-29.txt": 312,
+    "C:\\Users\\Budi\\Desktop\\botnet\\backend\\logs\\asruex\\2025-10-30.txt": 165
+=======
     "D:\\workspace\\botnet\\backend\\logs\\asruex\\2025-10-29.txt": 319,
     "D:\\workspace\\botnet\\backend\\logs\\asruex\\2025-10-30.txt": 168
+>>>>>>> eb9076e4f48f42c7bd45d5e8de5fa468bc17095b
   },
   "mozi": {
     "C:\\Users\\74138\\Desktop\\31339752\\backend\\logs\\mozi\\2025-10-29.txt": 201,
     "C:\\Users\\74138\\Desktop\\31339752\\backend\\logs\\mozi\\2025-10-30.txt": 145,
     "/home/spider/31339752/backend/logs/mozi/2025-10-30.txt": 145,
     "/home/spider/31339752/backend/logs/mozi/2025-10-29.txt": 201,
+<<<<<<< HEAD
+    "C:\\Users\\Budi\\Desktop\\botnet\\backend\\logs\\mozi\\2025-10-29.txt": 201,
+    "C:\\Users\\Budi\\Desktop\\botnet\\backend\\logs\\mozi\\2025-10-30.txt": 145
+=======
     "D:\\workspace\\botnet\\backend\\logs\\mozi\\2025-10-29.txt": 207,
     "D:\\workspace\\botnet\\backend\\logs\\mozi\\2025-10-30.txt": 148
+>>>>>>> eb9076e4f48f42c7bd45d5e8de5fa468bc17095b
   }
 }

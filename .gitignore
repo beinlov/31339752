@@ -8,7 +8,8 @@ __pycache__/
 
 # runtime logs
 backend/logs/
-
+botnet_navicat.sql
+backend/ip_location/IP_city_single_WGS84.awdb
 # Large / binary data
 *.awdb
 

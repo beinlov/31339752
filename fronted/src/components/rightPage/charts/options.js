@@ -93,11 +93,14 @@ export const IndustryDistributionOptions = (params) => ({
 });
 
 // 传播态势折线图配置
-export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], timeData = [] }) => {
+export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], timeData = [], displayMode = 'active' }) => {
   // 确保数据为数组，提供空数据时的默认显示
   const safeNationalData = Array.isArray(nationalData) ? nationalData : [];
   const safeGlobalData = Array.isArray(globalData) ? globalData : [];
   const safeTimeData = Array.isArray(timeData) ? timeData : [];
+  
+  // 根据displayMode设置标题文字
+  const titleSuffix = displayMode === 'cleaned' ? '已清理节点态势' : '活跃节点态势';
   
   // 计算动态Y轴范围
   const nationalYRange = calculateYAxisRange(safeNationalData);
@@ -135,7 +138,7 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
     ],
     title: [
       {
-        text: '全国传播态势',
+        text: `全国${titleSuffix}`,
         left: 'center',
         top: '0%',
         textStyle: {
@@ -144,7 +147,7 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
         }
       },
       {
-        text: '全球传播态势',
+        text: `全球${titleSuffix}`,
         left: 'center',
         top: '51%',
         textStyle: {

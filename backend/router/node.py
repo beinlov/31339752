@@ -128,6 +128,7 @@ async def get_node_details(
         
         # 构建基础查询：使用新字段名（first_seen, last_seen）
         # 但在SELECT中映射为旧字段名（active_time, last_active）以保持API兼容性
+        # 只查询active和cleaned状态的节点，排除inactive
         base_query = f"""
             SELECT 
                 COALESCE(CONCAT(n.id, ''), '') as id,
@@ -136,6 +137,7 @@ async def get_node_details(
                 COALESCE(n.latitude, 0) as latitude,
                 CASE 
                     WHEN n.status = 'active' THEN 'active'
+                    WHEN n.status = 'cleaned' THEN 'cleaned'
                     ELSE 'inactive'
                 END as status,
                 COALESCE(n.last_seen, n.created_time, NOW()) as last_active,
@@ -147,19 +149,23 @@ async def get_node_details(
             FROM {table_name} n
             WHERE n.longitude IS NOT NULL
             AND n.latitude IS NOT NULL
+            AND n.status IN ('active', 'cleaned')
         """
         
         # 添加过滤条件
         condition_params = []
         
-        # 构建WHERE条件
-        where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL"]
+        # 构建WHERE条件 - 默认只查询active和cleaned状态
+        where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL", "n.status IN ('active', 'cleaned')"]
         
         if status:
             if status == 'active':
-                where_conditions.append("n.status = 'active'")
+                where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL", "n.status = 'active'"]
+            elif status == 'cleaned':
+                where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL", "n.status = 'cleaned'"]
             elif status == 'inactive':
-                where_conditions.append("n.status = 'inactive'")
+                # 如果明确请求inactive状态，则只返回inactive
+                where_conditions = ["n.longitude IS NOT NULL", "n.latitude IS NOT NULL", "n.status = 'inactive'"]
                 
         if country:
             where_conditions.append("n.country = %s")
@@ -202,9 +208,6 @@ async def get_node_details(
         cursor.execute(count_query, tuple(condition_params))
         total_count = cursor.fetchone()['total']
         
-        base_query += f" AND {' AND '.join(where_conditions[2:])}" if len(where_conditions) > 2 else ""
-        base_params = [botnet_type, *condition_params]
-        
         if ids_only:
             ids_query = f"""
                 SELECT COALESCE(CONCAT(n.id, ''), '') as id
@@ -224,8 +227,9 @@ async def get_node_details(
             
             return JSONResponse(content=response_data)
             
-        # 添加分页
-        base_query = f"""
+        # 添加分页 - 只查询active和cleaned状态的节点
+        # 使用相同的where_sql确保查询一致性
+        data_query = f"""
             SELECT 
                 COALESCE(CONCAT(n.id, ''), '') as id,
                 COALESCE(n.ip, '') as ip,
@@ -233,22 +237,25 @@ async def get_node_details(
                 COALESCE(n.latitude, 0) as latitude,
                 CASE 
                     WHEN n.status = 'active' THEN 'active'
+                    WHEN n.status = 'cleaned' THEN 'cleaned'
                     ELSE 'inactive'
                 END as status,
                 COALESCE(n.last_seen, n.created_time, NOW()) as last_active,
                 COALESCE(n.first_seen, n.created_time, NOW()) as active_time,
-                %s as botnet_type,
                 COALESCE(n.country, '') as country,
                 COALESCE(n.province, '') as province,
                 COALESCE(n.city, '') as city
             FROM {table_name} n
             WHERE {where_sql}
+            ORDER BY n.id ASC
+            LIMIT %s OFFSET %s
         """
-        base_query += " LIMIT %s OFFSET %s"
-        base_params.extend([page_size, (page - 1) * page_size])
+        
+        # 执行查询，参数包括condition_params + 分页参数
+        query_params = list(condition_params) + [page_size, (page - 1) * page_size]
         
         # 执行主查询
-        cursor.execute(base_query, tuple(base_params))
+        cursor.execute(data_query, tuple(query_params))
         nodes = list(cursor.fetchall())
         
         # 处理datetime格式
@@ -258,12 +265,13 @@ async def get_node_details(
             if isinstance(node.get('active_time'), datetime):
                 node['active_time'] = node['active_time'].strftime('%Y-%m-%d %H:%M:%S')
         
-        # 获取在线/离线节点数量（按 IP 去重）
+        # 获取active/cleaned节点数量（按 IP 去重）- 只统计active和cleaned，不统计inactive
         status_query = f"""
             SELECT 
                 COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_count,
-                COUNT(DISTINCT CASE WHEN status = 'inactive' THEN ip END) as inactive_count
+                COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_count
             FROM {table_name}
+            WHERE status IN ('active', 'cleaned')
         """
         cursor.execute(status_query)
         status_counts = cursor.fetchone()
@@ -291,7 +299,8 @@ async def get_node_details(
                 },
                 "statistics": {
                     "active_nodes": status_counts['active_count'],
-                    "inactive_nodes": status_counts['inactive_count'],
+                    "inactive_nodes": status_counts.get('cleaned_count', 0),  # 为了兼容性，使用cleaned_count但字段名保持inactive_nodes
+                    "cleaned_nodes": status_counts.get('cleaned_count', 0),
                     "country_distribution": country_distribution
                 }
             }

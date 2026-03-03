@@ -508,7 +508,8 @@ async def get_province_amounts(botnet_type: Optional[str] = None):
                         SELECT 
                             '{province}' as province,
                             '{botnet_name}' as botnet_type,
-                            COALESCE(SUM(infected_num), 0) as total
+                            COALESCE(SUM(active_num), 0) as active,
+                            COALESCE(SUM(cleaned_num), 0) as cleaned
                         FROM {china_table}
                         WHERE province = %s
                     """)
@@ -523,10 +524,11 @@ async def get_province_amounts(botnet_type: Optional[str] = None):
             # 转换为响应格式
             province_amounts = {name: [] for name in botnet_tables.keys()}
 
-            for province, botnet_type_result, total in results:
+            for province, botnet_type_result, active, cleaned in results:
                 province_amounts[botnet_type_result].append({
                     "province": province,
-                    "amount": int(total)
+                    "active": int(active),
+                    "cleaned": int(cleaned)
                 })
 
             return province_amounts
@@ -571,17 +573,23 @@ async def get_world_amounts(botnet_type: Optional[str] = None):
             else:
                 botnet_types = list(botnet_tables.keys())
 
-            # 构建查询
+            # 优化查询 - 使用GROUP BY聚合数据，减少返回行数
             query_parts = []
             for bot_type in botnet_types:
-                # 使用global_botnet_xxx表
+                # 使用global_botnet_xxx表，按国家聚合
                 global_table = f"global_botnet_{bot_type}"
                 query_parts.append(f"""
                     SELECT 
                         country,
                         '{bot_type}' as botnet_type,
-                        infected_num
+                        SUM(active_num) as active_total,
+                        SUM(cleaned_num) as cleaned_total
                     FROM {global_table}
+                    WHERE country IS NOT NULL
+                    AND country != ''
+                    GROUP BY country
+                    ORDER BY active_total DESC, cleaned_total DESC
+                    LIMIT 200
                 """)
 
             # 执行查询
@@ -595,10 +603,11 @@ async def get_world_amounts(botnet_type: Optional[str] = None):
             # 转换为响应格式
             world_amounts = {bot_type: [] for bot_type in botnet_types}
 
-            for country, bot_type_result, amount in results:
+            for country, bot_type_result, active, cleaned in results:
                 world_amounts[bot_type_result].append({
                     "country": country,
-                    "amount": int(amount or 0)
+                    "active": int(active or 0),
+                    "cleaned": int(cleaned or 0)
                 })
 
             return world_amounts

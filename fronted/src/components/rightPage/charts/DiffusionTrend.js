@@ -63,11 +63,16 @@ class DiffusionTrend extends PureComponent {
     if (prevProps.timeRange !== this.props.timeRange) {
       this.fetchNodeHistory();
     }
+
+    // 当显示模式发生变化时，重新获取数据
+    if (prevProps.displayMode !== this.props.displayMode) {
+      this.fetchNodeHistory();
+    }
   }
 
   // 从后端API获取节点数量历史记录
   fetchNodeHistory = async () => {
-    const { selectedNetwork } = this.props;
+    const { selectedNetwork, displayMode } = this.props;
     const { timeRange = '7days' } = this.props;
     
     if (!selectedNetwork) {
@@ -96,12 +101,22 @@ class DiffusionTrend extends PureComponent {
       if (response && Array.isArray(response)) {
         console.log('API返回数据:', response);
         const timeData = response.map(item => item.timestamp);
-        const nationalData = response.map(item => item.china_count);
-        const globalData = response.map(item => item.global_count);
+        
+        // 根据displayMode选择使用哪个数据字段
+        let nationalData, globalData;
+        if (displayMode === 'cleaned') {
+          nationalData = response.map(item => item.china_cleaned);
+          globalData = response.map(item => item.global_cleaned);
+          console.log('清理模式 - 全国数据:', nationalData);
+          console.log('清理模式 - 全球数据:', globalData);
+        } else {
+          nationalData = response.map(item => item.china_active);
+          globalData = response.map(item => item.global_active);
+          console.log('活跃模式 - 全国数据:', nationalData);
+          console.log('活跃模式 - 全球数据:', globalData);
+        }
         
         console.log('时间数据:', timeData);
-        console.log('全国数据:', nationalData);
-        console.log('全球数据:', globalData);
         
         this.setState({
           timeData,
@@ -130,11 +145,13 @@ class DiffusionTrend extends PureComponent {
 
   render() {
     const { renderer, nationalData, globalData, timeData } = this.state;
+    const { displayMode } = this.props;
     
     const option = DiffusionTrendOptions({
       nationalData,
       globalData,
-      timeData
+      timeData,
+      displayMode
     });
 
     return (
@@ -151,7 +168,8 @@ class DiffusionTrend extends PureComponent {
 
 const mapStateToProps = ({ mapState }) => ({
   selectedNetwork: mapState.selectedNetwork,
-  botnetData: mapState.botnetData
+  botnetData: mapState.botnetData,
+  displayMode: mapState.displayMode
 });
 
 export default connect(mapStateToProps)(DiffusionTrend); 
