@@ -348,8 +348,8 @@ const TutorialButton = styled.button`
 
 const AdminPage = ({ history }) => {
   const [activeMenu, setActiveMenu] = useState('clear');
-  const [selectedNetwork, setSelectedNetwork] = useState('ramnit');
-  const [currentContent, setCurrentContent] = useState(<NodeManagement networkType="ramnit" />);
+  const [selectedNetwork, setSelectedNetwork] = useState('utg-q-008');
+  const [currentContent, setCurrentContent] = useState(<NodeManagement networkType="utg-q-008" />);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [networkTypes, setNetworkTypes] = useState([]);

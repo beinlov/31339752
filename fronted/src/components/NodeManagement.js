@@ -478,7 +478,7 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   const [isSelectAllActive, setIsSelectAllActive] = useState(false);
   const [isSelectAllLoading, setIsSelectAllLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [networkType, setNetworkType] = useState(propNetworkType || 'asruex');
+  const [networkType, setNetworkType] = useState(propNetworkType || 'utg-q-008');
   const [error, setError] = useState(null);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);

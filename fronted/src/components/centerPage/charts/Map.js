@@ -165,7 +165,7 @@ class Map extends PureComponent {
     const { provinceData, selectedNetwork } = this.props;
     if (!provinceData) return null;
 
-    const networkToUse = selectedNetwork || 'ramnit';
+    const networkToUse = selectedNetwork || 'utg-q-008';
     return provinceData[networkToUse];
   }
 

@@ -53,7 +53,7 @@ class WorldMap extends PureComponent {
     const { worldData, selectedNetwork, mapData, isLeftPage } = this.props;
     if (!worldData) return;
 
-    const networkToUse = selectedNetwork || 'ramnit';
+    const networkToUse = selectedNetwork || 'utg-q-008';
     const countryData = worldData[networkToUse] || [];
 
     const option = worldMapOptions({
@@ -124,7 +124,7 @@ class WorldMap extends PureComponent {
 
 // 从全局状态中获取选择的网络类型和世界数据
 const mapStateToProps = state => ({
-  selectedNetwork: state.mapState.selectedNetwork || 'ramnit',
+  selectedNetwork: state.mapState.selectedNetwork || 'utg-q-008',
   worldData: state.mapState.worldData
 });
 
