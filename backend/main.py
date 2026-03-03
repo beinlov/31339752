@@ -22,6 +22,7 @@ from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
 from router.node_history import router as node_history_router
 from router.suppression import router as suppression_router
+from router.cleanup import router as cleanup_router
 
 import logging
 import re
@@ -106,6 +107,9 @@ app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 
 # 包含抑制阻断策略路由
 app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
+
+# 包含一键清除路由
+app.include_router(cleanup_router, prefix="/api", tags=["cleanup"])
 
 # 数据模型
 class ProvinceAmount(BaseModel):
