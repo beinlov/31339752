@@ -46,7 +46,7 @@ def load_config(config_file: str = "config.json") -> Dict:
     
     if os.path.exists(config_file):
         try:
-            with open(config_file, 'r') as f:
+            with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 logger.info(f"加载配置文件: {config_file}")
                 return config
@@ -60,8 +60,11 @@ def load_config(config_file: str = "config.json") -> Dict:
 # 加载配置
 CONFIG = load_config()
 BOTNET_TYPE = CONFIG["botnet"]["botnet_type"]
+# 兼容旧配置
 LOG_DIR = Path(CONFIG["botnet"]["log_dir"])
 LOG_FILE_PATTERN = CONFIG["botnet"]["log_file_pattern"]
+# 加载日志源配置（过滤掉注释项）
+LOG_SOURCES = {k: v for k, v in CONFIG.get("log_sources", {}).items() if not k.startswith('_')}
 
 # HTTP服务器配置
 HTTP_HOST = os.environ.get("C2_HTTP_HOST", CONFIG.get("http_server", {}).get("host", "0.0.0.0"))
@@ -72,7 +75,7 @@ API_KEY = os.environ.get("C2_API_KEY", CONFIG.get("http_server", {}).get("api_ke
 # 数据缓存配置（改用SQLite持久化）
 CACHE_CONFIG = CONFIG.get("cache", {})
 MAX_CACHED_RECORDS = CACHE_CONFIG.get("max_cached_records", 10000)
-CACHE_DB_FILE = CACHE_CONFIG.get("db_file", "/tmp/c2_data_cache.db")
+CACHE_DB_FILE = CACHE_CONFIG.get("db_file", "./c2_data_cache.db")
 CACHE_RETENTION_DAYS = CACHE_CONFIG.get("retention_days", 7)
 
 
@@ -202,16 +205,26 @@ class BackpressureController:
             logger.info(f"📊 背压统计: 暂停{stats['paused_rate']}, 节流{stats['throttled_rate']}, 全速{stats['full_speed_rate']}")
 
 # ============================================================
->>>>>>> 46b5376133a7f5b130f40fc59c24a04ef65bf9d4
 # 通用工具类
 # ============================================================
 
 class LogReader:
     """日志文件读取器"""
     
-    def __init__(self, log_dir: Path, file_pattern: str):
+    def __init__(self, log_dir: Path, file_pattern: str, line_parser_config: Dict = None):
         self.log_dir = log_dir
         self.file_pattern = file_pattern
+        self.line_parser_config = line_parser_config or {}
+        
+        # 编译正则表达式（如果提供）
+        if self.line_parser_config.get('type') == 'regex':
+            pattern = self.line_parser_config.get('pattern')
+            if pattern:
+                self.regex_pattern = re.compile(pattern)
+            else:
+                self.regex_pattern = None
+        else:
+            self.regex_pattern = None
     
     async def get_available_log_files(self, days_back: int = None, include_current: bool = True) -> List[Tuple[datetime, Path]]:
         """
@@ -310,13 +323,150 @@ class LogReader:
                             continue
         
         return sorted(files, key=lambda x: x[0])
+    
+    def parse_line(self, line: str) -> Optional[Tuple[str, datetime]]:
+        """
+        解析日志行，提取IP和时间戳
+        
+        Returns:
+            (ip, timestamp) 或 None
+        """
+        if not self.regex_pattern:
+            # 无正则配置，返回None
+            return None
+        
+        try:
+            match = self.regex_pattern.search(line)
+            if not match:
+                return None
+            
+            # 提取时间戳
+            ts_group = self.line_parser_config.get('timestamp_group', 1)
+            timestamp_str = match.group(ts_group)
+            ts_format = self.line_parser_config.get('timestamp_format', '%Y-%m-%d %H:%M:%S')
+            log_time = datetime.strptime(timestamp_str, ts_format)
+            
+            # 提取IP
+            ip_group = self.line_parser_config.get('ip_group', 2)
+            ip = match.group(ip_group)
+            
+            return (ip, log_time)
+        except Exception as e:
+            logger.debug(f"解析行失败: {e}, line: {line[:100]}")
+            return None
+
+
+class DatabaseReader:
+    """数据库日志读取器（支持SQLite）"""
+    
+    def __init__(self, db_path: Path, db_config: Dict, field_mapping: Dict):
+        self.db_path = db_path
+        self.db_config = db_config
+        self.field_mapping = field_mapping
+        self.last_position = 0
+        self.position_file = './db_positions.json'
+        self._load_position()
+        
+    def _load_position(self):
+        """加载上次读取位置"""
+        try:
+            if os.path.exists(self.position_file):
+                with open(self.position_file, 'r') as f:
+                    positions = json.load(f)
+                    self.last_position = positions.get(str(self.db_path), 0)
+                    logger.info(f"数据库 {self.db_path.name} 从位置 {self.last_position} 继续")
+        except Exception as e:
+            logger.warning(f"加载数据库位置失败: {e}")
+    
+    def _save_position(self):
+        """保存当前读取位置"""
+        try:
+            positions = {}
+            if os.path.exists(self.position_file):
+                with open(self.position_file, 'r') as f:
+                    positions = json.load(f)
+            positions[str(self.db_path)] = self.last_position
+            with open(self.position_file, 'w') as f:
+                json.dump(positions, f)
+        except Exception as e:
+            logger.error(f"保存数据库位置失败: {e}")
+    
+    def read_records(self, limit: int = 1000) -> List[Dict]:
+        """从数据库读取记录"""
+        records = []
+        try:
+            if not self.db_path.exists():
+                logger.warning(f"数据库文件不存在: {self.db_path}")
+                return records
+            
+            conn = sqlite3.connect(str(self.db_path))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # 执行查询（使用配置的SQL）
+            query = self.db_config.get('query')
+            if not query:
+                # 默认查询
+                table = self.db_config.get('table', 'logs')
+                position_field = self.db_config.get('position_field', 'id')
+                ip_field = self.field_mapping['ip_field']
+                ts_field = self.field_mapping['timestamp_field']
+                query = f"SELECT {ip_field}, {ts_field}, {position_field} FROM {table} WHERE {position_field} > ? ORDER BY {position_field} ASC LIMIT ?"
+            
+            cursor.execute(query, (self.last_position, limit))
+            rows = cursor.fetchall()
+            
+            ip_field = self.field_mapping['ip_field']
+            ts_field = self.field_mapping['timestamp_field']
+            ts_format = self.field_mapping.get('timestamp_format', '%Y-%m-%dT%H:%M:%S')
+            position_field = self.db_config.get('position_field', 'id')
+            
+            for row in rows:
+                try:
+                    # 提取IP
+                    ip = row[ip_field]
+                    # 提取时间戳
+                    timestamp_str = row[ts_field]
+                    
+                    # 解析时间戳
+                    try:
+                        log_time = datetime.strptime(timestamp_str, ts_format)
+                    except:
+                        # 如果解析失败，尝试ISO格式
+                        log_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    
+                    # 更新位置
+                    if position_field in row.keys():
+                        self.last_position = max(self.last_position, row[position_field])
+                    
+                    records.append({
+                        'ip': ip,
+                        'timestamp': log_time.isoformat(),
+                        'date': log_time.strftime('%Y-%m-%d'),
+                        'log_hour': log_time.strftime('%Y-%m-%d_%H'),
+                    })
+                except Exception as e:
+                    logger.warning(f"解析数据库记录失败: {e}, row: {dict(row)}")
+                    continue
+            
+            conn.close()
+            
+            if records:
+                self._save_position()
+                logger.info(f"从数据库读取 {len(records)} 条记录，位置: {self.last_position}")
+            
+        except Exception as e:
+            logger.error(f"读取数据库失败: {e}", exc_info=True)
+        
+        return records
 
 
 class IPProcessor:
     """IP地址处理器"""
     
-    def __init__(self, botnet_type: str):
+    def __init__(self, botnet_type: str, log_type: str = "online", field_mapping: Dict = None):
         self.botnet_type = botnet_type
+        self.log_type = log_type
     
     def normalize_ip(self, ip: str) -> Optional[str]:
         """规范化IP地址（去除前导零）并验证"""
@@ -393,7 +543,8 @@ class IPProcessor:
                             'timestamp_source': timestamp_source,
                             'date': log_time.strftime('%Y-%m-%d'),
                             'log_hour': log_time.strftime('%Y-%m-%d_%H'),
-                            'botnet_type': self.botnet_type
+                            'botnet_type': self.botnet_type,
+                            'log_type': self.log_type
                         }
             
             return None
@@ -687,13 +838,9 @@ class BackgroundLogReader:
     
     def __init__(self, cache: DataCache):
         self.cache = cache
-        self.log_reader = LogReader(LOG_DIR, LOG_FILE_PATTERN)
-        self.ip_processor = IPProcessor(BOTNET_TYPE)
         self.running = False
-        self.read_interval = 60
         self.file_positions = {}  # {file_path: last_read_position}
-        # 文件位置持久化文件
-        self.positions_file = '/tmp/c2_file_positions.json'
+        self.positions_file = './c2_file_positions.json'
         self.file_positions = self._load_file_positions()
         
         # 从配置读取参数
@@ -714,12 +861,68 @@ class BackgroundLogReader:
             self.lookback_config = {'mode': 'unlimited', 'max_days': 90}
             logger.warning("无法加载回溯配置，使用默认值（无限回溯）")
         
-        logger.info(f"初始化日志读取器:")
-        logger.info(f"  - 日志目录: {LOG_DIR}")
-        logger.info(f"  - 文件模式: {LOG_FILE_PATTERN}")
-        logger.info(f"  - 僵尸网络: {BOTNET_TYPE}")
-        logger.info(f"  - 读取间隔: {self.read_interval}秒")
-        logger.info(f"  - 位置记录: {len(self.file_positions)} 个文件")
+        # ========== 初始化日志源（支持多种日志类型） ==========
+        self.log_sources = {}  # {log_type: (reader, processor, db_reader)}
+        
+        # 如果有新配置log_sources，优先使用
+        if LOG_SOURCES:
+            logger.info("=" * 60)
+            logger.info("初始化多日志源模式:")
+            for log_type, source_config in LOG_SOURCES.items():
+                if not source_config.get('enabled', False):
+                    logger.info(f"  ⊗ {log_type}: 已禁用")
+                    continue
+                
+                storage_type = source_config.get('storage_type')
+                log_type_name = source_config.get('log_type', log_type)
+                
+                try:
+                    if storage_type == 'file':
+                        # 文件日志源
+                        path = Path(source_config['path'])
+                        
+                        # 判断path是文件还是目录
+                        if path.is_file() or not path.exists():
+                            # 单个文件 - 特殊处理
+                            log_dir = path.parent
+                            file_pattern = path.name
+                        else:
+                            # 目录
+                            log_dir = path
+                            file_pattern = source_config.get('file_pattern', '*.log')
+                        
+                        line_parser_config = source_config.get('field_mapping', {}).get('line_parser', {})
+                        reader = LogReader(log_dir, file_pattern, line_parser_config)
+                        processor = IPProcessor(BOTNET_TYPE, log_type_name)
+                        self.log_sources[log_type_name] = ('file', reader, processor, None)
+                        logger.info(f"  ✓ {log_type_name} (文件): {path}")
+                    
+                    elif storage_type == 'database':
+                        # 数据库日志源
+                        db_path = Path(source_config['path'])
+                        db_config = source_config.get('db_config', {})
+                        field_mapping = source_config.get('field_mapping', {})
+                        
+                        db_reader = DatabaseReader(db_path, db_config, field_mapping)
+                        processor = IPProcessor(BOTNET_TYPE, log_type_name)
+                        self.log_sources[log_type_name] = ('database', None, processor, db_reader)
+                        logger.info(f"  ✓ {log_type_name} (数据库): {db_path}")
+                    
+                except Exception as e:
+                    logger.error(f"  ✗ {log_type}: 初始化失败 - {e}")
+            
+            logger.info("=" * 60)
+        else:
+            # 兼容旧配置（单一日志源）
+            logger.info("使用兼容模式（单一日志源）:")
+            self.log_reader = LogReader(LOG_DIR, LOG_FILE_PATTERN)
+            self.ip_processor = IPProcessor(BOTNET_TYPE, "online")
+            logger.info(f"  - 日志目录: {LOG_DIR}")
+            logger.info(f"  - 文件模式: {LOG_FILE_PATTERN}")
+            logger.info(f"  - 僵尸网络: {BOTNET_TYPE}")
+        
+        logger.info(f"读取间隔: {self.read_interval}秒")
+        logger.info(f"位置记录: {len(self.file_positions)} 个文件")
     
     def _load_file_positions(self) -> Dict[str, int]:
         """从文件加载已读取位置"""
@@ -755,8 +958,127 @@ class BackgroundLogReader:
                 logger.error(f"读取日志异常: {e}", exc_info=True)
                 await asyncio.sleep(10)
     
+    async def read_logs_multi_source(self, read_limit: int):
+        """读取多个日志源（支持文件和数据库）"""
+        all_records = []
+        
+        for log_type, (storage_type, file_reader, processor, db_reader) in self.log_sources.items():
+            try:
+                if storage_type == 'database':
+                    # 从数据库读取
+                    records = db_reader.read_records(limit=min(read_limit - len(all_records), 1000))
+                    for record in records:
+                        record['botnet_type'] = BOTNET_TYPE
+                        record['log_type'] = log_type
+                        # 标准化IP
+                        ip = record.get('ip')
+                        if ip:
+                            normalized_ip = processor.normalize_ip(ip)
+                            if normalized_ip:
+                                record['ip'] = normalized_ip
+                                all_records.append(record)
+                    
+                    logger.info(f"  [{log_type}] 数据库读取 {len(records)} 条")
+                
+                elif storage_type == 'file':
+                    # 从文件读取
+                    if file_reader.regex_pattern:
+                        # 使用新的正则解析逻辑
+                        records = await self._read_file_with_regex(file_reader, processor, log_type, read_limit - len(all_records))
+                        all_records.extend(records)
+                    else:
+                        # 使用原有的IP提取逻辑
+                        records = await self._read_file_legacy(file_reader, processor, log_type, read_limit - len(all_records))
+                        all_records.extend(records)
+                
+                # 检查是否达到限制
+                if len(all_records) >= read_limit:
+                    break
+            
+            except Exception as e:
+                logger.error(f"读取日志源 {log_type} 失败: {e}", exc_info=True)
+        
+        # 添加到缓存
+        if all_records:
+            self.cache.add_records(all_records)
+            stats = self.cache.get_stats()
+            logger.info(f"📦 提取 {len(all_records)} 条 → 当前缓存: {stats['cached_records']} 条")
+            
+            # 保存文件位置
+            self._save_file_positions()
+            
+            # 每10次输出一次背压统计
+            self.stats_counter += 1
+            if self.stats_counter % 10 == 0:
+                self.backpressure.log_stats()
+        else:
+            logger.debug("本次未提取到新数据")
+    
+    async def _read_file_with_regex(self, reader: LogReader, processor: IPProcessor, log_type: str, limit: int) -> List[Dict]:
+        """使用正则表达式读取文件"""
+        records = []
+        
+        # 获取该日志源的单个文件
+        log_files = await reader.get_available_log_files(days_back=None, include_current=True)
+        
+        for file_datetime, file_path in log_files:
+            if len(records) >= limit:
+                break
+            
+            file_key = str(file_path)
+            last_position = self.file_positions.get(file_key, 0)
+            
+            try:
+                file_size = file_path.stat().st_size
+                if last_position >= file_size and file_size > 0:
+                    continue
+                
+                async with aiofiles.open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    await f.seek(last_position)
+                    line_count = 0
+                    
+                    async for line in f:
+                        line_count += 1
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        # 使用正则解析
+                        result = reader.parse_line(line)
+                        if result:
+                            ip, log_time = result
+                            normalized_ip = processor.normalize_ip(ip)
+                            if normalized_ip:
+                                records.append({
+                                    'ip': normalized_ip,
+                                    'timestamp': log_time.isoformat(),
+                                    'date': log_time.strftime('%Y-%m-%d'),
+                                    'log_hour': log_time.strftime('%Y-%m-%d_%H'),
+                                    'botnet_type': BOTNET_TYPE,
+                                    'log_type': log_type
+                                })
+                        
+                        if len(records) >= limit:
+                            break
+                    
+                    current_position = await f.tell()
+                    self.file_positions[file_key] = current_position
+                    
+                    if line_count > 0:
+                        logger.info(f"  [{log_type}] {file_path.name}: 读取{line_count}行, 提取{len(records)}个IP")
+            
+            except Exception as e:
+                logger.error(f"读取文件 {file_path} 失败: {e}")
+        
+        return records
+    
+    async def _read_file_legacy(self, reader: LogReader, processor: IPProcessor, log_type: str, limit: int) -> List[Dict]:
+        """使用传统IP正则读取文件"""
+        # 兼容旧逻辑，暂时返回空
+        return []
+    
     async def read_logs(self):
-        """读取日志文件（支持无限回溯+增量读取+背压控制）"""
+        """读取日志文件（支持多日志源+无限回溯+增量读取+背压控制）"""
         try:
             # ========== 背压控制检查 ==========
             stats = self.cache.get_stats()
@@ -772,8 +1094,13 @@ class BackgroundLogReader:
             # 计算本次应该读取的数量
             read_limit, read_reason = self.backpressure.calculate_read_size(current_cached)
             logger.info(f"📖 开始读取: {read_reason}, 限制 {read_limit} 条")
+            
+            # 如果有多日志源配置，使用新逻辑
+            if self.log_sources:
+                await self.read_logs_multi_source(read_limit)
+                return
 
-            # 确定回溯天数
+            # 确定回溯天数（兼容旧配置）
             if self.lookback_config['mode'] == 'unlimited':
                 days_back = None  # 无限回溯
             else:
@@ -858,8 +1185,6 @@ class BackgroundLogReader:
                     
                     files_read += 1
 
-                    # 限制单次处理的文件数
-                    if files_read >= 10 or len(new_records) >= 5000:
                     # 达到读取限制时停止
                     if len(new_records) >= read_limit:
                         logger.info(f"达到读取限制: 已读{files_read}个文件，提取{len(new_records)}条")

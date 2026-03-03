@@ -144,10 +144,34 @@ class BotnetLogProcessor:
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """
         处理来自API的结构化IP数据（支持队列模式和降级模式）
+        根据log_type分流：online -> 正常处理，cleanup -> 清除处理
         """
         if botnet_type not in self.writers:
             logger.warning(f"Unknown botnet type: {botnet_type}")
             return
+
+        # ========== 检测数据类型并分流处理 ==========
+        # 检查是否所有数据都是cleanup类型
+        cleanup_records = []
+        online_records = []
+        
+        for record in ip_data:
+            log_type = record.get('log_type', 'online')  # 默认为online
+            if log_type == 'cleanup':
+                cleanup_records.append(record)
+            else:
+                online_records.append(record)
+        
+        # 如果有清除日志，单独处理
+        if cleanup_records:
+            logger.info(f"[{botnet_type}] 检测到 {len(cleanup_records)} 条清除日志")
+            asyncio.create_task(self._handle_cleanup_records(botnet_type, cleanup_records))
+        
+        # 如果没有上线日志，直接返回
+        if not online_records:
+            return
+        
+        logger.info(f"[{botnet_type}] 处理 {len(online_records)} 条上线日志")
 
         # ===== 模式1: 使用Redis队列（推荐，不阻塞） =====
         if USE_QUEUE_FOR_PULLING and task_queue:
@@ -155,12 +179,12 @@ class BotnetLogProcessor:
                 # 在线程池中执行Redis操作，避免阻塞事件循环
                 loop = asyncio.get_event_loop()
 
-                # 异步推送任务
+                # 异步推送任务（只推送上线日志）
                 task_id = await loop.run_in_executor(
                     None,
                     task_queue.push_task,
                     botnet_type,
-                    ip_data,
+                    online_records,
                     'log_processor'  # 标识来源
                 )
 
@@ -171,7 +195,7 @@ class BotnetLogProcessor:
                 )
 
                 logger.info(
-                    f"[{botnet_type}] 已推送 {len(ip_data)} 条数据到队列，"
+                    f"[{botnet_type}] 已推送 {len(online_records)} 条数据到队列，"
                     f"任务ID: {task_id}, 队列长度: {queue_len}"
                 )
                 return  # 成功推送到队列，直接返回
@@ -180,10 +204,10 @@ class BotnetLogProcessor:
 
         # ===== 模式2: 降级处理（创建后台任务，不阻塞拉取循环） =====
         # 即使没有队列，我们也不在主拉取循环里直接处理，而是起一个后台任务
-        logger.info(f"[{botnet_type}] 创建后台任务处理 {len(ip_data)} 个IP...")
+        logger.info(f"[{botnet_type}] 创建后台任务处理 {len(online_records)} 个IP...")
 
         # 创建后台任务，不阻塞当前协程
-        asyncio.create_task(self._process_data_in_background(botnet_type, ip_data))
+        asyncio.create_task(self._process_data_in_background(botnet_type, online_records))
         return
     
     async def _process_data_in_background(self, botnet_type: str, ip_data: List[Dict]):
@@ -282,6 +306,129 @@ class BotnetLogProcessor:
             )
         except Exception as e:
             logger.error(f"[ERROR] [{botnet_type}] [后台] 数据处理失败: {e}", exc_info=True)
+
+    async def _handle_cleanup_records(self, botnet_type: str, cleanup_records: List[Dict]):
+        """
+        处理清除日志：批量更新节点状态为cleaned
+        
+        Args:
+            botnet_type: 僵尸网络类型
+            cleanup_records: 清除日志记录列表
+        
+        处理流程：
+        1. 数据接收与校验
+        2. 开启数据库事务
+        3. 批量更新节点status为cleaned，记录清除时间
+        4. 同步更新Redis缓存中的活跃节点计数
+        5. 提交事务
+        """
+        writer = self.writers.get(botnet_type)
+        if not writer:
+            logger.warning(f"[{botnet_type}] No writer found for cleanup processing")
+            return
+        
+        logger.info(f"[{botnet_type}] [清除] 开始处理 {len(cleanup_records)} 条清除记录...")
+        start_time = datetime.now()
+        
+        try:
+            # 1. 数据校验与准备
+            ip_list = []
+            cleanup_time_map = {}  # IP -> 清除时间映射
+            
+            for record in cleanup_records:
+                ip = record.get('ip')
+                if not ip:
+                    logger.warning(f"[{botnet_type}] [清除] 记录缺少IP字段: {record}")
+                    continue
+                    
+                ip_list.append(ip)
+                # 提取清除时间（如果有）
+                cleanup_time = record.get('timestamp')
+                if cleanup_time:
+                    if isinstance(cleanup_time, str):
+                        try:
+                            cleanup_time = datetime.fromisoformat(cleanup_time)
+                        except:
+                            cleanup_time = datetime.now()
+                    cleanup_time_map[ip] = cleanup_time
+                else:
+                    cleanup_time_map[ip] = datetime.now()
+            
+            if not ip_list:
+                logger.warning(f"[{botnet_type}] [清除] 没有有效的IP地址")
+                return
+            
+            logger.info(f"[{botnet_type}] [清除] 校验完成：{len(ip_list)} 个有效IP")
+            
+            # 2. 调用Writer的批量更新方法（在事务中执行）
+            updated_count = await writer.update_nodes_to_cleaned(
+                ip_list=ip_list,
+                cleanup_time_map=cleanup_time_map
+            )
+            
+            # 3. 同步更新Redis缓存（如果启用）
+            if updated_count > 0:
+                try:
+                    await self._update_active_count_cache(botnet_type, -updated_count)
+                    logger.info(f"[{botnet_type}] [清除] Redis缓存已更新：活跃节点数 -{updated_count}")
+                except Exception as e:
+                    logger.warning(f"[{botnet_type}] [清除] Redis缓存更新失败: {e}")
+            
+            # 4. 输出处理结果
+            duration = (datetime.now() - start_time).total_seconds()
+            logger.info(
+                f"[{botnet_type}] [清除] 处理完成: "
+                f"接收 {len(cleanup_records)} 条, "
+                f"有效 {len(ip_list)} 条, "
+                f"更新 {updated_count} 条, "
+                f"耗时 {duration:.2f}秒"
+            )
+            
+        except Exception as e:
+            logger.error(f"[{botnet_type}] [清除] 处理失败: {e}", exc_info=True)
+    
+    async def _update_active_count_cache(self, botnet_type: str, delta: int):
+        """
+        更新Redis缓存中的活跃节点计数
+        
+        Args:
+            botnet_type: 僵尸网络类型
+            delta: 增量（负数表示减少）
+        """
+        try:
+            # 尝试导入Redis相关模块
+            from config import REDIS_CONFIG
+            import redis
+            
+            if not REDIS_CONFIG.get('enabled', False):
+                logger.debug(f"[{botnet_type}] Redis未启用，跳过缓存更新")
+                return
+            
+            # 连接Redis
+            redis_client = redis.StrictRedis(
+                host=REDIS_CONFIG.get('host', 'localhost'),
+                port=REDIS_CONFIG.get('port', 6379),
+                password=REDIS_CONFIG.get('password'),
+                db=REDIS_CONFIG.get('db', 0),
+                decode_responses=True
+            )
+            
+            # 更新活跃节点计数
+            cache_key = f"botnet:active_count:{botnet_type}"
+            new_count = redis_client.incrby(cache_key, delta)
+            
+            # 确保不会出现负数
+            if new_count < 0:
+                redis_client.set(cache_key, 0)
+                new_count = 0
+            
+            logger.info(f"[{botnet_type}] Redis缓存更新：{cache_key} = {new_count} (delta: {delta})")
+            
+        except ImportError:
+            logger.debug(f"[{botnet_type}] Redis模块未安装，跳过缓存更新")
+        except Exception as e:
+            logger.error(f"[{botnet_type}] Redis缓存更新失败: {e}")
+            # 不抛出异常，避免影响主流程
 
     async def process_log_line(self, botnet_type: str, line: str):
         """
