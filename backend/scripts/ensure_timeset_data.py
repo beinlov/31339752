@@ -89,26 +89,29 @@ def _ensure_timeset_schema(cursor, timeset_table: str) -> None:
         )
 
 
-def _get_counts(cursor, botnet_type: str) -> tuple[int, int, int, int] | None:
+def _get_counts(cursor, botnet_type: str) -> tuple[int, int, int, int, int, int] | None:
     """
-    返回: (global_active, china_active, global_cleaned, china_cleaned)
+    返回: (global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
     """
     node_table = f"botnet_nodes_{botnet_type}"
     if not _table_exists(cursor, node_table):
         return None
 
-    # 统计全球active和cleaned数量
+    # 统计全球总数和active/cleaned数量
     cursor.execute(f"""
         SELECT 
+            COUNT(*) as total_count,
             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
             SUM(CASE WHEN status = 'cleaned' THEN 1 ELSE 0 END) as cleaned_count
         FROM {node_table}
     """)
     row = cursor.fetchone()
+    global_count = int(row["total_count"] or 0)
     global_active = int(row["active_count"] or 0)
     global_cleaned = int(row["cleaned_count"] or 0)
 
-    # 统计中国active和cleaned数据
+    # 统计中国总数和active/cleaned数据
+    china_count = 0
     china_active = 0
     china_cleaned = 0
     global_table = f"global_botnet_{botnet_type}"
@@ -116,6 +119,7 @@ def _get_counts(cursor, botnet_type: str) -> tuple[int, int, int, int] | None:
         cursor.execute(
             f"""
             SELECT 
+                SUM(infected_num) as total_china,
                 SUM(active_num) as active_total,
                 SUM(cleaned_num) as cleaned_total
             FROM {global_table} 
@@ -124,10 +128,11 @@ def _get_counts(cursor, botnet_type: str) -> tuple[int, int, int, int] | None:
         )
         row = cursor.fetchone()
         if row:
+            china_count = int(row["total_china"] or 0)
             china_active = int(row["active_total"] or 0)
             china_cleaned = int(row["cleaned_total"] or 0)
 
-    return global_active, china_active, global_cleaned, china_cleaned
+    return global_count, china_count, global_active, china_active, global_cleaned, china_cleaned
 
 
 def _get_last_timeset_date(cursor, timeset_table: str) -> date | None:
@@ -173,7 +178,7 @@ def ensure_recent_30_days_data() -> None:
                     _log(f"[{botnet_type}] skip: nodes table not found or unreadable")
                     continue
 
-                global_active, china_active, global_cleaned, china_cleaned = counts
+                global_count, china_count, global_active, china_active, global_cleaned, china_cleaned = counts
 
                 existing = _get_existing_dates(cursor, timeset_table, range_start, today)
                 missing = [
@@ -188,22 +193,25 @@ def ensure_recent_30_days_data() -> None:
 
                 _log(
                     f"[{botnet_type}] missing {len(missing)} day(s): {missing[0]} ~ {missing[-1]} | "
-                    f"write global_active={global_active}, china_active={china_active}, "
+                    f"write global_count={global_count}, china_count={china_count}, "
+                    f"global_active={global_active}, china_active={china_active}, "
                     f"global_cleaned={global_cleaned}, china_cleaned={china_cleaned}"
                 )
 
                 for d in missing:
                     cursor.execute(
                         f"""
-                        INSERT INTO {timeset_table} (date, global_active, china_active, global_cleaned, china_cleaned)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO {timeset_table} (date, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         ON DUPLICATE KEY UPDATE
+                            global_count = VALUES(global_count),
+                            china_count = VALUES(china_count),
                             global_active = VALUES(global_active),
                             china_active = VALUES(china_active),
                             global_cleaned = VALUES(global_cleaned),
                             china_cleaned = VALUES(china_cleaned)
                         """,
-                        (d, global_active, china_active, global_cleaned, china_cleaned),
+                        (d, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned),
                     )
 
                 _log(f"[{botnet_type}] filled {len(missing)} day(s) into {timeset_table}")

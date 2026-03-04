@@ -57,7 +57,7 @@ ALLOWED_BOTNET_TYPES = [
     'moobot',
     'ramnit',
     'leethozer',
-    'test'
+    'utg_q_008'
 ]
 
 # ============================================================
