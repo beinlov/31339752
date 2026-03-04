@@ -1,0 +1,11 @@
+# C2端Python依赖包
+
+# HTTP服务器框架（异步）
+aiohttp>=3.8.0
+
+# 注：Python 3.7+ 标准库已包含以下模块，无需安装
+# - sqlite3 (数据库)
+# - re (正则表达式)
+# - json (JSON解析)
+# - logging (日志)
+# - asyncio (异步IO)

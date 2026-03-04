@@ -1,0 +1,122 @@
+{
+  "_comment": "C2端生产环境配置文件",
+  "_security_notice": "API_KEY请使用环境变量 C2_API_KEY，不要写死在配置文件中",
+  
+  "botnet": {
+    "_comment_botnet_type": "僵尸网络类型标识（必须与平台端config.py中的配置保持一致）",
+    "_example": "如平台端配置为 'ramnit'，此处也应为 'ramnit'",
+    "botnet_type": "test"
+  },
+  
+  "log_sources": {
+    "_comment": "========== 日志源配置 - 适配C2实际路径 ==========",
+    
+    "online": {
+      "_comment": "上线日志配置 - 从user_activity.log读取JOIN记录",
+      "enabled": true,
+      "log_type": "online",
+      "storage_type": "file",
+      
+      "_comment_path": "上线日志文件路径（C2实际路径）",
+      "path": "/home/irc_server/logs/user_activity.log",
+      
+      "_comment_format": "逐行解析",
+      "format": "line",
+      
+      "_comment_field_mapping": "字段映射配置",
+      "field_mapping": {
+        "ip_field": "ip",
+        "timestamp_field": "timestamp",
+        
+        "_comment_line_parser": "只匹配JOIN类型的记录",
+        "line_parser": {
+          "type": "regex",
+          "pattern": "\\[(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\] \\[JOIN\\s*\\].*?([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})",
+          "timestamp_group": 1,
+          "ip_group": 2,
+          "timestamp_format": "%Y-%m-%d %H:%M:%S"
+        }
+      }
+    },
+    
+    "cleanup": {
+      "_comment": "清除日志配置 - 从reports.db读取清除记录",
+      "enabled": true,
+      "log_type": "cleanup",
+      "storage_type": "database",
+      
+      "_comment_path": "清除记录数据库路径（C2实际路径）",
+      "path": "/home/irc_server/logs/reports.db",
+      
+      "_comment_db_config": "数据库查询配置",
+      "db_config": {
+        "type": "sqlite",
+        "table": "reports",
+        "query": "SELECT client_ip, timestamp FROM reports WHERE id > ? ORDER BY id ASC LIMIT ?",
+        "position_field": "id"
+      },
+      
+      "_comment_field_mapping": "字段映射配置",
+      "field_mapping": {
+        "ip_field": "client_ip",
+        "timestamp_field": "timestamp",
+        "timestamp_format": "%Y-%m-%dT%H:%M:%S"
+      }
+    }
+  },
+  
+  "cache": {
+    "_comment": "数据缓存配置（SQLite持久化）",
+    "_comment_db_file": "缓存数据库路径（建议放在可写目录）",
+    "db_file": "/tmp/c2_data_cache.db",
+    
+    "_comment_max_cached_records": "最大缓存记录数（硬限制）",
+    "max_cached_records": 10000,
+    
+    "_comment_high_watermark": "高水位线（达到此值暂停读取）",
+    "high_watermark": 8000,
+    
+    "_comment_low_watermark": "低水位线（低于此值全速读取）",
+    "low_watermark": 2000,
+    
+    "_comment_read_batch_size": "每次读取的批量大小",
+    "read_batch_size": 5000,
+    
+    "_comment_adaptive_read": "是否启用自适应读取",
+    "adaptive_read": true,
+    
+    "_comment_retention_days": "已拉取记录保留天数",
+    "retention_days": 7,
+    
+    "_comment_two_phase_commit": "是否启用两阶段确认（强烈推荐）",
+    "two_phase_commit": true
+  },
+  
+  "processing": {
+    "_comment_read_interval": "日志读取间隔（秒）",
+    "read_interval": 60,
+    
+    "_comment_max_files_per_read": "单次处理的最大文件数",
+    "max_files_per_read": 10
+  },
+  
+  "http_server": {
+    "_comment_host": "监听地址（0.0.0.0表示所有网络接口）",
+    "host": "0.0.0.0",
+    
+    "_comment_port": "HTTP服务端口（需要与平台端C2配置一致）",
+    "port": 8888,
+    
+    "_comment_api_key": "API认证密钥 - 强烈建议使用环境变量 C2_API_KEY",
+    "api_key": "your-secret-key-here"
+  },
+  
+  "files": {
+    "_comment": "程序运行时文件配置",
+    "_comment_positions_file": "文件读取位置记录",
+    "positions_file": "/tmp/c2_log_positions.json",
+    
+    "_comment_log_file": "C2服务器程序日志",
+    "log_file": "/tmp/c2_data_server.log"
+  }
+}
