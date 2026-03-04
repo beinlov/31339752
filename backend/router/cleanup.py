@@ -57,10 +57,10 @@ def get_botnet_c2_info(botnet_name: str) -> Optional[Dict]:
 
 def get_all_botnets_with_c2() -> List[Dict]:
     """
-    获取所有僵网及其C2权限状态
+    获取所有僵网类型，并检查每个僵网是否有C2权限
     
     Returns:
-        僵网列表，每个包含名称、显示名、C2状态等信息
+        包含所有僵网及其C2权限状态的列表
     """
     try:
         conn = pymysql.connect(**DB_CONFIG)
@@ -78,11 +78,11 @@ def get_all_botnets_with_c2() -> List[Dict]:
         for botnet in botnets:
             botnet_name = botnet['name']
             
-            # 查询是否有C2 IP
+            # 检查该僵网是否有C2服务器配置
             c2_info = get_botnet_c2_info(botnet_name)
             has_c2 = c2_info is not None and c2_info.get('ip')
             
-            # 检查是否在配置中定义了操作路径
+            # 检查是否配置了清除接口路径
             has_paths = botnet_name in C2_CLEANUP_CONFIG['botnet_paths']
             
             result.append({
@@ -139,9 +139,14 @@ def call_c2_api(c2_ip: str, botnet_name: str, action: str) -> Dict:
         # 获取操作路径
         action_path = C2_CLEANUP_CONFIG['botnet_paths'][botnet_name][action]
         
-        # 构建完整URL
-        base_url = f"http://{c2_ip}:{C2_CLEANUP_CONFIG['c2_port']}"
-        full_url = f"{base_url}{C2_CLEANUP_CONFIG['c2_path_prefix']}{action_path}"
+        # 根据端口选择协议（443使用HTTPS，其他使用HTTP）
+        port = C2_CLEANUP_CONFIG['c2_port']
+        protocol = 'https' if port == 443 else 'http'
+        base_url = f"{protocol}://{c2_ip}:{port}"
+        
+        # 构建完整URL（如果路径前缀为空，则直接拼接action_path）
+        path_prefix = C2_CLEANUP_CONFIG['c2_path_prefix']
+        full_url = f"{base_url}{path_prefix}{action_path}"
         
         # 构建请求头
         headers = {

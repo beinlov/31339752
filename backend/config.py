@@ -158,12 +158,12 @@ BOTNET_CONFIG = {
         'enabled': True,
         'description': 'Leethozer僵尸网络'
     },
-    'test': {
-        'log_dir': os.path.join(LOGS_DIR, 'test'),
-        'important_events': [],
+    'utg_q_008': {
+        'log_dir': os.path.join(LOGS_DIR, 'utg_q_008'),
+        'important_events': ['scan', 'exploit', 'infection', 'beacon'],
         'enabled': True,
-        'description': 'Test僵尸网络'
-    }
+        'description': 'UTG-q-008僵尸网络'
+    },
 }
 
 # ============================================================
@@ -467,16 +467,16 @@ C2_CLEANUP_CONFIG = {
     # 安全码（X-Safety-Code header）
     'safety_code': 'Mrcm3YsTNFyJQ685m@bL&nhm!8jyaP&sw9@qz^BJMKkqHh@rzV5GEptkxq9@3Z5e',
     
-    # C2接口端口
-    'c2_port': 8080,
+    # C2接口端口（HTTPS）
+    'c2_port': 443,
     
-    # C2接口路径前缀
-    'c2_path_prefix': '/execute',
+    # C2接口路径前缀（直接访问/admin路径，无需前缀）
+    'c2_path_prefix': '',
     
     # 请求超时（秒）
     'request_timeout': 30,
     
-    # 是否验证SSL证书（HTTP不需要）
+    # 是否验证SSL证书（HTTPS可能需要，视C2服务器配置而定）
     'verify_ssl': False,
     
     # 僵网操作路径配置（按照文档中的接口路径）
@@ -491,7 +491,7 @@ C2_CLEANUP_CONFIG = {
             'status': '/admin/autoupdate/status',
             'reset': '/admin/autoupdate/reset'
         },
-        'utg-q-008': {
+        'utg_q_008': {
             'cleanup': '/admin/irc/cleanup',
             'status': '/admin/irc/status',
             'reset': '/admin/irc/reset'
