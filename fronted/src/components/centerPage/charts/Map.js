@@ -105,6 +105,9 @@ class Map extends PureComponent {
     if (this.flyLinesTimer) {
       clearTimeout(this.flyLinesTimer);
     }
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+    }
   }
 
   initChart = () => {
@@ -136,28 +139,39 @@ class Map extends PureComponent {
     if (prevProps.selectedNetwork !== this.props.selectedNetwork ||
         prevProps.provinceData !== this.props.provinceData ||
         prevProps.mapData !== this.props.mapData ||
+        prevProps.cityData !== this.props.cityData ||
+        prevProps.displayMode !== this.props.displayMode ||
         prevProps.isLeftPage !== this.props.isLeftPage) {
       this.updateChart();
     }
   };
 
-  // 更新图表
+  // 更新图表 - 添加防抖优化
   updateChart = () => {
     if (!this.chart) return;
 
-    const { mapData, currentMap, isLeftPage, cityData } = this.props;
-    const { currentProvinceColor, isShowingFlyLines } = this.state;
-    const provinceData = this.getProvinceDataForCurrentNetwork();
+    // 清除之前的更新定时器
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+    }
 
-    const option = mapOptions({
-      ...mapData,
-      provinceData,
-      currentProvinceColor,
-      showLines: isShowingFlyLines,
-      cityData: currentMap !== 'china' ? (cityData && cityData[this.props.selectedNetwork]) : null
-    }, currentMap, isLeftPage || false);
+    // 使用防抖，避免频繁更新
+    this.updateTimer = setTimeout(() => {
+      const { mapData, currentMap, isLeftPage, cityData, displayMode } = this.props;
+      const { currentProvinceColor, isShowingFlyLines } = this.state;
+      const provinceData = this.getProvinceDataForCurrentNetwork();
 
-    this.chart.setOption(option);
+      const option = mapOptions({
+        ...mapData,
+        provinceData,
+        currentProvinceColor,
+        showLines: isShowingFlyLines,
+        cityData: currentMap !== 'china' ? (cityData && cityData[this.props.selectedNetwork]) : null
+      }, currentMap, isLeftPage || false, displayMode || 'active');
+
+      // 使用notMerge: false来提升性能，只更新变化的部分
+      this.chart.setOption(option, { notMerge: false, lazyUpdate: true });
+    }, 100); // 100ms防抖延迟
   };
 
   // 获取当前选择网络的省份数据
@@ -165,7 +179,7 @@ class Map extends PureComponent {
     const { provinceData, selectedNetwork } = this.props;
     if (!provinceData) return null;
 
-    const networkToUse = selectedNetwork || 'ramnit';
+    const networkToUse = selectedNetwork || 'utg_q_008';
     return provinceData[networkToUse];
   }
 
@@ -331,7 +345,8 @@ const mapStateToProps = (state) => ({
   showFlyLines: state.mapState.showFlyLines,
   selectedNetwork: state.mapState.selectedNetwork,
   provinceData: state.mapState.provinceData,
-  cityData: state.mapState.cityData  // Add cityData from state
+  cityData: state.mapState.cityData,
+  displayMode: state.mapState.displayMode
 });
 
 export default connect(mapStateToProps)(Map);

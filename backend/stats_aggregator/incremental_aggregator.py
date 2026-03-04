@@ -204,11 +204,13 @@ class IncrementalStatsAggregator:
             # 注意：节点表使用 created_time，但统计表使用 created_at
             # 按IP去重统计节点数量，避免重复计数
             cursor.execute(f"""
-                INSERT INTO {china_table} (province, municipality, infected_num, created_at, updated_at)
+                INSERT INTO {china_table} (province, municipality, infected_num, active_num, cleaned_num, created_at, updated_at)
                 SELECT 
                     %s as province,
                     %s as municipality,
                     COUNT(DISTINCT ip) as infected_num,
+                    COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_num,
+                    COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
@@ -232,6 +234,8 @@ class IncrementalStatsAggregator:
                     END = %s
                 ON DUPLICATE KEY UPDATE
                     infected_num = VALUES(infected_num),
+                    active_num = VALUES(active_num),
+                    cleaned_num = VALUES(cleaned_num),
                     created_at = VALUES(created_at),
                     updated_at = VALUES(updated_at)
             """, (province, municipality, province, municipality))
@@ -249,16 +253,20 @@ class IncrementalStatsAggregator:
             # 注意：节点表使用 created_time，但统计表使用 created_at
             # 按IP去重统计节点数量，避免重复计数
             cursor.execute(f"""
-                INSERT INTO {global_table} (country, infected_num, created_at, updated_at)
+                INSERT INTO {global_table} (country, infected_num, active_num, cleaned_num, created_at, updated_at)
                 SELECT 
                     %s as country,
                     COUNT(DISTINCT ip) as infected_num,
+                    COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_num,
+                    COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_num,
                     MIN(created_time) as created_at,
                     MAX(updated_at) as updated_at
                 FROM {node_table}
                 WHERE COALESCE(country, '未知') = %s
                 ON DUPLICATE KEY UPDATE
                     infected_num = VALUES(infected_num),
+                    active_num = VALUES(active_num),
+                    cleaned_num = VALUES(cleaned_num),
                     created_at = VALUES(created_at),
                     updated_at = VALUES(updated_at)
             """, (country, country))

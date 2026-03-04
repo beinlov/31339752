@@ -129,9 +129,9 @@ if "!SKIP_FRONTEND!"=="0" (
     echo.
     echo [Step 5/6] Checking frontend dependencies...
     
-    if not exist "%~dp0frontend\node_modules" (
+    if not exist "%~dp0fronted\node_modules" (
         echo [Installing] Frontend dependencies not found, installing...
-        pushd "%~dp0frontend"
+        pushd "%~dp0fronted"
         if exist package.json (
             call npm install
             if !errorlevel! neq 0 (
@@ -170,7 +170,7 @@ echo [OK] Log Processor started
 
 echo.
 echo [Starting 2/4] Platform Backend API (FastAPI)...
-start "Botnet API Backend" cmd /k "cd /d %~dp0backend && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "Botnet API Backend" cmd /k "cd /d %~dp0backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 timeout /t 3 /nobreak >nul
 echo [OK] Platform Backend started - http://localhost:8000
 
@@ -198,7 +198,7 @@ echo.
 REM Start frontend if enabled
 if "!SKIP_FRONTEND!"=="0" (
     echo [Starting 5/5] Frontend UI - Vite...
-    cd /d "%~dp0frontend"
+    cd /d "%~dp0fronted"
     start "Botnet Frontend" cmd /k "npm run dev"
     cd /d "%~dp0"
     timeout /t 3 /nobreak >nul

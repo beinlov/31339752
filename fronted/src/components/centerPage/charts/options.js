@@ -121,9 +121,9 @@ const provinceCoordinates = {
 };
 
 // 获取所有省份数据的最大和最小值
-const getMinMaxValues = (data) => {
+const getMinMaxValues = (data, getValueField = null) => {
   if (!Array.isArray(data) || !data.length) return { min: 0, max: 0 };
-  const values = data.map(item => item.amount);
+  const values = getValueField ? data.map(getValueField) : data.map(item => item.amount);
   return {
     min: Math.min(...values),
     max: Math.max(...values)
@@ -131,10 +131,10 @@ const getMinMaxValues = (data) => {
 };
 
 // 计算数据的分位数
-const calculateQuantiles = (data) => {
+const calculateQuantiles = (data, getValueField = null) => {
   if (!Array.isArray(data) || !data.length) return [0, 0, 0, 0, 0, 0];
 
-  const values = data.map(item => item.amount).sort((a, b) => a - b);
+  const values = getValueField ? data.map(getValueField).sort((a, b) => a - b) : data.map(item => item.amount).sort((a, b) => a - b);
   const maxValue = values[values.length - 1];
 
   // 计算分位数
@@ -196,11 +196,19 @@ const normalizeProvince = (rawName) => {
 };
 
 // 将省份数据转换为地图所需格式，并进行省份名称映射
-const convertData = (data) => {
+const convertData = (data, displayMode = 'active') => {
   if (!Array.isArray(data)) return [];
 
+  // 根据displayMode选择使用哪个字段
+  const getValueField = (item) => {
+    if (displayMode === 'cleaned') {
+      return item.cleaned || 0;
+    }
+    return item.active || 0;
+  };
+
   // 找出最大值用于相对比例计算
-  const maxValue = Math.max(...data.map(item => item.amount));
+  const maxValue = Math.max(...data.map(getValueField));
 
   // 创建一个包含所有省份的映射，初始值为0
   const provinceDataMap = {};
@@ -257,11 +265,12 @@ const convertData = (data) => {
     }
     
     if (fullName) {
-      provinceDataMap[fullName] = item.amount;
-      console.log(`✓ 匹配成功: "${provinceName}" → "${fullName}" (数量: ${item.amount})`);
+      const value = getValueField(item);
+      provinceDataMap[fullName] = value;
+      console.log(`✓ 匹配成功: "${provinceName}" → "${fullName}" (数量: ${value})`);
     } else {
       // 输出未匹配的省份名用于调试
-      console.warn(`✗ 未能匹配省份: "${provinceName}" (标准化后: "${normalizeProvince(provinceName)}")，节点数: ${item.amount}`);
+      console.warn(`✗ 未能匹配省份: "${provinceName}" (标准化后: "${normalizeProvince(provinceName)}")，节点数: ${getValueField(item)}`);
     }
   });
 
@@ -291,11 +300,19 @@ const convertData = (data) => {
 };
 
 // 将城市数据转换为地图所需格式
-const convertCityData = (data) => {
+const convertCityData = (data, displayMode = 'active') => {
   if (!Array.isArray(data)) return [];
 
+  // 根据displayMode选择使用哪个字段
+  const getValueField = (item) => {
+    if (displayMode === 'cleaned') {
+      return item.cleaned || 0;
+    }
+    return item.active || 0;
+  };
+
   // 找出最大值用于相对比例计算
-  const maxValue = data.length > 0 ? Math.max(...data.map(item => item.amount)) : 0;
+  const maxValue = data.length > 0 ? Math.max(...data.map(getValueField)) : 0;
 
   console.log('=== 城市数据转换 ===');
   const result = data.map(item => {
@@ -341,13 +358,14 @@ const convertCityData = (data) => {
       cityName = cityName + '市';
     }
     
-    console.log(`城市名称转换: "${originalName}" → "${cityName}" (数量: ${item.amount})`);
+    const value = getValueField(item);
+    console.log(`城市名称转换: "${originalName}" → "${cityName}" (数量: ${value})`);
     
     return {
       name: cityName,
-      value: item.amount,
+      value: value,
       itemStyle: {
-        areaColor: getProvinceColorByRatio(item.amount, maxValue),
+        areaColor: getProvinceColorByRatio(value, maxValue),
         borderColor: 'rgba(147, 235, 248, 0.3)'
       }
     };
@@ -357,19 +375,27 @@ const convertCityData = (data) => {
   return result;
 };
 
-export const mapOptions = (params, currentMap, isLeftPage = false) => {
-  const maxValue = params.provinceData ? getMinMaxValues(params.provinceData).max : 0;
-  const quantiles = params.provinceData ? calculateQuantiles(params.provinceData) : [0, 0, 0, 0, 0, 0];
+export const mapOptions = (params, currentMap, isLeftPage = false, displayMode = 'active') => {
+  // 根据displayMode选择使用哪个字段
+  const getValueField = (item) => {
+    if (displayMode === 'cleaned') {
+      return item.cleaned || 0;
+    }
+    return item.active || 0;
+  };
+
+  const maxValue = params.provinceData ? getMinMaxValues(params.provinceData, getValueField).max : 0;
+  const quantiles = params.provinceData ? calculateQuantiles(params.provinceData, getValueField) : [0, 0, 0, 0, 0, 0];
 
   // 根据当前地图类型调整配置
   const isProvince = currentMap !== 'china';
 
-  // 计算城市数据的最大值和分位数
+  // 计算城市数据的最大值和分位数 - 根据displayMode选择字段
   let cityMaxValue = 0;
   let cityQuantiles = [0, 0, 0, 0, 0, 0];
   if (isProvince && params.cityData && Array.isArray(params.cityData)) {
-    cityMaxValue = Math.max(...params.cityData.map(item => item.amount));
-    const cityValues = params.cityData.map(item => item.amount).sort((a, b) => a - b);
+    cityMaxValue = Math.max(...params.cityData.map(item => getValueField(item)));
+    const cityValues = params.cityData.map(item => getValueField(item)).sort((a, b) => a - b);
     const len = cityValues.length;
     cityQuantiles = [
       0,
@@ -381,11 +407,11 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
     ];
   }
 
-  // 获取城市感染数据映射
+  // 获取城市数据映射 - 根据displayMode选择字段
   const cityAmountMap = {};
   if (params.cityData && Array.isArray(params.cityData)) {
     params.cityData.forEach(item => {
-      cityAmountMap[item.city] = item.amount;
+      cityAmountMap[item.city] = getValueField(item);
     });
   }
 
@@ -441,10 +467,13 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
           value = params.data.value;
         }
         
-        // 显示省份/城市名称和感染数量
+        // 根据displayMode显示不同的提示文字
+        const labelText = displayMode === 'cleaned' ? '已清除节点数量' : '在线节点数量';
+        
+        // 显示省份/城市名称和节点数量
         if (value !== undefined && value !== null) {
           const displayName = params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
-          return `${displayName}<br/>感染节点数量：${value}`;
+          return `${displayName}<br/>${labelText}：${value}`;
         }
         
         // 如果没有数据，只显示名称
@@ -530,8 +559,8 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
         type: 'map',
         geoIndex: 0,
         data: isProvince ?
-          (params.cityData ? convertCityData(params.cityData) : []) :
-          (params.provinceData ? convertData(params.provinceData) : []),
+          (params.cityData ? convertCityData(params.cityData, displayMode) : []) :
+          (params.provinceData ? convertData(params.provinceData, displayMode) : []),
         nameProperty: 'name',
         tooltip: {
           show: true,
@@ -549,10 +578,13 @@ export const mapOptions = (params, currentMap, isLeftPage = false) => {
               value = params.data.value;
             }
             
-            // 显示省份/城市名称和感染数量
+            // 根据displayMode显示不同的提示文字
+            const labelText = displayMode === 'cleaned' ? '已清除节点数量' : '在线节点数量';
+            
+            // 显示省份/城市名称和节点数量
             if (value !== undefined && value !== null) {
               const displayName = params.name.replace(/(省|市|自治区|特别行政区|州|地区)$/, '');
-              return `${displayName}<br/>感染节点数量：${value}`;
+              return `${displayName}<br/>${labelText}：${value}`;
             }
             
             // 如果没有数据，只显示名称

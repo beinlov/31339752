@@ -1,12 +1,11 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import { connect } from '../../../utils/ModernConnect';
 import { 
   Typography,
   Box,
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { getUserLocation } from '../../../utils/index';
-import { getApiUrl } from '../../../config/api';
+import CleanupModal from '../../CleanupModal';
 
 const useStyles = makeStyles((theme) => ({
   buttonContainer: {
@@ -45,63 +44,16 @@ const useStyles = makeStyles((theme) => ({
 
 const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
   const classes = useStyles();
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
   
   // 获取用户角色，判断是否有操作权限
   const userRole = localStorage.getItem('role');
   const canOperate = userRole === '管理员' || userRole === '操作员';  // 只有管理员和操作员可以操作
   const isGuest = userRole === '访客';  // 访客只能查看
 
-  const handleClean = async () => {
-    if (!selectedNetwork) {
-      console.error('No botnet network selected');
-      return;
-    }
-
-    // 使用 handleFlyLines effect
-    dispatch({
-      type: 'mapState/handleFlyLines'
-    });
-
-    try {
-      // 获取操作者的IP地理位置
-      const locationInfo = await getUserLocation();
-      console.log('操作者IP地理位置:', locationInfo);
-
-      // 调用清除API
-      const token = localStorage.getItem('token');
-      fetch(getApiUrl('/api/clean-botnet'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          botnet_type: selectedNetwork,  // 使用选中的僵尸网络类型
-          target_machines: [],    // 空数组表示清除所有节点
-          clean_method: 'clear',  // 有效的清除方法之一
-          username: localStorage.getItem('username') || 'admin',
-          location: locationInfo.location,
-          operator_ip: locationInfo.ip
-        }),
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          // 更新数据显示
-          dispatch({
-            type: 'mapState/fetchProvinceAmounts'
-          });
-          dispatch({
-            type: 'mapState/fetchBotnetDistribution'
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-      });
-    } catch (error) {
-      console.error('Error getting location:', error);
-    }
+  const handleClean = () => {
+    // 打开清除模态框
+    setShowCleanupModal(true);
   };
 
   return (
@@ -121,8 +73,15 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
             一键清除
           </Typography>
         </Box>
-
       </Box>
+
+      {/* 清除模态框 */}
+      {showCleanupModal && (
+        <CleanupModal 
+          onClose={() => setShowCleanupModal(false)} 
+          dispatch={dispatch}
+        />
+      )}
     </Fragment>
   );
 };

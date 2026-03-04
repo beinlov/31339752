@@ -1,41 +1,37 @@
-# 忽略大文件
-*.awdb
-*.log
+# Python artifacts
 __pycache__/
-<<<<<<< HEAD
-__pycache__/ 
-*.pyc 
-=======
-<<<<<<< HEAD
-__pycache__/ 
-*.pyc 
-<<<<<<< HEAD
-=======
-=======
 *.pyc
->>>>>>> c9ae37dc6f29235a456b0c74fd138a653121b35e
->>>>>>> 20c900ac51bce5e49c8764f85b55b9953fa184a9
 
-# ignore large sql dumps
+# Logs / runtime artifacts
+*.log
+*.pid
+
+# runtime logs
+backend/logs/
+botnet_navicat.sql
+backend/ip_location/IP_city_single_WGS84.awdb
+
+# Large / binary data
+*.awdb
+
+# SQL dumps (prefer patterns over fixed names)
+*.sql
 botnet.sql
 data_only.sql
 data_optimized.sql
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> a8cdbf0d8c22c5dabef654d5f534f66ee3a589ec
-=======
 data_new_optimized.sql
 schema_only.sql
 schema_clean.sql
 schema_new.sql
 
-# ignore backup files
+# Backups
 backup_*.sql
 backup_*.json
 
-# ignore temp files
+# Temp files
 temp_*.sql
 *.bak
->>>>>>> c9ae37dc6f29235a456b0c74fd138a653121b35e
->>>>>>> 20c900ac51bce5e49c8764f85b55b9953fa184a9
+
+# App runtime state (if you do NOT want to version these)
+backend/.remote_puller_state.json
+backend/log_processor/.file_positions.json

@@ -17,32 +17,51 @@ const getWorldMapColor = (value) => {
 
 
 // 将世界地图数据转换为所需格式
-const convertWorldMapData = (data) => {
+const convertWorldMapData = (data, displayMode = 'active') => {
   if (!Array.isArray(data) || data.length === 0) return [];
 
-  // 找出最大值用于相对比例计算
-  const maxValue = Math.max(...data.map(item => item.amount));
-
-  return data.map(item => ({
-    name: item.country,
-    value: item.amount,
-    itemStyle: {
-      normal: {
-          areaColor: getWorldMapColor(item.amount)
-      }
+  // 根据displayMode选择使用哪个字段
+  const getValueField = (item) => {
+    if (displayMode === 'cleaned') {
+      return item.cleaned || 0;
     }
-  }));
+    return item.active || 0;
+  };
+
+  // 找出最大值用于相对比例计算
+  const maxValue = Math.max(...data.map(getValueField));
+
+  return data.map(item => {
+    const value = getValueField(item);
+    return {
+      name: item.country,
+      value: value,
+      itemStyle: {
+        normal: {
+            areaColor: getWorldMapColor(value)
+        }
+      }
+    };
+  });
 };
 
-export const worldMapOptions = (params, isLeftPage = false) => {
+export const worldMapOptions = (params, isLeftPage = false, displayMode = 'active') => {
   const countryData = params.countryData || [];
+
+  // 根据displayMode选择使用哪个字段
+  const getValueField = (item) => {
+    if (displayMode === 'cleaned') {
+      return item.cleaned || 0;
+    }
+    return item.active || 0;
+  };
 
   // 计算数据的最大值和分位点
   let maxValue = 0;
   let quantiles = [0, 0, 0, 0, 0];
 
   if (countryData.length > 0) {
-    const values = countryData.map(item => item.amount).sort((a, b) => a - b);
+    const values = countryData.map(getValueField).sort((a, b) => a - b);
     maxValue = values[values.length - 1];
 
     // 计算分位数
@@ -71,9 +90,12 @@ export const worldMapOptions = (params, isLeftPage = false) => {
           return params.name;
         }
 
-        // 国家地图（map）仍展示感染节点数量
+        // 根据displayMode显示不同的提示文字
+        const labelText = displayMode === 'cleaned' ? '已清除节点数量' : '在线节点数量';
+
+        // 国家地图（map）仍展示节点数量
         if (params.value) {
-          return `${params.name}<br/>感染节点数量：${params.value}`;
+          return `${params.name}<br/>${labelText}：${params.value}`;
         }
 
         return params.name;
@@ -141,7 +163,7 @@ export const worldMapOptions = (params, isLeftPage = false) => {
         name: '感染数量',
         type: 'map',
         geoIndex: 0,
-        data: convertWorldMapData(countryData)
+        data: convertWorldMapData(countryData, displayMode)
       },
       {
         type: 'effectScatter',

@@ -16,8 +16,10 @@ router = APIRouter()
 
 class NodeCountHistory(BaseModel):
     timestamp: str
-    china_count: int
-    global_count: int
+    china_active: int
+    global_active: int
+    china_cleaned: int
+    global_cleaned: int
 
 
 @router.get("/node-count-history/{botnet_type}", response_model=List[NodeCountHistory])
@@ -55,12 +57,15 @@ async def get_node_count_history(
         query = f"""
             SELECT 
                 DATE_FORMAT(date, '%%m-%%d') as date_str,
-                global_count,
-                china_count
+                COALESCE(china_active, 0) as china_active,
+                COALESCE(global_active, 0) as global_active,
+                COALESCE(china_cleaned, 0) as china_cleaned,
+                COALESCE(global_cleaned, 0) as global_cleaned
             FROM {timeset_table}
             WHERE date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
             ORDER BY date ASC
         """
+        
         cursor.execute(query, (days,))
         rows = cursor.fetchall()
         
@@ -69,8 +74,10 @@ async def get_node_count_history(
         for row in rows:
             result.append({
                 "timestamp": row['date_str'],
-                "china_count": row['china_count'],
-                "global_count": row['global_count']
+                "china_active": row['china_active'],
+                "global_active": row['global_active'],
+                "china_cleaned": row['china_cleaned'],
+                "global_cleaned": row['global_cleaned']
             })
         
         logger.info(f"Retrieved {len(result)} daily history points for {botnet_type} (last {days} days)")
