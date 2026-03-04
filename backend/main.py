@@ -77,6 +77,10 @@ app.include_router(user_router, prefix="/api/user", tags=["users"])
 # 包含用户集成接口路由（SSO免登录接口和用户数据同步接口）
 app.include_router(user_integration_router, prefix="/api/user", tags=["user-integration"])
 
+# 包含第三方集成平台API路由（用户名密码增删改查）
+from router.integration_platform_api import router as integration_platform_router
+app.include_router(integration_platform_router, prefix="/api/integration", tags=["integration-platform"])
+
 # 包含节点路由
 app.include_router(node_router, prefix="/api", tags=["nodes"])
 
