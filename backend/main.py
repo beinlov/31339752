@@ -528,7 +528,8 @@ async def get_province_amounts(botnet_type: Optional[str] = None):
                 province_amounts[botnet_type_result].append({
                     "province": province,
                     "active": int(active),
-                    "cleaned": int(cleaned)
+                    "cleaned": int(cleaned),
+                    "amount": int(active) + int(cleaned)  # 添加amount字段用于前端显示
                 })
 
             return province_amounts
@@ -607,7 +608,8 @@ async def get_world_amounts(botnet_type: Optional[str] = None):
                 world_amounts[bot_type_result].append({
                     "country": country,
                     "active": int(active or 0),
-                    "cleaned": int(cleaned or 0)
+                    "cleaned": int(cleaned or 0),
+                    "amount": int(active or 0) + int(cleaned or 0)  # 添加amount字段用于前端显示
                 })
 
             return world_amounts

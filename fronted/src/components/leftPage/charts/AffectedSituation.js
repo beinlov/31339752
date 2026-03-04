@@ -30,7 +30,8 @@ class AffectedSituation extends PureComponent {
       prevProps.isSwapped !== this.props.isSwapped ||
       prevProps.currentMap !== this.props.currentMap ||
       prevProps.provinceData !== this.props.provinceData ||
-      prevProps.cityData !== this.props.cityData
+      prevProps.cityData !== this.props.cityData ||
+      prevProps.displayMode !== this.props.displayMode
     ) {
       this.updateChartData();
     }
@@ -41,6 +42,12 @@ class AffectedSituation extends PureComponent {
       clearInterval(this.pollingInterval);
     }
   }
+
+  // 根据displayMode获取对应的字段值
+  getValueField = (item) => {
+    const { displayMode } = this.props;
+    return displayMode === 'cleaned' ? (item.cleaned || 0) : (item.active || 0);
+  };
 
   updateChartData = () => {
     const { selectedNetwork, isSwapped, currentMap, provinceData, cityData } = this.props;
@@ -63,11 +70,12 @@ class AffectedSituation extends PureComponent {
           );
           
           if (currentProvinceData) {
+            const value = this.getValueField(currentProvinceData);
             this.setState({
               affectedData: {
                 provinces: [currentMap],
                 data: [{
-                  value: currentProvinceData.amount,
+                  value: value,
                   percentage: '100.0'
                 }],
                 isWorldView: false,
@@ -80,16 +88,19 @@ class AffectedSituation extends PureComponent {
         // 其他省份显示城市详细数据
         const currentCityData = cityData[selectedNetwork] || [];
         const sortedCityData = [...currentCityData]
-          .sort((a, b) => b.amount - a.amount)
+          .sort((a, b) => this.getValueField(b) - this.getValueField(a))
           .slice(0, 15);
 
-        const total = currentCityData.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const total = currentCityData.reduce((sum, item) => sum + this.getValueField(item), 0);
 
         const cities = sortedCityData.map(item => item.city);
-        const data = sortedCityData.map(item => ({
-          value: item.amount || 0,
-          percentage: ((item.amount || 0) / (total || 1) * 100).toFixed(1)
-        }));
+        const data = sortedCityData.map(item => {
+          const value = this.getValueField(item);
+          return {
+            value: value,
+            percentage: ((value / (total || 1)) * 100).toFixed(1)
+          };
+        });
 
         this.setState({
           affectedData: {
@@ -105,16 +116,19 @@ class AffectedSituation extends PureComponent {
     else if (provinceData) {
       const networkData = provinceData[selectedNetwork] || [];
       const sortedNetworkData = [...networkData]
-        .sort((a, b) => b.amount - a.amount)
+        .sort((a, b) => this.getValueField(b) - this.getValueField(a))
         .slice(0, 15);
 
-      const total = networkData.reduce((sum, item) => sum + item.amount, 0);
+      const total = networkData.reduce((sum, item) => sum + this.getValueField(item), 0);
 
       const provinces = sortedNetworkData.map(item => item.province);
-      const data = sortedNetworkData.map(item => ({
-        value: item.amount,
-        percentage: ((item.amount / total) * 100).toFixed(1)
-      }));
+      const data = sortedNetworkData.map(item => {
+        const value = this.getValueField(item);
+        return {
+          value: value,
+          percentage: ((value / total) * 100).toFixed(1)
+        };
+      });
 
       this.setState({
         affectedData: {
@@ -139,16 +153,19 @@ class AffectedSituation extends PureComponent {
         
         // 按数量降序排列，取前15个
         const sortedCountryData = [...countryData]
-          .sort((a, b) => b.amount - a.amount)
+          .sort((a, b) => this.getValueField(b) - this.getValueField(a))
           .slice(0, 15);
         
-        const total = countryData.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const total = countryData.reduce((sum, item) => sum + this.getValueField(item), 0);
         
         const countries = sortedCountryData.map(item => item.country);
-        const data = sortedCountryData.map(item => ({
-          value: item.amount || 0,
-          percentage: ((item.amount || 0) / (total || 1) * 100).toFixed(1)
-        }));
+        const data = sortedCountryData.map(item => {
+          const value = this.getValueField(item);
+          return {
+            value: value,
+            percentage: ((value / (total || 1)) * 100).toFixed(1)
+          };
+        });
         
         this.setState({
           affectedData: {
@@ -192,7 +209,8 @@ const mapStateToProps = state => ({
   isSwapped: state.mapPosition.isSwapped,
   currentMap: state.mapState.currentMap,
   provinceData: state.mapState.provinceData,
-  cityData: state.mapState.cityData
+  cityData: state.mapState.cityData,
+  displayMode: state.mapState.displayMode
 });
 
 export default connect(mapStateToProps)(AffectedSituation);
