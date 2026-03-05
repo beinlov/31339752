@@ -236,6 +236,26 @@ class RemotePuller:
                     self.stats['error_count'] += 1
                     return None
                 
+                # 🔍 检测C2端重置：如果平台的since_seq > C2的global_max_seq_id，说明C2已清空缓存/日志
+                global_max_seq_id = data.get('global_max_seq_id', None)
+                if last_seq_id is not None and global_max_seq_id is not None:
+                    if last_seq_id > global_max_seq_id:
+                        logger.warning(
+                            f"[{name}] 🔄 检测到C2端重置！"
+                            f"平台游标({last_seq_id}) > C2最大seq_id({global_max_seq_id})"
+                        )
+                        logger.warning(f"[{name}] 自动清除断点续传状态，下次将从头拉取")
+                        
+                        # 清除断点续传状态
+                        if name in self.last_seq_ids:
+                            del self.last_seq_ids[name]
+                        if name in self.last_timestamps:
+                            del self.last_timestamps[name]
+                        self.save_state()
+                        
+                        logger.info(f"[{name}] ✅ 已重置断点续传状态，等待下次拉取")
+                        return 0  # 本次返回0，下次重新拉取
+                
                 records = data.get('data', [])
                 
                 if not records:

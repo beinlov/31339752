@@ -11,11 +11,18 @@
 - ✅ `log_type="online"` → 正常上线日志处理流程
 - ✅ `log_type="cleanup"` → 清除日志处理流程
 
-### 2. 数据处理流程
+### 2. 数据处理流程（串行执行）
 ```
 C2端 → RemotePuller → LogProcessor → 
-├─ online记录 → IP增强 → 数据库写入（add_node）
-└─ cleanup记录 → 状态更新 → 批量UPDATE + Redis同步
+├─ Step 1: 先处理上线记录
+│   └─ online记录 → IP增强 → 数据库写入（add_node）
+│   └─ 等待完成 ✓
+│
+└─ Step 2: 再处理清除记录
+    └─ cleanup记录 → 状态更新 → 批量UPDATE + Redis同步
+    └─ 等待完成 ✓
+
+处理顺序：先上线，后清除（避免竞态条件）
 ```
 
 ### 3. 清除日志处理步骤
@@ -208,7 +215,50 @@ redis-cli> GET botnet:active_count:test
 
 ## 关键设计说明
 
-### 1. 数据库Schema设计
+### 1. 处理顺序设计（先上线，后清除）
+
+**为什么采用串行处理？**
+
+如果同一批数据中，某个IP既有上线记录又有清除记录，并发处理会导致竞态条件：
+```
+并发处理（错误）:
+  上线任务: IP 1.1.1.1 → status='active'   (可能后完成)
+  清除任务: IP 1.1.1.1 → status='cleaned'  (可能先完成)
+  
+  最终状态: 不确定！可能是active，也可能是cleaned
+```
+
+**串行处理流程：**
+```
+Step 1: 处理所有上线日志
+  ├─ IP 1.1.1.1 → status='active'
+  ├─ IP 2.2.2.2 → status='active'
+  └─ 等待完成 ✓
+
+Step 2: 处理所有清除日志
+  ├─ IP 1.1.1.1 → status='cleaned'  (覆盖之前的active状态)
+  ├─ IP 3.3.3.3 → status='cleaned'
+  └─ 等待完成 ✓
+
+最终状态:
+  - IP 1.1.1.1: cleaned ✓（正确）
+  - IP 2.2.2.2: active  ✓
+  - IP 3.3.3.3: cleaned ✓
+```
+
+**顺序选择：为什么是"先上线，后清除"？**
+
+1. **语义合理**：先添加节点信息，再标记为已清除
+2. **最终状态正确**：如果同一IP既上线又清除，最终状态是`cleaned`（符合预期）
+3. **数据完整性**：确保节点记录存在后，再执行清除操作
+
+**Redis队列模式的注意事项：**
+
+当启用Redis队列时（`USE_QUEUE_FOR_PULLING=True`），上线日志会被推送到队列异步处理，无法等待完成。此时：
+- 上线日志和清除日志可能并发执行
+- 如需严格串行，建议禁用队列模式或使用同步等待机制
+
+### 2. 数据库Schema设计
 **节点状态定义**：
 ```sql
 status ENUM('active', 'inactive', 'cleaned') DEFAULT 'active'
@@ -232,7 +282,7 @@ INDEX idx_cleaned_time (cleaned_time)
 - `idx_status` - 加速按状态查询（如查询所有已清除节点）
 - `idx_cleaned_time` - 加速按清除时间范围查询
 
-### 2. 为什么需要Redis缓存同步？
+### 3. 为什么需要Redis缓存同步？
 **问题背景**：
 - 大屏显示活跃节点数时，直接查询数据库会很慢
 - 使用Redis缓存可以实现毫秒级响应
@@ -246,7 +296,7 @@ INDEX idx_cleaned_time (cleaned_time)
 - Redis更新失败不影响数据库操作
 - 定期从数据库重新计算并更新缓存
 
-### 3. 事务的重要性
+### 4. 事务的重要性
 **确保原子性**：
 - 所有IP要么全部更新成功，要么全部回滚
 - 避免部分成功导致的数据不一致

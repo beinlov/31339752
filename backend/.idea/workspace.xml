@@ -4,7 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a445c879-8da6-4580-a04a-ebd2c6431714" name="Changes" comment="" />
+    <list default="true" id="a445c879-8da6-4580-a04a-ebd2c6431714" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/log_processor/.remote_puller_state.json" beforeDir="false" afterPath="$PROJECT_DIR$/log_processor/.remote_puller_state.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/log_processor/CLEANUP_LOG_PROCESSING.md" beforeDir="false" afterPath="$PROJECT_DIR$/log_processor/CLEANUP_LOG_PROCESSING.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/log_processor/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/log_processor/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/log_processor/remote_puller.py" beforeDir="false" afterPath="$PROJECT_DIR$/log_processor/remote_puller.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/remote/c2_data_server.py" beforeDir="false" afterPath="$PROJECT_DIR$/remote/c2_data_server.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/stats_aggregator/aggregator.py" beforeDir="false" afterPath="$PROJECT_DIR$/stats_aggregator/aggregator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../start_all_v3.bat" beforeDir="false" afterPath="$PROJECT_DIR$/../start_all_v3.bat" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -63,6 +72,7 @@
       <workItem from="1763431051359" duration="24000" />
       <workItem from="1768792606772" duration="72000" />
       <workItem from="1768870278583" duration="6000" />
+      <workItem from="1772627350897" duration="25000" />
     </task>
     <servers />
   </component>

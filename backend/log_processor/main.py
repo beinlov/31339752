@@ -91,6 +91,12 @@ class BotnetLogProcessor:
         self.internal_workers = []  # 内置Worker协程列表
         self.internal_worker_tasks = []  # Worker任务列表
         
+        # 添加处理锁，确保串行处理（但不阻塞拉取循环）
+        self._processing_lock = asyncio.Lock()
+        self._processing_tasks = []  # 跟踪所有后台处理任务
+        
+        logger.info("[串行处理] 已启用异步锁机制")
+        
         # 统计信息
         self.stats = {
             'total_lines': 0,
@@ -143,15 +149,18 @@ class BotnetLogProcessor:
 
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """
-        处理来自API的结构化IP数据（支持队列模式和降级模式）
+        处理来自API的结构化IP数据（串行处理：先上线，后清除）
         根据log_type分流：online -> 正常处理，cleanup -> 清除处理
+        
+        处理顺序：
+        1. 先处理所有上线日志（等待完成）
+        2. 再处理所有清除日志（等待完成）
         """
         if botnet_type not in self.writers:
             logger.warning(f"Unknown botnet type: {botnet_type}")
             return
 
         # ========== 检测数据类型并分流处理 ==========
-        # 检查是否所有数据都是cleanup类型
         cleanup_records = []
         online_records = []
         
@@ -162,53 +171,71 @@ class BotnetLogProcessor:
             else:
                 online_records.append(record)
         
-        # 如果有清除日志，单独处理
-        if cleanup_records:
-            logger.info(f"[{botnet_type}] 检测到 {len(cleanup_records)} 条清除日志")
-            asyncio.create_task(self._handle_cleanup_records(botnet_type, cleanup_records))
+        logger.info(
+            f"[{botnet_type}] 接收数据: "
+            f"上线 {len(online_records)} 条, 清除 {len(cleanup_records)} 条"
+        )
         
-        # 如果没有上线日志，直接返回
-        if not online_records:
-            return
+        # 创建后台任务（不等待，立即返回）
+        # 但在任务内部使用锁确保串行处理
+        task = asyncio.create_task(
+            self._process_with_lock(botnet_type, online_records, cleanup_records)
+        )
         
-        logger.info(f"[{botnet_type}] 处理 {len(online_records)} 条上线日志")
-
-        # ===== 模式1: 使用Redis队列（推荐，不阻塞） =====
-        if USE_QUEUE_FOR_PULLING and task_queue:
-            try:
-                # 在线程池中执行Redis操作，避免阻塞事件循环
-                loop = asyncio.get_event_loop()
-
-                # 异步推送任务（只推送上线日志）
-                task_id = await loop.run_in_executor(
-                    None,
-                    task_queue.push_task,
-                    botnet_type,
-                    online_records,
-                    'log_processor'  # 标识来源
-                )
-
-                # 异步获取队列长度
-                queue_len = await loop.run_in_executor(
-                    None,
-                    task_queue.get_queue_length
-                )
-
-                logger.info(
-                    f"[{botnet_type}] 已推送 {len(online_records)} 条数据到队列，"
-                    f"任务ID: {task_id}, 队列长度: {queue_len}"
-                )
-                return  # 成功推送到队列，直接返回
-            except Exception as e:
-                logger.error(f"[{botnet_type}] 推送到队列失败: {e}，降级为后台直接处理")
-
-        # ===== 模式2: 降级处理（创建后台任务，不阻塞拉取循环） =====
-        # 即使没有队列，我们也不在主拉取循环里直接处理，而是起一个后台任务
-        logger.info(f"[{botnet_type}] 创建后台任务处理 {len(online_records)} 个IP...")
-
-        # 创建后台任务，不阻塞当前协程
-        asyncio.create_task(self._process_data_in_background(botnet_type, online_records))
+        # 记录任务，用于优雅关闭
+        self._processing_tasks.append(task)
+        
+        # 清理已完成的任务
+        self._processing_tasks = [t for t in self._processing_tasks if not t.done()]
+        
+        if len(self._processing_tasks) > 5:
+            logger.warning(
+                f"⚠️  [{botnet_type}] 处理任务积压: {len(self._processing_tasks)} 个待处理"
+            )
+        
+        logger.debug(
+            f"[{botnet_type}] 已提交后台处理任务，"
+            f"当前待处理任务数: {len(self._processing_tasks)}"
+        )
+        
+        # 立即返回，不阻塞拉取循环
         return
+    
+    async def _process_with_lock(
+        self, 
+        botnet_type: str, 
+        online_records: List[Dict], 
+        cleanup_records: List[Dict]
+    ):
+        """
+        带锁的串行处理：确保同一时间只有一个批次在处理
+        
+        这样可以：
+        1. 不阻塞拉取循环（create_task立即返回）
+        2. 保证处理顺序（锁确保串行）
+        3. 避免竞态条件（同一IP的上线和清除按顺序处理）
+        """
+        # 获取锁（如果有其他任务在处理，这里会等待）
+        async with self._processing_lock:
+            try:
+                logger.info(f"[{botnet_type}] [🔒锁定] 开始串行处理...")
+                
+                # Step 1: 先处理上线日志
+                if online_records:
+                    logger.info(f"[{botnet_type}] [1/2] 处理上线日志 {len(online_records)} 条...")
+                    await self._process_data_in_background(botnet_type, online_records)
+                    logger.info(f"[{botnet_type}] [1/2] 上线日志处理完成")
+                
+                # Step 2: 再处理清除日志
+                if cleanup_records:
+                    logger.info(f"[{botnet_type}] [2/2] 处理清除日志 {len(cleanup_records)} 条...")
+                    await self._handle_cleanup_records(botnet_type, cleanup_records)
+                    logger.info(f"[{botnet_type}] [2/2] 清除日志处理完成")
+                
+                logger.info(f"[{botnet_type}] [🔓解锁] 数据处理流程完成")
+                
+            except Exception as e:
+                logger.error(f"[{botnet_type}] [❌错误] 处理失败: {e}", exc_info=True)
     
     async def _process_data_in_background(self, botnet_type: str, ip_data: List[Dict]):
         """
@@ -635,6 +662,26 @@ class BotnetLogProcessor:
         # 打印内置Worker统计
         if self.internal_worker_tasks:
             logger.info(f"内置Worker: {len(self.internal_worker_tasks)} 个协程运行中")
+    
+    async def stop(self):
+        """
+        优雅停止：等待所有处理任务完成
+        """
+        if self._processing_tasks:
+            task_count = len(self._processing_tasks)
+            logger.info(f"⏳ 等待 {task_count} 个处理任务完成...")
+            
+            # 等待所有任务完成（最多等待30秒）
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._processing_tasks, return_exceptions=True),
+                    timeout=30.0
+                )
+                logger.info("✅ 所有处理任务已完成")
+            except asyncio.TimeoutError:
+                logger.warning("⚠️  部分处理任务超时，强制退出")
+        else:
+            logger.info("✅ 无待处理任务")
     
     def generate_performance_reports(self):
         """生成所有写入器的性能报告"""

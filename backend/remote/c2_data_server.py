@@ -1297,8 +1297,13 @@ async def handle_pull(request: web.Request) -> web.Response:
         else:
             logger.info(f"拉取请求: 返回 {len(records)} 条记录（未确认，等待服务器确认）")
         
-        # 获取当前最大seq_id（用于断点续传）
+        # 获取当前批次最大seq_id（用于断点续传）
         max_seq_id = max([r.get('_seq_id', 0) for r in records]) if records else 0
+        
+        # 获取缓存中的全局最大seq_id（用于检测C2端重置）
+        cursor = data_cache.conn.execute('SELECT MAX(seq_id) as global_max_seq FROM cache')
+        row = cursor.fetchone()
+        global_max_seq_id = row['global_max_seq'] if row and row['global_max_seq'] is not None else 0
         
         response_data = {
             'success': True,
@@ -1306,6 +1311,7 @@ async def handle_pull(request: web.Request) -> web.Response:
             'data': records,  # 使用 'data' 字段（匹配本地拉取器）
             'records': records,  # 保留兼容性
             'max_seq_id': max_seq_id,  # 当前批次最大序列ID
+            'global_max_seq_id': global_max_seq_id,  # 缓存中的全局最大序列ID（用于检测重置）
             'stats': data_cache.get_stats()
         }
         

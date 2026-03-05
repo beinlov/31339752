@@ -182,9 +182,9 @@ echo [OK] Timeset data ensure service started
 
 echo.
 echo [Starting 3/5] Stats Aggregator - Daemon Mode...
-start "Botnet Stats Aggregator" cmd /k "cd /d %~dp0backend\stats_aggregator && python aggregator.py daemon 30"
+start "Botnet Stats Aggregator" cmd /k "cd /d %~dp0backend\stats_aggregator && python aggregator.py daemon 0.1667"
 timeout /t 1 /nobreak >nul
-echo [OK] Stats Aggregator started - aggregates every 30 minutes
+echo [OK] Stats Aggregator started - aggregates every 10 seconds (utg_q_008 only)
 
 echo.
 echo [Starting 4/5] Daily Node Counter - Manual Execution...

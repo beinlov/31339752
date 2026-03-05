@@ -18,7 +18,8 @@ def create_timeset_table(botnet_type):
     CREATE TABLE IF NOT EXISTS {table_name} (
         id INT AUTO_INCREMENT PRIMARY KEY,
         date DATE NOT NULL UNIQUE COMMENT '日期',
-        count INT NOT NULL DEFAULT 0 COMMENT '节点数量',
+        global_count INT NOT NULL DEFAULT 0 COMMENT '全球节点数量',
+        china_count INT NOT NULL DEFAULT 0 COMMENT '中国节点数量',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
         INDEX idx_date (date)

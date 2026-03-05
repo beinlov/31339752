@@ -127,15 +127,15 @@ class StatsAggregator:
             cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS {temp_table}")
             cursor.execute(f"""
                 CREATE TEMPORARY TABLE {temp_table} (
-                    province VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
-                    municipality VARCHAR(100) COLLATE utf8mb4_0900_ai_ci,
+                    province VARCHAR(100) COLLATE utf8mb4_unicode_ci,
+                    municipality VARCHAR(100) COLLATE utf8mb4_unicode_ci,
                     infected_num INT,
                     active_num INT DEFAULT 0,
                     cleaned_num INT DEFAULT 0,
                     created_at DATETIME,
                     updated_at DATETIME,
                     PRIMARY KEY (province, municipality)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
             
             # Step 1.2: 聚合到临时表（优化：简化字符串操作）
@@ -229,13 +229,13 @@ class StatsAggregator:
             cursor.execute(f"DROP TEMPORARY TABLE IF EXISTS {temp_global_table}")
             cursor.execute(f"""
                 CREATE TEMPORARY TABLE {temp_global_table} (
-                    country VARCHAR(100) COLLATE utf8mb4_0900_ai_ci PRIMARY KEY,
+                    country VARCHAR(100) COLLATE utf8mb4_unicode_ci PRIMARY KEY,
                     infected_num INT,
                     active_num INT DEFAULT 0,
                     cleaned_num INT DEFAULT 0,
                     created_at DATETIME,
                     updated_at DATETIME
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
             
             # Step 2.2: 聚合到临时表
@@ -383,13 +383,16 @@ class StatsAggregator:
     def aggregate_all(self, max_retries=3):
         """聚合所有僵尸网络的统计数据（支持重试）"""
         logger.info("=" * 60)
-        logger.info("开始全量聚合统计数据")
+        logger.info("开始聚合统计数据（仅utg_q_008）")
         logger.info("=" * 60)
         
         start_time = time.time()
         results = {}
         
-        for botnet_type in self.BOTNET_TYPES:
+        # 只聚合utg_q_008以提高实时性
+        botnet_types_to_aggregate = ['utg_q_008']
+        
+        for botnet_type in botnet_types_to_aggregate:
             retry_count = 0
             while retry_count < max_retries:
                 result = self.aggregate_botnet_stats(botnet_type)
@@ -418,7 +421,7 @@ class StatsAggregator:
         
         logger.info("=" * 60)
         logger.info(f"聚合完成！耗时: {elapsed:.2f}秒")
-        logger.info(f"成功: {success_count}/{len(self.BOTNET_TYPES)}")
+        logger.info(f"成功: {success_count}/{len(botnet_types_to_aggregate)} (仅utg_q_008)")
         logger.info(f"总计: 中国统计 {total_china} 条，全球统计 {total_global} 条")
         logger.info("=" * 60)
         
@@ -499,7 +502,7 @@ def main():
             interval = 30  # 默认30分钟
             if len(sys.argv) > 2:
                 try:
-                    interval = int(sys.argv[2])
+                    interval = float(sys.argv[2])  # 使用float支持小数（如0.1667分钟=10秒）
                 except ValueError:
                     logger.warning(f"无效的间隔时间，使用默认值: {interval}分钟")
             
@@ -508,12 +511,13 @@ def main():
         else:
             print("用法:")
             print("  python aggregator.py once [botnet_type]  # 执行一次聚合")
-            print("  python aggregator.py daemon [minutes]    # 守护进程模式（默认30分钟）")
+            print("  python aggregator.py daemon [minutes]    # 守护进程模式（默认30分钟，支持小数）")
             print("\n示例:")
             print("  python aggregator.py once               # 聚合所有僵尸网络")
             print("  python aggregator.py once mozi          # 只聚合 mozi")
             print("  python aggregator.py daemon 30          # 每30分钟聚合一次")
             print("  python aggregator.py daemon 5           # 每5分钟聚合一次")
+            print("  python aggregator.py daemon 0.1667      # 每10秒聚合一次")
     else:
         # 默认：守护进程模式，30分钟间隔
         run_daemon(interval_minutes=30)
