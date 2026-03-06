@@ -683,7 +683,8 @@ async def get_active_botnet_communications(botnet_type: str = 'asruex'):
                 SELECT 
                     DATE_FORMAT(communication_time, '%Y-%m-%d %H:%i:%s') as time,
                     ip,
-                    COALESCE(country, '未知') as country
+                    COALESCE(country, '未知') as country,
+                    status
                 FROM {table_name}
                 ORDER BY communication_time DESC
                 LIMIT 20
@@ -691,6 +692,12 @@ async def get_active_botnet_communications(botnet_type: str = 'asruex'):
             
             cursor.execute(query)
             results = cursor.fetchall()
+            
+            # DEBUG: 确认查询结果
+            logger.info(f"[ACTIVE-BOTNET-COMM] Returned {len(results)} records")
+            if results:
+                logger.info(f"[ACTIVE-BOTNET-COMM] Keys: {list(results[0].keys())}")
+            
             return results
         except Exception as e:
             logger.error(f"Error fetching active botnet communications for {botnet_type}: {e}")

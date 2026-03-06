@@ -17,7 +17,7 @@ class UserSituation extends PureComponent {
         evenRowBGC: 'rgba(0, 21, 41, 0.3)',
         index: false,
         columnWidth: [],
-        align: ['center', 'center', 'center'],
+        align: ['center', 'center', 'center', 'center'],
         rowNum: 4,
         headerHeight: 60,
         rowHeight: 70,
@@ -69,11 +69,11 @@ class UserSituation extends PureComponent {
   updateColumnWidth = () => {
     if (this.containerRef.current) {
       const width = this.containerRef.current.clientWidth;
-      const colWidth = Math.floor(width / 3);
+      const colWidth = Math.floor(width / 4);
       this.setState(prevState => ({
         config: {
           ...prevState.config,
-          columnWidth: [colWidth, colWidth, colWidth]
+          columnWidth: [colWidth, colWidth, colWidth, colWidth]
         }
       }));
     }
@@ -89,11 +89,25 @@ class UserSituation extends PureComponent {
         ? response
         : (response && Array.isArray(response.data) ? response.data : []);
 
-      const formattedData = rows.map(event => [
+      const formattedData = rows.map(event => {
+        // 根据 status 显示节点状态
+        let statusText = '未知';
+        let statusColor = '#999999';
+        if (event.status === 'active') {
+          statusText = '在线';
+          statusColor = '#00FF7F';
+        } else if (event.status === 'cleaned') {
+          statusText = '已清除';
+          statusColor = '#FFA500';
+        }
+        
+        return [
           `<span style="color: #00EAFF; font-weight: bold;">${event.time}</span>`,
           `<span style="color: #ffffff; font-weight: bold;">${event.ip}</span>`,
-          `<span style="color: #00EAFF; font-weight: bold;">${event.country}</span>`
-        ]);
+          `<span style="color: #00EAFF; font-weight: bold;">${event.country}</span>`,
+          `<span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>`
+        ];
+      });
       
       this.setState(prevState => ({
         userEvents: formattedData,
