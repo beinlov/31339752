@@ -22,8 +22,9 @@ echo   1. Redis Server      (Port: 6379)
 echo   2. Log Processor     (with Internal Worker)
 echo   3. Platform Backend  (Port: 8000)
 echo   4. Stats Aggregator  (Daemon, 30min interval)
-echo   5. Daily Node Counter (8:00 AM daily)
-echo   6. Frontend UI       (Port: 9000)
+echo   5. Takeover Stats    (Every minute)
+echo   6. Daily Node Counter (8:00 AM daily)
+echo   7. Frontend UI       (Port: 9000)
 echo.
 echo ============================================================
 echo.
@@ -187,6 +188,12 @@ timeout /t 1 /nobreak >nul
 echo [OK] Stats Aggregator started - aggregates every 10 seconds (utg_q_008 only)
 
 echo.
+echo [Starting 3.1/5] Takeover Stats Aggregator - Every Minute...
+start "Takeover Stats Aggregator" cmd /k "cd /d %~dp0backend\stats_aggregator && python takeover_stats_aggregator.py"
+timeout /t 1 /nobreak >nul
+echo [OK] Takeover Stats Aggregator started - aggregates every minute
+
+echo.
 echo [Starting 4/5] Daily Node Counter - Manual Execution...
 echo [INFO] Note: Schedule library not installed, using manual execution
 echo [INFO] To enable daily auto-run, install: pip install schedule
@@ -220,11 +227,12 @@ echo   [1] Redis Server         - Port: 6379
 echo   [2] Log Processor (Internal Worker) - Background
 echo   [3] Platform Backend API - http://localhost:8000
 echo   [4] Stats Aggregator     - Background (every 30 minutes)
-echo   [5] Daily Node Counter   - Background (8:00 AM daily)
+echo   [5] Takeover Stats       - Background (every minute)
+echo   [6] Daily Node Counter   - Background (8:00 AM daily)
 if "!SKIP_FRONTEND!"=="0" (
-    echo   [6] Frontend UI          - http://localhost:9000
+    echo   [7] Frontend UI          - http://localhost:9000
 ) else (
-    echo   [6] Frontend UI          - Not started - Node.js not installed
+    echo   [7] Frontend UI          - Not started - Node.js not installed
 )
 echo.
 echo ============================================================
@@ -237,6 +245,7 @@ echo Log Files:
 echo   - Log Processor:   backend/logs/log_processor.log
 echo   - Platform API:    Console output
 echo   - Aggregator:      backend/logs/stats_aggregator.log
+echo   - Takeover Stats:  backend/logs/takeover_stats_aggregator.log
 echo   - Node Counter:    Console output
 echo.
 echo To Stop Services:

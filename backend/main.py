@@ -23,6 +23,7 @@ from router.botnet_stats import router as botnet_stats_router
 from router.node_history import router as node_history_router
 from router.suppression import router as suppression_router
 from router.cleanup import router as cleanup_router
+from router.takeover_stats_api import router as takeover_stats_router
 
 import logging
 import re
@@ -114,6 +115,9 @@ app.include_router(suppression_router, prefix="/api/suppression", tags=["suppres
 
 # 包含一键清除路由
 app.include_router(cleanup_router, prefix="/api", tags=["cleanup"])
+
+# 包含接管节点统计API路由
+app.include_router(takeover_stats_router, tags=["takeover-statistics"])
 
 # 数据模型
 class ProvinceAmount(BaseModel):
