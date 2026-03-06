@@ -10,6 +10,9 @@ import pymysql
 from pymysql.cursors import DictCursor
 from config import DB_CONFIG, C2_CLEANUP_CONFIG
 import urllib3
+from datetime import date
+import threading
+import time
 
 # 禁用SSL警告（因为使用HTTP协议）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -190,6 +193,104 @@ def call_c2_api(c2_ip: str, botnet_name: str, action: str) -> Dict:
         raise HTTPException(status_code=500, detail=f"调用C2接口失败: {str(e)}")
 
 
+def update_timeset_after_cleanup(botnet_name: str):
+    """
+    清除操作后智能更新 timeset 表
+    比较 timeset.updated_at 和 botnet_nodes.updated_at，只更新过期的日期
+    """
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        node_table = f"botnet_nodes_{botnet_name}"
+        timeset_table = f"botnet_timeset_{botnet_name}"
+        
+        # 检查 nodes 表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count 
+            FROM information_schema.tables 
+            WHERE table_schema = DATABASE() 
+            AND table_name = %s
+        """, (node_table,))
+        
+        if cursor.fetchone()['count'] == 0:
+            logger.warning(f"{botnet_name} 的 nodes 表不存在，跳过更新")
+            return False
+        
+        # 按 updated_at 日期分组，获取所有日期
+        cursor.execute(f"""
+            SELECT DATE(updated_at) as date
+            FROM {node_table}
+            GROUP BY DATE(updated_at)
+        """)
+        dates = cursor.fetchall()
+        
+        if not dates:
+            logger.info(f"{botnet_name} 的 nodes 表中没有数据")
+            return True
+        
+        updated_count = 0
+        
+        # 对每个日期，统计该日期的节点状态
+        for row in dates:
+            date_str = row['date']
+            
+            # 统计该日期 updated_at 的节点状态
+            cursor.execute(f"""
+                SELECT 
+                    COUNT(DISTINCT ip) as total_ips,
+                    COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_ips,
+                    COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_ips,
+                    COUNT(DISTINCT CASE WHEN country = '中国' THEN ip END) as china_total,
+                    COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'active' THEN ip END) as china_active,
+                    COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'cleaned' THEN ip END) as china_cleaned
+                FROM {node_table}
+                WHERE DATE(updated_at) = %s
+            """, (date_str,))
+            
+            stats = cursor.fetchone()
+            
+            global_count = int(stats['total_ips'] or 0)
+            global_active = int(stats['active_ips'] or 0)
+            global_cleaned = int(stats['cleaned_ips'] or 0)
+            china_count = int(stats['china_total'] or 0)
+            china_active = int(stats['china_active'] or 0)
+            china_cleaned = int(stats['china_cleaned'] or 0)
+            
+            # 更新该日期的 timeset 表
+            cursor.execute(f"""
+                INSERT INTO {timeset_table} (date, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                    global_count = %s,
+                    china_count = %s,
+                    global_active = %s,
+                    china_active = %s,
+                    global_cleaned = %s,
+                    china_cleaned = %s,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (date_str, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned,
+                  global_count, china_count, global_active, china_active, global_cleaned, china_cleaned))
+            
+            updated_count += 1
+            logger.info(f"{botnet_name} {date_str}: 全球{global_count}(活跃{global_active},清除{global_cleaned}), 中国{china_count}(活跃{china_active},清除{china_cleaned})")
+        
+        conn.commit()
+        logger.info(f"{botnet_name}: 共更新 {updated_count} 个日期的 timeset 数据")
+        return True
+        
+    except Exception as e:
+        logger.error(f"更新 timeset 失败: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+
 @router.get("/cleanup/check-permissions")
 async def check_cleanup_permissions():
     """
@@ -252,6 +353,26 @@ async def execute_cleanup_action(botnet_name: str, action: str):
         
         # 调用C2 API
         c2_response = call_c2_api(c2_ip, botnet_name, action)
+        
+        # 如果是清除操作，执行成功后在后台循环更新 timeset 表1分钟
+        if action == 'cleanup' and c2_response.get('status') == 'success':
+            logger.info(f"清除操作成功，启动后台循环更新 {botnet_name} 的 timeset 数据（1分钟）...")
+            # 在后台线程中循环更新1分钟
+            def update_loop():
+                end_time = time.time() + 60  # 1分钟后停止
+                update_count = 0
+                while time.time() < end_time:
+                    try:
+                        update_timeset_after_cleanup(botnet_name)
+                        update_count += 1
+                        logger.info(f"[{botnet_name}] 第 {update_count} 次更新完成，剩余时间: {int(end_time - time.time())} 秒")
+                    except Exception as e:
+                        logger.error(f"[{botnet_name}] 循环更新失败: {e}")
+                    time.sleep(5)  # 每5秒更新一次
+                logger.info(f"[{botnet_name}] 循环更新结束，共执行 {update_count} 次")
+            
+            thread = threading.Thread(target=update_loop, daemon=True)
+            thread.start()
         
         # 操作类型的中文映射
         action_names = {

@@ -1,5 +1,7 @@
 {
-  "last_seq_ids": {},
+  "last_seq_ids": {
+    "C2-utg_q_008-remote": 2
+  },
   "last_timestamps": {},
-  "updated_at": "2026-03-04T20:35:12.778500"
+  "updated_at": "2026-03-05T16:16:23.238743"
 }

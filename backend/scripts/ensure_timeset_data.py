@@ -167,18 +167,18 @@ def ensure_recent_30_days_data() -> None:
         try:
             for botnet_type in ALLOWED_BOTNET_TYPES:
                 timeset_table = f"botnet_timeset_{botnet_type}"
+                node_table = f"botnet_nodes_{botnet_type}"
+                
                 if not _table_exists(cursor, timeset_table):
                     _log(f"[{botnet_type}] skip: timeset table not found ({timeset_table})")
                     continue
 
                 _ensure_timeset_schema(cursor, timeset_table)
 
-                counts = _get_counts(cursor, botnet_type)
-                if not counts:
-                    _log(f"[{botnet_type}] skip: nodes table not found or unreadable")
+                # 检查 nodes 表是否存在
+                if not _table_exists(cursor, node_table):
+                    _log(f"[{botnet_type}] skip: nodes table not found ({node_table})")
                     continue
-
-                global_count, china_count, global_active, china_active, global_cleaned, china_cleaned = counts
 
                 existing = _get_existing_dates(cursor, timeset_table, range_start, today)
                 missing = [
@@ -191,30 +191,47 @@ def ensure_recent_30_days_data() -> None:
                     _log(f"[{botnet_type}] ok: no missing dates in last 30 days")
                     continue
 
-                _log(
-                    f"[{botnet_type}] missing {len(missing)} day(s): {missing[0]} ~ {missing[-1]} | "
-                    f"write global_count={global_count}, china_count={china_count}, "
-                    f"global_active={global_active}, china_active={china_active}, "
-                    f"global_cleaned={global_cleaned}, china_cleaned={china_cleaned}"
-                )
+                _log(f"[{botnet_type}] missing {len(missing)} day(s): {missing[0]} ~ {missing[-1]}")
 
+                # 对每一天，从 botnet_nodes 表按 updated_at 日期统计
+                filled_count = 0
                 for d in missing:
                     cursor.execute(
                         f"""
-                        INSERT INTO {timeset_table} (date, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
+                        SELECT 
+                            COUNT(DISTINCT ip) as total_ips,
+                            COUNT(DISTINCT CASE WHEN status = 'active' THEN ip END) as active_ips,
+                            COUNT(DISTINCT CASE WHEN status = 'cleaned' THEN ip END) as cleaned_ips,
+                            COUNT(DISTINCT CASE WHEN country = '中国' THEN ip END) as china_total,
+                            COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'active' THEN ip END) as china_active,
+                            COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'cleaned' THEN ip END) as china_cleaned
+                        FROM {node_table}
+                        WHERE DATE(updated_at) = %s
+                        """,
+                        (d,)
+                    )
+                    result = cursor.fetchone()
+                    
+                    global_count = int(result['total_ips'] or 0)
+                    global_active = int(result['active_ips'] or 0)
+                    global_cleaned = int(result['cleaned_ips'] or 0)
+                    china_count = int(result['china_total'] or 0)
+                    china_active = int(result['china_active'] or 0)
+                    china_cleaned = int(result['china_cleaned'] or 0)
+                    
+                    # 即使当天没有 updated_at 的记录，也写入0值以保证30天数据完整
+                    # 使用 INSERT IGNORE 确保不会修改已存在的日期条目
+                    cursor.execute(
+                        f"""
+                        INSERT IGNORE INTO {timeset_table} (date, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE
-                            global_count = VALUES(global_count),
-                            china_count = VALUES(china_count),
-                            global_active = VALUES(global_active),
-                            china_active = VALUES(china_active),
-                            global_cleaned = VALUES(global_cleaned),
-                            china_cleaned = VALUES(china_cleaned)
                         """,
                         (d, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned),
                     )
+                    if cursor.rowcount > 0:
+                        filled_count += 1
 
-                _log(f"[{botnet_type}] filled {len(missing)} day(s) into {timeset_table}")
+                _log(f"[{botnet_type}] filled {filled_count}/{len(missing)} day(s) into {timeset_table} (based on nodes.updated_at)")
 
         finally:
             cursor.close()

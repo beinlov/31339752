@@ -68,9 +68,10 @@ class StatsAggregator:
             cursor = conn.cursor()
             
             # 统一连接字符集与排序规则，避免不同表/会话的 collation 冲突
-            cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci")
-            cursor.execute("SET collation_connection = 'utf8mb4_general_ci'")
-            cursor.execute("SET collation_server = 'utf8mb4_general_ci'")
+            # 使用 utf8mb4_unicode_ci 与临时表保持一致
+            cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci")
+            cursor.execute("SET collation_connection = 'utf8mb4_unicode_ci'")
+            cursor.execute("SET collation_database = 'utf8mb4_unicode_ci'")
             
             # 设置会话级别的查询超时（5分钟）
             cursor.execute("SET SESSION max_execution_time = 300000")
@@ -189,7 +190,9 @@ class StatsAggregator:
             cursor.execute(f"""
                 SELECT c.province, c.municipality
                 FROM {china_table} c
-                INNER JOIN {temp_table} t ON c.province = t.province AND c.municipality = t.municipality
+                INNER JOIN {temp_table} t 
+                ON c.province COLLATE utf8mb4_unicode_ci = t.province 
+                AND c.municipality COLLATE utf8mb4_unicode_ci = t.municipality
             """)
             existing_keys = {f"{row[0]}|{row[1]}" for row in cursor.fetchall()}
             elapsed = time.time() - start_time
@@ -201,7 +204,9 @@ class StatsAggregator:
                     INSERT INTO {china_table} (province, municipality, infected_num, active_num, cleaned_num, created_at, updated_at)
                     SELECT t.province, t.municipality, t.infected_num, t.active_num, t.cleaned_num, t.created_at, t.updated_at
                     FROM {temp_table} t
-                    LEFT JOIN {china_table} c ON t.province = c.province AND t.municipality = c.municipality
+                    LEFT JOIN {china_table} c 
+                    ON t.province = c.province COLLATE utf8mb4_unicode_ci 
+                    AND t.municipality = c.municipality COLLATE utf8mb4_unicode_ci
                     WHERE c.province IS NULL
                 """)
                 insert_count = cursor.rowcount
@@ -211,7 +216,9 @@ class StatsAggregator:
             if existing_keys:
                 cursor.execute(f"""
                     UPDATE {china_table} c
-                    INNER JOIN {temp_table} t ON c.province = t.province AND c.municipality = t.municipality
+                    INNER JOIN {temp_table} t 
+                    ON c.province COLLATE utf8mb4_unicode_ci = t.province 
+                    AND c.municipality COLLATE utf8mb4_unicode_ci = t.municipality
                     SET c.infected_num = t.infected_num,
                         c.active_num = t.active_num,
                         c.cleaned_num = t.cleaned_num,
@@ -262,8 +269,12 @@ class StatsAggregator:
             
             # Step 2.3: 查询已存在的国家
             cursor.execute(f"""
-                SELECT country FROM {global_table}
-                WHERE country IN (SELECT country FROM {temp_global_table})
+                SELECT g.country 
+                FROM {global_table} g
+                WHERE EXISTS (
+                    SELECT 1 FROM {temp_global_table} t 
+                    WHERE g.country COLLATE utf8mb4_unicode_ci = t.country
+                )
             """)
             existing_countries = {row[0] for row in cursor.fetchall()}
             
@@ -273,7 +284,7 @@ class StatsAggregator:
                     INSERT INTO {global_table} (country, infected_num, active_num, cleaned_num, created_at, updated_at)
                     SELECT t.country, t.infected_num, t.active_num, t.cleaned_num, t.created_at, t.updated_at
                     FROM {temp_global_table} t
-                    LEFT JOIN {global_table} g ON t.country = g.country
+                    LEFT JOIN {global_table} g ON t.country = g.country COLLATE utf8mb4_unicode_ci
                     WHERE g.country IS NULL
                 """)
                 logger.info(f"[{botnet_type}] 插入新国家: {cursor.rowcount} 个")
@@ -282,7 +293,7 @@ class StatsAggregator:
             if existing_countries:
                 cursor.execute(f"""
                     UPDATE {global_table} g
-                    INNER JOIN {temp_global_table} t ON g.country = t.country
+                    INNER JOIN {temp_global_table} t ON g.country COLLATE utf8mb4_unicode_ci = t.country
                     SET g.infected_num = t.infected_num,
                         g.active_num = t.active_num,
                         g.cleaned_num = t.cleaned_num,
