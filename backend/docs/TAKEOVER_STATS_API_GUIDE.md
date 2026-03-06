@@ -29,8 +29,8 @@
 | `monthly_cleaned_total_nodes` | 近一个月清除节点总数 | 所有botnet_nodes_*表中created_time为近30天且status=cleaned的总数 |
 | `monthly_cleaned_domestic_nodes` | 近一个月清除国内节点数 | 所有botnet_nodes_*表中created_time为近30天且status=cleaned且is_china=1的总数 |
 | `monthly_cleaned_foreign_nodes` | 近一个月清除国外节点数 | 所有botnet_nodes_*表中created_time为近30天且status=cleaned且is_china=0的总数 |
-| `suppression_total_count` | 已使用抑制阻断策略总次数 | 固定值20（暂时写死） |
-| `monthly_suppression_count` | 近一个月使用抑制阻断策略次数 | 固定值20（暂时写死） |
+| `suppression_total_count` | 已使用抑制阻断策略总次数 | 固定值（暂时写死） |
+| `monthly_suppression_count` | 近一个月使用抑制阻断策略次数 | 固定值（暂时写死） |
 
 ## API接口列表
 
