@@ -90,6 +90,7 @@ class RightPage extends PureComponent {
           >
             <Option value='7days' style={{ color: '#ffffff', fontWeight: 700 }}>近7天</Option>
             <Option value='30days' style={{ color: '#ffffff', fontWeight: 700 }}>近30天</Option>
+            <Option value='realtime' style={{ color: '#ffffff', fontWeight: 700 }}>实时情况</Option>
           </Select>
         </TimeRangeBar>
 
@@ -101,7 +102,12 @@ class RightPage extends PureComponent {
                 <span>传播态势</span>
               </ModuleTitle>
               <div className='diffusion-trend-box'>
-                <DiffusionTrend timeRange={this.state.timeRange} />
+                <DiffusionTrend 
+                  timeRange={this.state.timeRange} 
+                  botnetData={this.props.botnetData}
+                  displayMode={this.props.displayMode}
+                  selectedNetwork={this.props.selectedNetwork}
+                />
               </div>
             </div>
           </BorderBox13>
@@ -111,7 +117,10 @@ class RightPage extends PureComponent {
   }
 }
 
-const mapStateToProps = state => ({
+const mapStateToProps = ({ mapState }) => ({
+  botnetData: mapState.botnetData,
+  displayMode: mapState.displayMode,
+  selectedNetwork: mapState.selectedNetwork
 });
 
 export default connect(mapStateToProps)(RightPage);

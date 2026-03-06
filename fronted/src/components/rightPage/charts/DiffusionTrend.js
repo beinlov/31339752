@@ -33,10 +33,16 @@ class DiffusionTrend extends PureComponent {
       renderer: 'canvas',
       nationalData: [],
       globalData: [],
-      timeData: []
+      timeData: [],
+      realtimeData: {
+        nationalData: [],
+        globalData: [],
+        timeData: []
+      }
     };
     this.chartInstance = null;
     this.fetchTimer = null;
+    this.realtimeTimer = null;
   }
 
   componentDidMount() {
@@ -45,11 +51,19 @@ class DiffusionTrend extends PureComponent {
     
     // 每5分钟更新一次数据
     this.fetchTimer = setInterval(this.fetchNodeHistory, 5 * 60 * 1000);
+    
+    // 如果是实时模式，启动实时数据更新
+    if (this.props.timeRange === 'realtime') {
+      this.startRealtimeUpdates();
+    }
   }
   
   componentWillUnmount() {
     if (this.fetchTimer) {
       clearInterval(this.fetchTimer);
+    }
+    if (this.realtimeTimer) {
+      clearInterval(this.realtimeTimer);
     }
   }
 
@@ -61,7 +75,12 @@ class DiffusionTrend extends PureComponent {
 
     // 当时间范围发生变化时，重新获取数据
     if (prevProps.timeRange !== this.props.timeRange) {
-      this.fetchNodeHistory();
+      if (this.props.timeRange === 'realtime') {
+        this.startRealtimeUpdates();
+      } else {
+        this.stopRealtimeUpdates();
+        this.fetchNodeHistory();
+      }
     }
 
     // 当显示模式发生变化时，重新获取数据
@@ -81,6 +100,12 @@ class DiffusionTrend extends PureComponent {
     }
 
     try {
+      // 如果是实时模式，使用实时数据
+      if (timeRange === 'realtime') {
+        this.updateRealtimeData();
+        return;
+      }
+
       // 根据时间粒度设置不同的查询参数
       let queryParams = '';
       switch (timeRange) {
@@ -141,6 +166,71 @@ class DiffusionTrend extends PureComponent {
         globalData: []
       });
     }
+  };
+
+  // 启动实时数据更新
+  startRealtimeUpdates = () => {
+    // 立即更新一次
+    this.updateRealtimeData();
+    
+    // 每5秒更新一次实时数据
+    this.realtimeTimer = setInterval(() => {
+      this.updateRealtimeData();
+    }, 5000);
+  };
+
+  // 停止实时数据更新
+  stopRealtimeUpdates = () => {
+    if (this.realtimeTimer) {
+      clearInterval(this.realtimeTimer);
+      this.realtimeTimer = null;
+    }
+  };
+
+  // 更新实时数据
+  updateRealtimeData = () => {
+    const { botnetData, displayMode } = this.props;
+    
+    if (!botnetData) {
+      return;
+    }
+
+    // 获取当前时间，格式为 HH:mm:ss
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('zh-CN', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    // 根据displayMode获取对应的数据
+    const nationalValue = displayMode === 'cleaned' ? botnetData.china_cleaned : botnetData.china_active;
+    const globalValue = displayMode === 'cleaned' ? botnetData.global_cleaned : botnetData.global_active;
+
+    this.setState(prevState => {
+      const newRealtimeData = { ...prevState.realtimeData };
+      
+      // 添加新的数据点
+      newRealtimeData.timeData.push(timeString);
+      newRealtimeData.nationalData.push(nationalValue || 0);
+      newRealtimeData.globalData.push(globalValue || 0);
+      
+      // 保持最近30个数据点（2.5分钟的数据）
+      if (newRealtimeData.timeData.length > 30) {
+        newRealtimeData.timeData = newRealtimeData.timeData.slice(-30);
+        newRealtimeData.nationalData = newRealtimeData.nationalData.slice(-30);
+        newRealtimeData.globalData = newRealtimeData.globalData.slice(-30);
+      }
+      
+      return {
+        realtimeData: newRealtimeData,
+        // 在实时模式下，使用实时数据更新主数据
+        timeData: newRealtimeData.timeData,
+        nationalData: newRealtimeData.nationalData,
+        globalData: newRealtimeData.globalData
+      };
+    });
   };
 
   render() {

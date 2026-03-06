@@ -128,7 +128,7 @@ class UserSituation extends PureComponent {
       <div className="user-situation-container">
         <div className="user-situation-title">
           <i className="iconfont" style={{ marginRight: '8px', fontSize: '18px' }}>&#xe7fd;</i>
-          活跃僵尸节点动态展示
+          已知僵尸节点动态展示
         </div>
         <div className="user-situation-content" ref={this.containerRef}>
           {userEvents ? (
