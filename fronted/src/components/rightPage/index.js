@@ -51,7 +51,7 @@ class RightPage extends PureComponent {
   constructor(props) {
     super(props);
     this.state = {
-      timeRange: '7days'
+      timeRange: 'realtime'
     };
   }
 
@@ -88,9 +88,9 @@ class RightPage extends PureComponent {
               border: '1px solid rgba(0, 212, 255, 0.9)'
             }}
           >
+            <Option value='realtime' style={{ color: '#ffffff', fontWeight: 700 }}>实时情况</Option>
             <Option value='7days' style={{ color: '#ffffff', fontWeight: 700 }}>近7天</Option>
             <Option value='30days' style={{ color: '#ffffff', fontWeight: 700 }}>近30天</Option>
-            <Option value='realtime' style={{ color: '#ffffff', fontWeight: 700 }}>实时情况</Option>
           </Select>
         </TimeRangeBar>
 

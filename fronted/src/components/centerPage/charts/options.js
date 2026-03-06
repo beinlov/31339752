@@ -654,7 +654,7 @@ export const mapOptions = (params, currentMap, isLeftPage = false, displayMode =
 
 export const userOptions = (data) => {
   return {
-    header: ['时间', 'IP', '地区'],
+    header: ['时间', 'IP', '地区', '节点状态'],
     data: data || [],
   };
 };

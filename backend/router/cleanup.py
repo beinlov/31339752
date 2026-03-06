@@ -217,25 +217,50 @@ def update_timeset_after_cleanup(botnet_name: str):
             logger.warning(f"{botnet_name} 的 nodes 表不存在，跳过更新")
             return False
         
-        # 按 updated_at 日期分组，获取所有日期
-        cursor.execute(f"""
-            SELECT DATE(updated_at) as date
-            FROM {node_table}
-            GROUP BY DATE(updated_at)
-        """)
-        dates = cursor.fetchall()
+        # 获取今天的日期
+        cursor.execute("SELECT CURDATE() as today")
+        today = cursor.fetchone()['today']
         
-        if not dates:
-            logger.info(f"{botnet_name} 的 nodes 表中没有数据")
-            return True
+        # 获取一个月前的日期
+        cursor.execute("SELECT DATE_SUB(CURDATE(), INTERVAL 30 DAY) as month_ago")
+        month_ago = cursor.fetchone()['month_ago']
+        
+        # 生成一个月内所有日期（包括今天）
+        cursor.execute(f"""
+            SELECT DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 30 DAY), INTERVAL seq DAY) as date
+            FROM (
+                SELECT 0 as seq UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 
+                UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 
+                UNION SELECT 12 UNION SELECT 13 UNION SELECT 14 UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 
+                UNION SELECT 18 UNION SELECT 19 UNION SELECT 20 UNION SELECT 21 UNION SELECT 22 UNION SELECT 23 
+                UNION SELECT 24 UNION SELECT 25 UNION SELECT 26 UNION SELECT 27 UNION SELECT 28 UNION SELECT 29 
+                UNION SELECT 30
+            ) numbers
+            WHERE DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 30 DAY), INTERVAL seq DAY) <= CURDATE()
+        """)
+        all_dates = [row['date'] for row in cursor.fetchall()]
+        
+        # 查询 timeset 表中已存在的日期
+        cursor.execute(f"""
+            SELECT date FROM {timeset_table}
+            WHERE date >= %s AND date <= %s
+        """, (month_ago, today))
+        existing_dates = set(row['date'] for row in cursor.fetchall())
         
         updated_count = 0
+        skipped_count = 0
         
-        # 对每个日期，统计该日期的节点状态
-        for row in dates:
-            date_str = row['date']
+        # 对每个日期进行处理
+        for date_obj in all_dates:
+            date_str = date_obj.strftime('%Y-%m-%d') if hasattr(date_obj, 'strftime') else str(date_obj)
             
-            # 统计该日期 updated_at 的节点状态
+            # 如果不是今天且已存在，跳过
+            if date_obj != today and date_obj in existing_dates:
+                skipped_count += 1
+                logger.info(f"{botnet_name} {date_str}: 已存在历史数据，跳过更新")
+                continue
+            
+            # 统计该日期及之前所有 updated_at 的节点状态（累加模式）
             cursor.execute(f"""
                 SELECT 
                     COUNT(DISTINCT ip) as total_ips,
@@ -245,7 +270,7 @@ def update_timeset_after_cleanup(botnet_name: str):
                     COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'active' THEN ip END) as china_active,
                     COUNT(DISTINCT CASE WHEN country = '中国' AND status = 'cleaned' THEN ip END) as china_cleaned
                 FROM {node_table}
-                WHERE DATE(updated_at) = %s
+                WHERE DATE(updated_at) <= %s
             """, (date_str,))
             
             stats = cursor.fetchone()
@@ -257,7 +282,7 @@ def update_timeset_after_cleanup(botnet_name: str):
             china_active = int(stats['china_active'] or 0)
             china_cleaned = int(stats['china_cleaned'] or 0)
             
-            # 更新该日期的 timeset 表
+            # 插入或更新该日期的 timeset 表
             cursor.execute(f"""
                 INSERT INTO {timeset_table} (date, global_count, china_count, global_active, china_active, global_cleaned, china_cleaned)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -276,7 +301,7 @@ def update_timeset_after_cleanup(botnet_name: str):
             logger.info(f"{botnet_name} {date_str}: 全球{global_count}(活跃{global_active},清除{global_cleaned}), 中国{china_count}(活跃{china_active},清除{china_cleaned})")
         
         conn.commit()
-        logger.info(f"{botnet_name}: 共更新 {updated_count} 个日期的 timeset 数据")
+        logger.info(f"{botnet_name}: 共更新 {updated_count} 个日期，跳过 {skipped_count} 个已存在的历史日期")
         return True
         
     except Exception as e:

@@ -1358,12 +1358,85 @@ class BotnetDBWriter:
             updated_count = cursor.rowcount
             
             logger.info(
-                f"[{self.botnet_type}] [清除] SQL执行完成: "
+                f"[{self.botnet_type}] [清除] 节点状态更新完成: "
                 f"受影响行数 {updated_count}"
             )
             
             # ========================================
-            # Step 3: 提交事务
+            # Step 3: 查询节点详细信息（用于写入通信记录表）
+            # ========================================
+            placeholders = ','.join(['%s'] * len(active_ips))
+            node_info_sql = f"""
+                SELECT id, ip, longitude, latitude, country, province, 
+                       city, continent, isp, asn, is_china
+                FROM {self.node_table}
+                WHERE ip IN ({placeholders})
+            """
+            cursor.execute(node_info_sql, list(active_ips))
+            node_info_list = cursor.fetchall()
+            
+            logger.info(
+                f"[{self.botnet_type}] [清除] 查询到 {len(node_info_list)} 个节点的详细信息"
+            )
+            
+            # ========================================
+            # Step 4: 向通信记录表插入清除记录
+            # ========================================
+            if node_info_list:
+                comm_values = []
+                for node_info in node_info_list:
+                    node_id, ip, longitude, latitude, country, province, \
+                    city, continent, isp, asn, is_china = node_info
+                    
+                    cleanup_time = cleanup_time_map.get(ip, datetime.now())
+                    
+                    comm_values.append((
+                        node_id,
+                        ip,
+                        cleanup_time,
+                        longitude,
+                        latitude,
+                        country,
+                        province,
+                        city,
+                        continent,
+                        isp,
+                        asn,
+                        'cleanup',  # event_type
+                        'cleaned',  # status
+                        is_china
+                    ))
+                
+                # 批量插入清除记录（使用真正的批量INSERT）
+                batch_size = 500
+                total_comm_inserted = 0
+                
+                for i in range(0, len(comm_values), batch_size):
+                    batch = comm_values[i:i+batch_size]
+                    
+                    # 构建批量INSERT IGNORE语句（14个字段）
+                    placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'] * len(batch))
+                    comm_sql = f"""
+                        INSERT IGNORE INTO {self.communication_table}
+                        (node_id, ip, communication_time, longitude, latitude, country, province, 
+                         city, continent, isp, asn, event_type, status, is_china)
+                        VALUES {placeholders}
+                    """
+                    
+                    # 展平参数
+                    flat_params = []
+                    for values in batch:
+                        flat_params.extend(values)
+                    
+                    cursor.execute(comm_sql, flat_params)
+                    total_comm_inserted += len(batch)
+                
+                logger.info(
+                    f"[{self.botnet_type}] [清除] 通信记录插入完成: {total_comm_inserted} 条"
+                )
+            
+            # ========================================
+            # Step 5: 提交事务
             # ========================================
             conn.commit()
             logger.info(f"[{self.botnet_type}] [清除] 事务已提交")
