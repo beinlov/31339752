@@ -34,6 +34,62 @@ const calculateYAxisRange = (data) => {
   }
 };
 
+// 优化的Y轴范围计算函数，特别针对小数据量优化显示效果
+const calculateOptimizedYAxisRange = (data) => {
+  if (!data || data.length === 0) return { min: 0, max: 10 };
+  
+  const validData = data.filter(val => typeof val === 'number' && !isNaN(val) && val >= 0);
+  if (validData.length === 0) return { min: 0, max: 10 };
+  
+  const maxValue = Math.max(...validData);
+  const minValue = Math.min(...validData);
+  
+  // 如果所有数据都是0，设置一个小的范围
+  if (maxValue === 0) {
+    return { min: 0, max: 10 };
+  }
+  
+  // 如果数据很小（小于10），优化显示
+  if (maxValue <= 10) {
+    return { min: 0, max: Math.max(15, Math.ceil(maxValue * 1.5)) };
+  }
+  
+  // 如果数据较小（小于100），优化显示
+  if (maxValue <= 100) {
+    return { min: 0, max: Math.ceil(maxValue * 1.3 / 10) * 10 };
+  }
+  
+  // 如果数据中等（小于1000），优化显示
+  if (maxValue <= 1000) {
+    return { min: 0, max: Math.ceil(maxValue * 1.25 / 100) * 100 };
+  }
+  
+  // 对于较大的数据，使用原有的档位逻辑
+  if (maxValue <= 3000) {
+    return { min: 0, max: 4000 };
+  } else if (maxValue <= 8000) {
+    return { min: 0, max: 10000 };
+  } else if (maxValue <= 20000) {
+    return { min: 0, max: 25000 };
+  } else if (maxValue <= 40000) {
+    return { min: 0, max: 50000 };
+  } else if (maxValue <= 80000) {
+    return { min: 0, max: 100000 };
+  } else if (maxValue <= 200000) {
+    return { min: 0, max: 250000 };
+  } else if (maxValue <= 400000) {
+    return { min: 0, max: 500000 };
+  } else if (maxValue <= 800000) {
+    return { min: 0, max: 1000000 };
+  } else if (maxValue <= 2000000) {
+    return { min: 0, max: 2500000 };
+  } else {
+    // 对于更大的值，设置为最大值的1.3倍
+    const targetMax = Math.ceil(maxValue * 1.3 / 100000) * 100000;
+    return { min: 0, max: targetMax };
+  }
+};
+
 // 行业分布饼图配置
 export const IndustryDistributionOptions = (params) => ({
   tooltip: {
@@ -102,21 +158,18 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
   // 根据displayMode设置标题文字
   const titleSuffix = displayMode === 'cleaned' ? '已清理节点态势' : '活跃节点态势';
   
-  // 计算动态Y轴范围
-  const nationalYRange = calculateYAxisRange(safeNationalData);
-  const globalYRange = calculateYAxisRange(safeGlobalData);
+  // 计算动态Y轴范围，优化小数据量的显示效果
+  const nationalYRange = calculateOptimizedYAxisRange(safeNationalData);
+  const globalYRange = calculateOptimizedYAxisRange(safeGlobalData);
 
-  // 根据数据点数量动态计算X轴标签间隔
+  // 根据数据点数量动态计算X轴标签间隔，最多显示7个横坐标
   const dataLength = safeTimeData.length;
   let xAxisInterval;
-  if (dataLength <= 10) {
+  if (dataLength <= 7) {
     xAxisInterval = 0; // 显示所有标签
-  } else if (dataLength <= 15) {
-    xAxisInterval = 1; // 每隔1个显示
-  } else if (dataLength <= 31) {
-    xAxisInterval = 2; // 每隔2个显示（30天约显示10个标签）
   } else {
-    xAxisInterval = Math.floor(dataLength / 10); // 显示约10个标签
+    // 计算间隔，确保最多显示7个标签
+    xAxisInterval = Math.ceil(dataLength / 7) - 1;
   }
 
   return {
@@ -251,7 +304,13 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
           color: '#BCDCFF',
           fontSize: 14,  // 增加Y轴标签字体大小
           formatter: (value) => {
-            return value >= 1000 ? `${value/1000}k` : value;
+            if (value >= 1000000) {
+              return `${(value/1000000).toFixed(1)}M`;
+            } else if (value >= 1000) {
+              return `${(value/1000).toFixed(0)}k`;
+            } else {
+              return value.toString();
+            }
           }
         },
         splitLine: {
@@ -283,7 +342,13 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
           color: '#BCDCFF',
           fontSize: 14,  // 增加Y轴标签字体大小
           formatter: (value) => {
-            return value >= 1000 ? `${value/1000}k` : value;
+            if (value >= 1000000) {
+              return `${(value/1000000).toFixed(1)}M`;
+            } else if (value >= 1000) {
+              return `${(value/1000).toFixed(0)}k`;
+            } else {
+              return value.toString();
+            }
           }
         },
         splitLine: {
