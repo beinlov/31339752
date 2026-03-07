@@ -83,6 +83,7 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
         <CleanupModal 
           onClose={() => setShowCleanupModal(false)} 
           dispatch={dispatch}
+          selectedNetwork={selectedNetwork}
         />
       )}
     </Fragment>
