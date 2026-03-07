@@ -14,29 +14,32 @@ const useStyles = makeStyles((theme) => ({
     gap: '0.2rem',
     alignItems: 'center',
     position: 'absolute',
-    top: '25%',
+    top: '10%',  // 大幅上移避免与南海诸岛重叠
   },
   actionButton: {
-    width: '1rem',
-    height: '0.3rem',
-    padding: '0.03rem 0.03rem',
-    backgroundColor: 'rgba(19, 25, 47, 0.8)',
+    width: '1.4rem',  // 放大宽度
+    height: '0.45rem',  // 放大高度
+    padding: '0.05rem 0.08rem',
+    backgroundColor: 'rgba(220, 50, 50, 0.85)',  // 红色背景
+    border: '2px solid rgba(255, 100, 100, 0.9)',  // 红色边框
     borderRadius: '5px',
     cursor: 'pointer',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     transition: 'all 0.3s',
+    boxShadow: '0 0 8px rgba(255, 50, 50, 0.5)',  // 红色发光
     '&:hover': {
-      backgroundColor: 'rgba(29, 35, 57, 0.9)',
-      boxShadow: '0 0 10px rgba(0, 100, 250, 0.5)',
+      backgroundColor: 'rgba(240, 70, 70, 0.95)',  // hover时更亮的红色
+      boxShadow: '0 0 15px rgba(255, 50, 50, 0.7)',
+      borderColor: 'rgba(255, 120, 120, 1)',
     }
   },
   buttonText: {
-    fontSize: '0.2rem',
+    fontSize: '0.26rem',  // 放大字体
     fontWeight: 'bold',
-    color: '#89e5ff',
-    textShadow: '0 0 5px rgba(77, 182, 229, 0.5)',
+    color: '#FFFFFF',  // 纯白色文字
+    textShadow: '0 0 8px rgba(255, 255, 200, 0.8), 0 0 3px rgba(0, 0, 0, 0.5)',  // 浅黄色光晕+黑色描边
     margin: 0,
     padding: 0,
   }

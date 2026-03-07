@@ -309,6 +309,7 @@ class index extends PureComponent {
     return (
       <CenterPage>
         {/* 固定的僵尸网络类型选择下拉框 */}
+        {/* 隐藏状态：如需显示，请删除下面 style 中的 display: 'none' */}
         <div
           style={{
             position: 'absolute',
@@ -318,7 +319,8 @@ class index extends PureComponent {
             background: 'rgba(15, 19, 37, 0)',
             padding: '10px',
             borderRadius: '4px',
-            minWidth: '240px'
+            minWidth: '240px',
+            display: 'none'  // ← 删除此行可恢复显示
           }}
         >
           <ModuleTitle className='module-title' style={{ marginBottom: '5px' }}>
@@ -446,8 +448,8 @@ class index extends PureComponent {
           />
           <div style={{
             position: 'absolute',
-            left: '90%',
-            top: '85%',
+            left: '85%',
+            top: '70%',
             zIndex: 999,
           }}>
             <Takeover />
