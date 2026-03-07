@@ -361,7 +361,7 @@ const EmptyMessage = styled.div`
 `;
 
 // 主组件
-const CleanupModal = ({ onClose, dispatch }) => {
+const CleanupModal = ({ onClose, dispatch, selectedNetwork }) => {
   const [botnets, setBotnets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -375,19 +375,59 @@ const CleanupModal = ({ onClose, dispatch }) => {
     
     try {
       const token = localStorage.getItem('token');
+      console.log('🔍 [CleanupModal] 开始获取僵网列表, selectedNetwork:', selectedNetwork);
+      
       const response = await axios.get(`${API_BASE_URL}/api/cleanup/check-permissions`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
+      console.log('📦 [CleanupModal] API响应:', response.data);
+      
       if (response.data.status === 'success') {
-        setBotnets(response.data.data.botnets || []);
+        const allBotnets = response.data.data.botnets || [];
+        console.log('📋 [CleanupModal] 所有僵网列表:', allBotnets);
+        console.log('📋 [CleanupModal] 僵网名称列表:', allBotnets.map(b => b.botnet_name));
+        
+        // 如果有选中的僵网，只显示该僵网；否则显示所有僵网
+        if (selectedNetwork) {
+          // 容错处理：同时支持下划线和连字符格式的匹配
+          const normalizeFormat = (name) => name?.replace(/[-_]/g, '_').toLowerCase();
+          const normalizedSelected = normalizeFormat(selectedNetwork);
+          
+          const filteredBotnets = allBotnets.filter(b => {
+            const normalizedBotnet = normalizeFormat(b.botnet_name);
+            return normalizedBotnet === normalizedSelected;
+          });
+          
+          console.log('🎯 [CleanupModal] 过滤后的僵网:', filteredBotnets);
+          console.log('🎯 [CleanupModal] 过滤条件:', { 
+            selectedNetwork, 
+            normalizedSelected,
+            匹配数量: filteredBotnets.length 
+          });
+          
+          // 如果过滤后为空，回退到显示所有僵网（避免一直加载）
+          if (filteredBotnets.length === 0) {
+            console.warn('⚠️ [CleanupModal] 未找到匹配的僵网，回退显示全部');
+            console.warn('⚠️ [CleanupModal] 可用的僵网:', allBotnets.map(b => b.botnet_name));
+            setBotnets(allBotnets);
+            setError(`未找到僵网 "${selectedNetwork}"，显示所有僵网`);
+          } else {
+            setBotnets(filteredBotnets);
+          }
+        } else {
+          console.log('📋 [CleanupModal] 未选中僵网，显示全部');
+          setBotnets(allBotnets);
+        }
       } else {
+        console.error('❌ [CleanupModal] API返回失败状态');
         setError('获取僵网列表失败');
       }
     } catch (err) {
-      console.error('获取僵网列表失败:', err);
+      console.error('❌ [CleanupModal] 获取僵网列表失败:', err);
+      console.error('❌ [CleanupModal] 错误详情:', err.response);
       setError(err.response?.data?.detail || '网络错误，请稍后重试');
     } finally {
       setLoading(false);
@@ -396,7 +436,7 @@ const CleanupModal = ({ onClose, dispatch }) => {
 
   useEffect(() => {
     fetchBotnets();
-  }, []);
+  }, [selectedNetwork]);
 
   // 执行操作
   const handleAction = async (botnetName, action) => {
@@ -470,8 +510,15 @@ const CleanupModal = ({ onClose, dispatch }) => {
         <ModalHeader>
           <ModalTitle>
             <span className="icon">🎯</span>
-            <span>僵网一键清除</span>
-            {!loading && (
+            <span>
+              {selectedNetwork ? 
+                (botnets.length > 0 ? 
+                  `${botnets[0].display_name || selectedNetwork} - 一键清除` : 
+                  `${selectedNetwork} - 一键清除`) : 
+                '僵网一键清除'
+              }
+            </span>
+            {!loading && !selectedNetwork && (
               <>
                 <span className="count-badge">有权限: {withPermission}</span>
                 {withoutPermission > 0 && (
@@ -489,7 +536,12 @@ const CleanupModal = ({ onClose, dispatch }) => {
           ) : error ? (
             <ErrorMessage>{error}</ErrorMessage>
           ) : botnets.length === 0 ? (
-            <EmptyMessage>暂无僵网数据</EmptyMessage>
+            <EmptyMessage>
+              {selectedNetwork ? 
+                `未找到僵网 "${selectedNetwork}" 的清除配置信息` : 
+                '暂无僵网数据'
+              }
+            </EmptyMessage>
           ) : (
             botnets.map(botnet => (
               <BotnetCard key={botnet.botnet_name} hasPermission={botnet.has_c2_permission}>
