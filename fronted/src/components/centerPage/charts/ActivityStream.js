@@ -17,7 +17,7 @@ class UserSituation extends PureComponent {
         evenRowBGC: 'rgba(0, 21, 41, 0.3)',
         index: false,
         columnWidth: [],
-        align: ['center', 'center', 'center', 'center'],
+        align: ['center', 'center', 'center', 'center', 'center', 'center'],
         rowNum: 4,
         headerHeight: 60,
         rowHeight: 70,
@@ -69,11 +69,11 @@ class UserSituation extends PureComponent {
   updateColumnWidth = () => {
     if (this.containerRef.current) {
       const width = this.containerRef.current.clientWidth;
-      const colWidth = Math.floor(width / 4);
+      const colWidth = Math.floor(width / 6);
       this.setState(prevState => ({
         config: {
           ...prevState.config,
-          columnWidth: [colWidth, colWidth, colWidth, colWidth]
+          columnWidth: [colWidth, colWidth, colWidth, colWidth, colWidth, colWidth]
         }
       }));
     }
@@ -105,7 +105,9 @@ class UserSituation extends PureComponent {
           `<span style="color: #00EAFF; font-weight: bold;">${event.time}</span>`,
           `<span style="color: #ffffff; font-weight: bold;">${event.ip}</span>`,
           `<span style="color: #00EAFF; font-weight: bold;">${event.country}</span>`,
-          `<span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>`
+          `<span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>`,
+          `<span style="color: #FFD700; font-weight: bold;">${event.unit || '-'}</span>`,
+          `<span style="color: #FFD700; font-weight: bold;">${event.industry || '-'}</span>`
         ];
       });
       

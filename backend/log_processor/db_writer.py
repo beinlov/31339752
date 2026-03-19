@@ -19,6 +19,14 @@ import time
 sys.path.insert(0, sys.path[0].replace('log_processor', ''))
 from database.schema import get_node_table_ddl, get_communication_table_ddl
 
+# 导入 IP-单位-行业映射器
+try:
+    from utils.ip_unit_industry_mapper import get_ip_unit_industry_mapper
+    HAS_IP_MAPPER = True
+except ImportError:
+    HAS_IP_MAPPER = False
+    logger.warning("无法导入 IP-单位-行业映射器，将跳过 unit 和 industry 字段")
+
 # Python 版本兼容性检查
 PYTHON_VERSION = sys.version_info
 HAS_TO_THREAD = PYTHON_VERSION >= (3, 9)
@@ -146,8 +154,15 @@ class BotnetDBWriter:
 
         # 表创建状态缓存
         self.table_created = False
+        self.fields_checked = False  # 字段检查状态（每次启动都需要检查）
         self.china_table = f"china_botnet_{botnet_type}"
         self.global_table = f"global_botnet_{botnet_type}"
+        
+        # IP-单位-行业映射器
+        if HAS_IP_MAPPER:
+            self.ip_mapper = get_ip_unit_industry_mapper(db_config)
+        else:
+            self.ip_mapper = None
 
         # 性能监控（如果启用）
         if enable_monitoring:
@@ -163,6 +178,50 @@ class BotnetDBWriter:
             self.insert_times = None
             self.cpu_usage = None
             self.memory_usage = None
+        
+        # 立即初始化表和字段（在服务启动时执行，而不是等待第一次数据写入）
+        self._initialize_database()
+    
+    def _initialize_database(self):
+        """初始化数据库表和字段（在服务启动时立即执行）"""
+        try:
+            logger.info(f"[{self.botnet_type}] 开始初始化数据库表和字段...")
+            
+            # 获取数据库连接
+            if self.connection_pool:
+                conn = self.connection_pool.get_connection()
+            else:
+                conn = pymysql.connect(**self.db_config)
+            
+            cursor = conn.cursor()
+            
+            # 1. 确保表存在
+            self._ensure_tables_exist_sync(cursor)
+            self.table_created = True
+            
+            # 2. 确保 communications 表的 unit 和 industry 字段存在
+            self._ensure_unit_industry_fields_sync(cursor)
+            
+            # 3. 确保 nodes 表的 unit 和 industry 字段存在
+            self._ensure_node_unit_industry_fields_sync(cursor)
+            self.fields_checked = True
+            
+            # 提交更改
+            conn.commit()
+            
+            cursor.close()
+            if self.connection_pool:
+                self.connection_pool.return_connection(conn)
+            else:
+                conn.close()
+            
+            logger.info(f"[{self.botnet_type}] 数据库初始化完成")
+            
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] 数据库初始化失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # 不抛出异常，允许服务继续启动
     
     def start_batch(self, source_ip: str, total_count: int):
         """
@@ -193,6 +252,11 @@ class BotnetDBWriter:
         try:
             self.received_count += 1
             
+            # 查询单位和行业信息
+            unit, industry = None, None
+            if self.ip_mapper:
+                unit, industry = self.ip_mapper.get_unit_industry(log_data['ip'])
+            
             # 构建节点数据（移除去重逻辑）
             node_data = {
                 'ip': log_data['ip'],
@@ -207,7 +271,9 @@ class BotnetDBWriter:
                 'isp': ip_info.get('isp', ''),
                 'asn': ip_info.get('asn', ''),
                 'status': 'active',
-                'is_china': ip_info.get('is_china', False)
+                'is_china': ip_info.get('is_china', False),
+                'unit': unit,
+                'industry': industry
             }
             
             # 线程安全地添加到缓冲区
@@ -320,6 +386,11 @@ class BotnetDBWriter:
             if not self.table_created:
                 self._ensure_tables_exist_sync(cursor)
                 self.table_created = True
+            
+            # 确保 unit 和 industry 字段存在（每次启动时检查一次）
+            if not self.fields_checked:
+                self._ensure_unit_industry_fields_sync(cursor)
+                self.fields_checked = True
             
             # 批量插入节点数据（同步执行，因为整个 flush 已经在后台运行）
             insert_start_time = time.time()
@@ -575,77 +646,286 @@ class BotnetDBWriter:
             logger.error(f"[{self.botnet_type}] Error upgrading table structure: {e}")
             raise
     
-    async def _ensure_tables_exist(self, cursor):
-        """确保数据表存在（双表设计：节点表+通信记录表）"""
+    def _ensure_unit_industry_fields_sync(self, cursor):
+        """确保 communications 表有 unit 和 industry 字段"""
         try:
-            # 1. 创建节点表（汇总信息）
+            # 检查 communications 表的字段
             cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.node_table} (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    ip VARCHAR(15) NOT NULL COMMENT '节点IP地址',
-                    longitude FLOAT COMMENT '经度',
-                    latitude FLOAT COMMENT '纬度',
-                    country VARCHAR(50) COMMENT '国家',
-                    province VARCHAR(50) COMMENT '省份',
-                    city VARCHAR(50) COMMENT '城市',
-                    continent VARCHAR(50) COMMENT '洲',
-                    isp VARCHAR(255) COMMENT 'ISP运营商',
-                    asn VARCHAR(50) COMMENT 'AS号',
-                    status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '节点状态',
-                    first_seen TIMESTAMP NULL DEFAULT NULL COMMENT '首次发现时间（日志时间）',
-                    last_seen TIMESTAMP NULL DEFAULT NULL COMMENT '最后通信时间（日志时间）',
-                    communication_count INT DEFAULT 0 COMMENT '通信次数',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
-                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    INDEX idx_ip (ip),
-                    INDEX idx_location (country, province, city),
-                    INDEX idx_status (status),
-                    INDEX idx_first_seen (first_seen),
-                    INDEX idx_last_seen (last_seen),
-                    INDEX idx_communication_count (communication_count),
-                    INDEX idx_is_china (is_china),
-                    UNIQUE KEY idx_unique_ip (ip)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点基本信息表（汇总）'
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = '{self.communication_table}'
+                AND COLUMN_NAME IN ('unit', 'industry')
             """)
             
-            # 2. 创建通信记录表（详细历史）
-            cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.communication_table} (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    node_id INT NOT NULL COMMENT '关联的节点ID',
-                    ip VARCHAR(15) NOT NULL COMMENT '节点IP',
-                    communication_time TIMESTAMP NOT NULL COMMENT '通信时间（日志时间）',
-                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '接收时间',
-                    longitude FLOAT COMMENT '经度',
-                    latitude FLOAT COMMENT '纬度',
-                    country VARCHAR(50) COMMENT '国家',
-                    province VARCHAR(50) COMMENT '省份',
-                    city VARCHAR(50) COMMENT '城市',
-                    continent VARCHAR(50) COMMENT '洲',
-                    isp VARCHAR(255) COMMENT 'ISP运营商',
-                    asn VARCHAR(50) COMMENT 'AS号',
-                    event_type VARCHAR(50) COMMENT '事件类型',
-                    status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
-                    is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
-                    UNIQUE KEY idx_unique_communication (ip, communication_time) COMMENT '唯一约束：防止重复数据',
-                    INDEX idx_communication_time (communication_time) COMMENT '时间范围查询',
-                    INDEX idx_location (country, province, city) COMMENT '地理位置查询'
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 
-                COMMENT='僵尸网络节点通信记录表（优化版：唯一约束+精简索引）'
-            """)
+            existing_fields = {row[0] for row in cursor.fetchall()}
             
-            # 3. 升级表结构（处理旧表迁移）
-            await self._upgrade_table_structure(cursor)
+            # 添加 unit 字段（如果不存在）
+            if 'unit' not in existing_fields:
+                logger.info(f"[{self.botnet_type}] 为 {self.communication_table} 添加 unit 字段...")
+                cursor.execute(f"""
+                    ALTER TABLE {self.communication_table}
+                    ADD COLUMN unit VARCHAR(255) DEFAULT NULL COMMENT '所属单位'
+                    AFTER city
+                """)
+                # 添加索引
+                cursor.execute(f"""
+                    ALTER TABLE {self.communication_table}
+                    ADD INDEX idx_unit (unit)
+                """)
+                logger.info(f"[{self.botnet_type}] unit 字段添加成功")
+            else:
+                logger.debug(f"[{self.botnet_type}] unit 字段已存在")
             
-            logger.info(f"[{self.botnet_type}] Tables ensured: {self.node_table}, {self.communication_table}")
+            # 添加 industry 字段（如果不存在）
+            if 'industry' not in existing_fields:
+                logger.info(f"[{self.botnet_type}] 为 {self.communication_table} 添加 industry 字段...")
+                cursor.execute(f"""
+                    ALTER TABLE {self.communication_table}
+                    ADD COLUMN industry VARCHAR(255) DEFAULT NULL COMMENT '所属行业'
+                    AFTER unit
+                """)
+                # 添加索引
+                cursor.execute(f"""
+                    ALTER TABLE {self.communication_table}
+                    ADD INDEX idx_industry (industry)
+                """)
+                logger.info(f"[{self.botnet_type}] industry 字段添加成功")
+            else:
+                logger.debug(f"[{self.botnet_type}] industry 字段已存在")
             
+            # 回填历史数据：为已有记录补充 unit 和 industry
+            self._backfill_unit_industry_data_sync(cursor)
+                
         except Exception as e:
-            logger.error(f"[{self.botnet_type}] Error ensuring tables exist: {e}")
-            raise
+            logger.error(f"[{self.botnet_type}] Error ensuring unit/industry fields: {e}")
+            # 不抛出异常，允许程序继续运行
     
-    async def _upgrade_table_structure(self, cursor):
+    def _ensure_node_unit_industry_fields_sync(self, cursor):
+        """确保 nodes 表有 unit 和 industry 字段"""
+        try:
+            # 检查 nodes 表的字段
+            cursor.execute(f"""
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = '{self.node_table}'
+                AND COLUMN_NAME IN ('unit', 'industry')
+            """)
+            
+            existing_fields = {row[0] for row in cursor.fetchall()}
+            
+            # 添加 unit 字段（如果不存在）
+            if 'unit' not in existing_fields:
+                logger.info(f"[{self.botnet_type}] 为 {self.node_table} 添加 unit 字段...")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table}
+                    ADD COLUMN unit VARCHAR(255) DEFAULT NULL COMMENT '所属单位'
+                    AFTER city
+                """)
+                # 添加索引
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table}
+                    ADD INDEX idx_unit (unit)
+                """)
+                logger.info(f"[{self.botnet_type}] {self.node_table} unit 字段添加成功")
+            else:
+                logger.debug(f"[{self.botnet_type}] {self.node_table} unit 字段已存在")
+            
+            # 添加 industry 字段（如果不存在）
+            if 'industry' not in existing_fields:
+                logger.info(f"[{self.botnet_type}] 为 {self.node_table} 添加 industry 字段...")
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table}
+                    ADD COLUMN industry VARCHAR(255) DEFAULT NULL COMMENT '所属行业'
+                    AFTER unit
+                """)
+                # 添加索引
+                cursor.execute(f"""
+                    ALTER TABLE {self.node_table}
+                    ADD INDEX idx_industry (industry)
+                """)
+                logger.info(f"[{self.botnet_type}] {self.node_table} industry 字段添加成功")
+            else:
+                logger.debug(f"[{self.botnet_type}] {self.node_table} industry 字段已存在")
+            
+            # 回填历史数据：为已有记录补充 unit 和 industry
+            self._backfill_node_unit_industry_data_sync(cursor)
+                
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] Error ensuring node unit/industry fields: {e}")
+            # 不抛出异常，允许程序继续运行
+    
+    def _backfill_unit_industry_data_sync(self, cursor):
+        """回填 communications 表历史数据：为 unit 和 industry 为空的记录补充数据"""
+        try:
+            if not self.ip_mapper:
+                logger.debug(f"[{self.botnet_type}] IP映射器未启用，跳过 communications 表历史数据回填")
+                return
+            
+            logger.info(f"[{self.botnet_type}] 开始检查并回填 communications 表历史数据...")
+            
+            # 1. 查询需要回填的记录（unit 和 industry 都为空的记录）
+            cursor.execute(f"""
+                SELECT DISTINCT ip
+                FROM {self.communication_table}
+                WHERE (unit IS NULL OR unit = '') 
+                AND (industry IS NULL OR industry = '')
+                LIMIT 10000
+            """)
+            
+            ips_to_update = [row[0] for row in cursor.fetchall()]
+            
+            if not ips_to_update:
+                logger.info(f"[{self.botnet_type}] 没有需要回填的历史数据")
+                return
+            
+            logger.info(f"[{self.botnet_type}] 找到 {len(ips_to_update)} 个需要回填的IP")
+            
+            # 2. 批量查询 ip_info 表
+            ip_mapping = self.ip_mapper.batch_get_unit_industry(ips_to_update)
+            
+            # 3. 过滤出有数据的 IP
+            updates = []
+            for ip, (unit, industry) in ip_mapping.items():
+                if unit or industry:
+                    updates.append((unit, industry, ip))
+            
+            if not updates:
+                logger.info(f"[{self.botnet_type}] ip_info 表中没有找到对应的 unit/industry 数据")
+                return
+            
+            logger.info(f"[{self.botnet_type}] 找到 {len(updates)} 个IP有对应的 unit/industry 数据")
+            
+            # 4. 批量更新（分批处理，每批500条）
+            batch_size = 500
+            total_updated = 0
+            
+            for i in range(0, len(updates), batch_size):
+                batch = updates[i:i+batch_size]
+                
+                # 使用 CASE WHEN 批量更新
+                update_sql = f"""
+                    UPDATE {self.communication_table}
+                    SET 
+                        unit = CASE ip
+                            {' '.join([f"WHEN %s THEN %s" for _ in batch])}
+                            ELSE unit
+                        END,
+                        industry = CASE ip
+                            {' '.join([f"WHEN %s THEN %s" for _ in batch])}
+                            ELSE industry
+                        END
+                    WHERE ip IN ({','.join(['%s'] * len(batch))})
+                    AND (unit IS NULL OR unit = '')
+                    AND (industry IS NULL OR industry = '')
+                """
+                
+                # 构建参数：unit的CASE, industry的CASE, WHERE IN
+                params = []
+                # unit CASE
+                for unit, industry, ip in batch:
+                    params.extend([ip, unit])
+                # industry CASE
+                for unit, industry, ip in batch:
+                    params.extend([ip, industry])
+                # WHERE IN
+                for unit, industry, ip in batch:
+                    params.append(ip)
+                
+                cursor.execute(update_sql, params)
+                affected = cursor.rowcount
+                total_updated += affected
+                
+            
+            logger.info(f"[{self.botnet_type}] communications 表历史数据回填完成: 更新了 {total_updated} 条记录")
+                
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] Error backfilling communications unit/industry data: {e}")
+            # 不抛出异常，允许程序继续运行
+    
+    def _backfill_node_unit_industry_data_sync(self, cursor):
+        """回填 nodes 表历史数据：为 unit 和 industry 为空的记录补充数据"""
+        try:
+            if not self.ip_mapper:
+                logger.debug(f"[{self.botnet_type}] IP映射器未启用，跳过 nodes 表历史数据回填")
+                return
+            
+            logger.info(f"[{self.botnet_type}] 开始检查并回填 nodes 表历史数据...")
+            
+            # 1. 查询需要回填的记录
+            cursor.execute(f"""
+                SELECT DISTINCT ip
+                FROM {self.node_table}
+                WHERE (unit IS NULL OR unit = '') 
+                AND (industry IS NULL OR industry = '')
+            """)
+            
+            ips_to_update = [row[0] for row in cursor.fetchall()]
+            
+            if not ips_to_update:
+                logger.info(f"[{self.botnet_type}] nodes 表没有需要回填的历史数据")
+                return
+            
+            logger.info(f"[{self.botnet_type}] nodes 表找到 {len(ips_to_update)} 个需要回填的IP")
+            
+            # 2. 批量查询 ip_info 表
+            ip_mapping = self.ip_mapper.batch_get_unit_industry(ips_to_update)
+            
+            # 3. 过滤出有数据的 IP
+            updates = []
+            for ip, (unit, industry) in ip_mapping.items():
+                if unit or industry:
+                    updates.append((unit, industry, ip))
+            
+            if not updates:
+                logger.info(f"[{self.botnet_type}] nodes 表在 ip_info 中没有找到对应的 unit/industry 数据")
+                return
+            
+            logger.info(f"[{self.botnet_type}] nodes 表找到 {len(updates)} 个IP有对应的 unit/industry 数据")
+            
+            # 4. 批量更新
+            batch_size = 500
+            total_updated = 0
+            
+            for i in range(0, len(updates), batch_size):
+                batch = updates[i:i+batch_size]
+                
+                update_sql = f"""
+                    UPDATE {self.node_table}
+                    SET 
+                        unit = CASE ip
+                            {' '.join([f"WHEN %s THEN %s" for _ in batch])}
+                            ELSE unit
+                        END,
+                        industry = CASE ip
+                            {' '.join([f"WHEN %s THEN %s" for _ in batch])}
+                            ELSE industry
+                        END
+                    WHERE ip IN ({','.join(['%s'] * len(batch))})
+                    AND (unit IS NULL OR unit = '')
+                    AND (industry IS NULL OR industry = '')
+                """
+                
+                params = []
+                for unit, industry, ip in batch:
+                    params.extend([ip, unit])
+                for unit, industry, ip in batch:
+                    params.extend([ip, industry])
+                for unit, industry, ip in batch:
+                    params.append(ip)
+                
+                cursor.execute(update_sql, params)
+                total_updated += cursor.rowcount
+            
+            logger.info(f"[{self.botnet_type}] nodes 表历史数据回填完成: 更新了 {total_updated} 条记录")
+                
+        except Exception as e:
+            logger.error(f"[{self.botnet_type}] Error backfilling nodes unit/industry data: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _upgrade_table_structure_sync(self, cursor):
         """升级表结构，重命名和添加字段（仅在必要时执行）"""
         try:
             # 检查字段存在性和定义
@@ -995,13 +1275,13 @@ class BotnetDBWriter:
             ip_to_node_id = {row[1]: row[0] for row in cursor.fetchall()}
             
             # ========================================
-            # Step 4: 插入通信记录表
+            # Step 4: 插入通信记录表（包含 unit 和 industry）
             # ========================================
             comm_sql = f"""
                 INSERT IGNORE INTO {self.communication_table}
                 (node_id, ip, communication_time, longitude, latitude, country, province, 
-                 city, continent, isp, asn, event_type, status, is_china)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 city, unit, industry, continent, isp, asn, event_type, status, is_china)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             
             comm_values = []
@@ -1025,6 +1305,8 @@ class BotnetDBWriter:
                     node['country'],
                     node['province'],
                     node['city'],
+                    node.get('unit'),  # 单位
+                    node.get('industry'),  # 行业
                     node['continent'],
                     node['isp'],
                     node['asn'],
@@ -1044,12 +1326,12 @@ class BotnetDBWriter:
                 for i in range(0, len(comm_values), batch_size):
                     batch = comm_values[i:i+batch_size]
                     
-                    # 构建批量INSERT IGNORE语句（14个字段）- 保证幂等性
-                    placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'] * len(batch))
+                    # 构建批量INSERT IGNORE语句（16个字段：添加了 unit 和 industry）- 保证幂等性
+                    placeholders = ','.join(['(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'] * len(batch))
                     comm_sql_batch = f"""
                         INSERT IGNORE INTO {self.communication_table}
                         (node_id, ip, communication_time, longitude, latitude, country, province, 
-                         city, continent, isp, asn, event_type, status, is_china)
+                         city, unit, industry, continent, isp, asn, event_type, status, is_china)
                         VALUES {placeholders}
                     """
                     

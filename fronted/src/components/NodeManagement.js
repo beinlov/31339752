@@ -180,7 +180,7 @@ const Table = styled.div`
 
 const TableHeader = styled.div`
   display: grid;
-  grid-template-columns: 40px 115px 160px 125px 125px;
+  grid-template-columns: 115px 160px 125px 125px;
   padding: 10px 8px;
   background: linear-gradient(90deg, rgba(13, 71, 161, 0.3), rgba(21, 101, 192, 0.3));
   border-bottom: 2px solid rgba(100, 181, 246, 0.3);
@@ -207,7 +207,7 @@ const TableHeader = styled.div`
 
 const TableRow = styled.div`
   display: grid;
-  grid-template-columns: 40px 115px 160px 125px 125px;
+  grid-template-columns: 115px 160px 125px 125px;
   padding: 6px 8px;
   border-bottom: 1px solid rgba(100, 181, 246, 0.1);
   transition: all 0.2s ease;
@@ -912,19 +912,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <Button
-            active={isSelectAllActive}
-            onClick={handleSelectAll}
-            disabled={isLoading || isSelectAllLoading}
-          >
-            {isSelectAllLoading ? (
-              '处理中...'
-            ) : (
-              <>
-                <span>✓</span> {isSelectAllActive ? '取消全选' : '一键勾选'}
-              </>
-            )}
-          </Button>
         </TopBar>
         
         <TopBar>
@@ -974,7 +961,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         <TableContainer>
           <Table>
             <TableHeader>
-              <div>选择</div>
               <div>IP地址</div>
               <div>地理位置</div>
               <div>最初记录时间</div>
@@ -992,13 +978,6 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
                   }
                 }}
               >
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selectedNodes.includes(node.id)}
-                    onChange={() => handleNodeSelect(node.id)}
-                    disabled={node.status === '离线' || node.status === '已清除'}
-                  />
-                </div>
                 <div>
                   <IpContainer>
                     <span className="ip-address">{node.ip}</span>

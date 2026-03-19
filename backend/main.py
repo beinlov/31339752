@@ -688,7 +688,9 @@ async def get_active_botnet_communications(botnet_type: str = 'asruex'):
                     DATE_FORMAT(communication_time, '%Y-%m-%d %H:%i:%s') as time,
                     ip,
                     COALESCE(country, '未知') as country,
-                    status
+                    status,
+                    unit,
+                    industry
                 FROM {table_name}
                 ORDER BY communication_time DESC
                 LIMIT 20
