@@ -58,8 +58,9 @@ export const RightCenterBox = styled.div`
 
 export const RightBottomBox = styled.div`
   position: relative;
-  height: 65%;
+  height: 58.5%;
   width: 100%;
+  margin-top: 0.06rem;
   // top: 0.1%;
   .right-bottom-borderBox13 {
     padding: 0.25rem 0.1875rem 0.1875rem;

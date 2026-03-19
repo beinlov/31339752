@@ -10,51 +10,90 @@ const DataBox = styled.div`
   height: 12.5%;
   width: 100%;
   padding: 0.1rem 0;
+  position: relative;
 
   .toggle-container {
     display: flex;
     justify-content: center;
-    margin-bottom: 0.15rem;
+    margin-bottom: 0.2rem;
+    position: relative;
+    z-index: 2;
+    
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+      z-index: -1;
+    }
     
     .toggle-button {
       background: linear-gradient(135deg, #1e3c72, #2a5298);
       border: 2px solid #4FD8FF;
-      border-radius: 0.25rem;
+      border-radius: 0.3rem;
       color: #fff;
       cursor: pointer;
-      font-size: 0.18rem;
-      font-weight: 500;
-      padding: 0.1rem 0.2rem;
-      margin: 0 0.05rem;
+      font-size: 0.22rem;
+      font-weight: 600;
+      padding: 0.15rem 0.3rem;
+      margin: 0 0.1rem;
       transition: all 0.3s ease;
-      min-width: 1.2rem;
+      min-width: 1.5rem;
       text-align: center;
+      position: relative;
+      overflow: hidden;
+      
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transition: left 0.5s;
+      }
       
       &:hover {
         background: linear-gradient(135deg, #2a5298, #4FD8FF);
         box-shadow: 0 0 0.15rem rgba(79, 216, 255, 0.8);
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+        
+        &::before {
+          left: 100%;
+        }
       }
       
       &.active {
         background: linear-gradient(135deg, #4FD8FF, #00BFFF);
         color: #000;
         font-weight: bold;
-        box-shadow: 0 0 0.2rem rgba(79, 216, 255, 1);
+        box-shadow: 0 0 0.25rem rgba(79, 216, 255, 1),
+                    inset 0 0 0.1rem rgba(255, 255, 255, 0.5);
+        animation: activeGlow 2s ease-in-out infinite;
       }
     }
   }
 
+  @keyframes activeGlow {
+    0%, 100% { box-shadow: 0 0 0.25rem rgba(79, 216, 255, 1), inset 0 0 0.1rem rgba(255, 255, 255, 0.5); }
+    50% { box-shadow: 0 0 0.4rem rgba(79, 216, 255, 1), inset 0 0 0.15rem rgba(255, 255, 255, 0.7); }
+  }
+
   .border-box-wrapper {
-    height: 1.0rem;
-    margin-top: 0.2rem;
+    height: 1.2rem;
+    margin-top: 0.25rem;
     width: 100%;
     position: relative;
 
     .dv-border-box-11-title {
-      font-size: 0.24rem !important;
+      font-size: 0.26rem !important;
       font-weight: bold !important;
       color: #fff !important;
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.8);
     }
 
     &:first-child {
@@ -74,6 +113,18 @@ const DataBox = styled.div`
       height: 150%;
       position: absolute;
       left: 0;
+      filter: drop-shadow(0 0 5px rgba(0, 212, 255, 0.3));
+    }
+    
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -0.1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.4), transparent);
     }
   }
 
@@ -89,13 +140,37 @@ const DataBox = styled.div`
     z-index: 1;
     
     .number {
-      font-size: 0.3rem;
+      font-size: 0.35rem;
       font-weight: bold;
       color: #4FD8FF;
-      font-family: DINAlternate-Bold;
+      font-family: DINAlternate-Bold, Arial;
       text-align: center;
       transition: all 0.3s ease;
       transform: translateY(0.1rem);
+      text-shadow: 0 0 15px rgba(79, 216, 255, 0.8),
+                   0 0 30px rgba(79, 216, 255, 0.4);
+      animation: numberPulse 3s ease-in-out infinite;
+      
+      &::before {
+        content: attr(data-value);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        color: rgba(79, 216, 255, 0.3);
+        filter: blur(8px);
+        z-index: -1;
+      }
+    }
+  }
+  
+  @keyframes numberPulse {
+    0%, 100% { 
+      text-shadow: 0 0 15px rgba(79, 216, 255, 0.8), 0 0 30px rgba(79, 216, 255, 0.4);
+    }
+    50% { 
+      text-shadow: 0 0 20px rgba(79, 216, 255, 1), 0 0 40px rgba(79, 216, 255, 0.6);
     }
   }
 `;
@@ -141,13 +216,6 @@ const DataDisplay = ({ botnetData, displayMode, dispatch }) => {
         <BorderBox11 title={`全国${getModeTitle()}`} >
           <div className="data-item">
             <div className="number">{getChinaCount().toLocaleString()}</div>
-          </div>
-        </BorderBox11>
-      </div>
-      <div className="border-box-wrapper">
-        <BorderBox11 title={`全球${getModeTitle()}`}>
-          <div className="data-item">
-            <div className="number">{getGlobalCount().toLocaleString()}</div>
           </div>
         </BorderBox11>
       </div>
