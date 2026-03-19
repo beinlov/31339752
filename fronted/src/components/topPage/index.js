@@ -14,7 +14,7 @@ class TopPage extends PureComponent {
   constructor(props) {
     super(props);
     this.state = {
-      title: '接管的僵尸网络展示处置平台',
+      title: '黑鹰作战展示平台',
       timeStr: '',
       dateStr: '',
       weekDay: '',

@@ -20,6 +20,7 @@ const TitleWrapper = styled.div`
   transform: translateX(-50%);
   z-index: 1000;
   text-align: center;
+  display: none;  /* 隐藏网络标题 */
 `;
 
 const TitleText = styled.div`
