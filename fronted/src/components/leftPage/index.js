@@ -2,7 +2,7 @@ import React, { PureComponent } from 'react';
 import { LeftPage, LeftTopBox, LeftBottomBox } from './style';
 import { ModuleTitle } from '../../style/globalStyledSet';
 import { BorderBox13 } from '@jiaminghi/data-view-react';
-import WorldMap from './charts/WorldMap';
+import IndustryDistribution from './charts/IndustryDistribution';
 import Map from '../centerPage/charts/Map';
 import AffectedSituation from './charts/AffectedSituation';
 import { connect } from 'dva';
@@ -25,8 +25,8 @@ class index extends PureComponent {
       displayMode
     } = this.props;
 
-    const MapComponent = isSwapped ? Map : WorldMap;
-    const mapDataToUse = isSwapped ? mapData : worldMapData;
+    const MapComponent = isSwapped ? Map : IndustryDistribution;
+    const mapDataToUse = isSwapped ? mapData : null;
     
     return (
       <LeftPage>
@@ -57,7 +57,7 @@ class index extends PureComponent {
             <div className='left-bottom'>
               <ModuleTitle className='module-title'>
                 <i className='iconfont'>&#xe7fd;</i>
-                <span>{isSwapped ? '中国分布' : '全球分布'}</span>
+                <span>{isSwapped ? '中国分布' : '行业分布'}</span>
               </ModuleTitle>
               <MapComponent 
                 mapData={mapDataToUse} 

@@ -98,15 +98,15 @@ export const IndustryDistributionOptions = (params) => ({
   legend: {
     orient: 'vertical',
     left: '2%',
-    top: 'middle',  // 垂直居中
+    top: 'middle',
     textStyle: {
       color: '#BCDCFF',
-      fontSize: 15  // 增加图例字体大小
+      fontSize: 18
     },
     icon: 'circle',
-    itemWidth: 10,  // 略微增加图例标记的大小
-    itemHeight: 10,
-    itemGap: 15,  // 增加图例项之间的间距
+    itemWidth: 12,
+    itemHeight: 12,
+    itemGap: 18,
   },
   series: [
     {
@@ -175,17 +175,10 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
   return {
     grid: [
       {
-        top: '9%',
+        top: '12%',
         left: '3%',
         right: '4%',
-        bottom: '54%',
-        containLabel: true
-      },
-      {
-        top: '57%',
-        left: '3%',
-        right: '4%',
-        bottom: '6%',
+        bottom: '8%',
         containLabel: true
       }
     ],
@@ -193,19 +186,10 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
       {
         text: `全国${titleSuffix}`,
         left: 'center',
-        top: '0%',
+        top: '2%',
         textStyle: {
           color: '#BCDCFF',
-          fontSize: 18  // 增加标题字体大小
-        }
-      },
-      {
-        text: `全球${titleSuffix}`,
-        left: 'center',
-        top: '51%',
-        textStyle: {
-          color: '#BCDCFF',
-          fontSize: 18  // 增加标题字体大小
+          fontSize: 18
         }
       }
     ],
@@ -249,37 +233,6 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
             type: 'dashed'
           }
         }
-      },
-      {
-        gridIndex: 1,
-        type: 'category',
-        boundaryGap: false,
-        data: safeTimeData,
-        axisLine: {
-          lineStyle: {
-            color: '#BCDCFF'
-          }
-        },
-        axisLabel: {
-          color: '#BCDCFF',
-          fontSize: 14,
-          interval: xAxisInterval,
-          rotate: 0,
-          formatter: (value) => {
-            return value;
-          }
-        },
-        axisTick: {
-          alignWithLabel: true,
-          interval: xAxisInterval
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: 'rgba(188, 220, 255, 0.1)',
-            type: 'dashed'
-          }
-        }
       }
     ],
     yAxis: [
@@ -292,7 +245,7 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
         name: '节点数/个',
         nameTextStyle: {
           color: '#BCDCFF',
-          fontSize: 14  // 增加Y轴名称字体大小
+          fontSize: 14
         },
         axisLine: {
           show: true,
@@ -302,45 +255,7 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
         },
         axisLabel: {
           color: '#BCDCFF',
-          fontSize: 14,  // 增加Y轴标签字体大小
-          formatter: (value) => {
-            if (value >= 1000000) {
-              return `${(value/1000000).toFixed(1)}M`;
-            } else if (value >= 1000) {
-              return `${(value/1000).toFixed(0)}k`;
-            } else {
-              return value.toString();
-            }
-          }
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: 'rgba(188, 220, 255, 0.1)',
-            type: 'dashed'
-          }
-        }
-      },
-      {
-        gridIndex: 1,
-        type: 'value',
-        min: globalYRange.min,
-        max: globalYRange.max,
-        splitNumber: 5,
-        name: '节点数/个',
-        nameTextStyle: {
-          color: '#BCDCFF',
-          fontSize: 14  // 增加Y轴名称字体大小
-        },
-        axisLine: {
-          show: true,
-          lineStyle: {
-            color: '#BCDCFF'
-          }
-        },
-        axisLabel: {
-          color: '#BCDCFF',
-          fontSize: 14,  // 增加Y轴标签字体大小
+          fontSize: 14,
           formatter: (value) => {
             if (value >= 1000000) {
               return `${(value/1000000).toFixed(1)}M`;
@@ -370,7 +285,7 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
         smooth: true,
         symbol: 'circle',
         symbolSize: 5,
-        showSymbol: false,    // 默认不显示数据点
+        showSymbol: false,
         itemStyle: {
           color: '#4A90E2'
         },
@@ -383,7 +298,6 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
             borderWidth: 2
           }
         },
-        // 只在刻度位置显示数据点
         markPoint: {
           symbol: 'circle',
           symbolSize: 5,
@@ -393,10 +307,9 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
             borderWidth: 1
           },
           label: {
-            show: false  // 不显示数字标签
+            show: false
           },
           data: safeNationalData.map((value, index) => {
-            // 只在每5个数据点（对应刻度）位置显示
             if (index % 5 === 0 || index === safeNationalData.length - 1) {
               return {
                 value: value,
@@ -419,67 +332,6 @@ export const DiffusionTrendOptions = ({ nationalData = [], globalData = [], time
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(79, 172, 254, 0.8)' },
             { offset: 1, color: 'rgba(0, 242, 254, 0.1)' }
-          ])
-        }
-      },
-      {
-        name: '全球传播',
-        type: 'line',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        data: safeGlobalData,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 5,
-        showSymbol: false,    // 默认不显示数据点
-        itemStyle: {
-          color: '#E74C3C'     // 红色数据点
-        },
-        emphasis: {
-          scale: true,
-          focus: 'series',
-          itemStyle: {
-            color: '#C0392B',   // 悬浮时的深红色
-            borderColor: '#FFFFFF',
-            borderWidth: 2
-          }
-        },
-        // 只在刻度位置显示数据点
-        markPoint: {
-          symbol: 'circle',
-          symbolSize: 5,
-          itemStyle: {
-            color: '#E74C3C',   // 红色数据点
-            borderColor: '#FFFFFF',
-            borderWidth: 1
-          },
-          label: {
-            show: false  // 不显示数字标签
-          },
-          data: safeGlobalData.map((value, index) => {
-            // 只在每5个数据点（对应刻度）位置显示
-            if (index % 5 === 0 || index === safeGlobalData.length - 1) {
-              return {
-                value: value,
-                xAxis: index,
-                yAxis: value
-              };
-            }
-            return null;
-          }).filter(item => item !== null)
-        },
-        lineStyle: {
-          width: 2,
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#FF9A9E' },
-            { offset: 1, color: '#FECFEF' }
-          ])
-        },
-        areaStyle: {
-          opacity: 0.3,
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(255, 154, 158, 0.8)' },
-            { offset: 1, color: 'rgba(254, 207, 239, 0.1)' }
           ])
         }
       }
