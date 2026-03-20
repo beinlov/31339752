@@ -1014,6 +1014,90 @@ async def get_country_botnet(country: str):
             conn.close()
 
 
+@app.get("/api/export-database")
+async def export_database(botnet_type: str):
+    """
+    Export botnet_nodes and botnet_communications tables as CSV files in a ZIP archive
+    """
+    import io
+    import csv
+    import zipfile
+    from fastapi.responses import StreamingResponse
+    
+    if not botnet_type or botnet_type not in ALLOWED_BOTNET_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid botnet type: {botnet_type}")
+    
+    conn = None
+    cursor = None
+    
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        # Create in-memory ZIP file
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Export botnet_nodes table
+            nodes_table = f"botnet_nodes_{botnet_type}"
+            cursor.execute(f"SELECT * FROM {nodes_table}")
+            nodes_data = cursor.fetchall()
+            
+            if nodes_data:
+                # Create CSV for nodes
+                nodes_csv = io.StringIO()
+                writer = csv.DictWriter(nodes_csv, fieldnames=nodes_data[0].keys())
+                writer.writeheader()
+                writer.writerows(nodes_data)
+                
+                # Add to ZIP
+                zip_file.writestr(
+                    f"{nodes_table}.csv",
+                    nodes_csv.getvalue().encode('utf-8-sig')  # UTF-8 with BOM for Excel
+                )
+                logger.info(f"Exported {len(nodes_data)} records from {nodes_table}")
+            
+            # Export botnet_communications table
+            comm_table = f"botnet_communications_{botnet_type}"
+            cursor.execute(f"SELECT * FROM {comm_table}")
+            comm_data = cursor.fetchall()
+            
+            if comm_data:
+                # Create CSV for communications
+                comm_csv = io.StringIO()
+                writer = csv.DictWriter(comm_csv, fieldnames=comm_data[0].keys())
+                writer.writeheader()
+                writer.writerows(comm_data)
+                
+                # Add to ZIP
+                zip_file.writestr(
+                    f"{comm_table}.csv",
+                    comm_csv.getvalue().encode('utf-8-sig')
+                )
+                logger.info(f"Exported {len(comm_data)} records from {comm_table}")
+        
+        # Prepare response
+        zip_buffer.seek(0)
+        filename = f"{botnet_type}_database_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.getvalue()),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting database for {botnet_type}: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     import uvicorn
 

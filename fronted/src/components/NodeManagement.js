@@ -338,6 +338,43 @@ const PageButton = styled.button`
   }
 `;
 
+const ExportButton = styled.button`
+  padding: 6px 16px;
+  margin-right: 12px;
+  border: 1px solid rgba(46, 125, 50, 0.4);
+  background: linear-gradient(135deg, rgba(46, 125, 50, 0.15) 0%, rgba(27, 94, 32, 0.15) 100%);
+  color: #66bb6a;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    background: linear-gradient(135deg, rgba(46, 125, 50, 0.25) 0%, rgba(27, 94, 32, 0.25) 100%);
+    border-color: rgba(46, 125, 50, 0.6);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(46, 125, 50, 0.3);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: rgba(100, 100, 100, 0.2);
+    border-color: rgba(100, 100, 100, 0.2);
+    color: rgba(255, 255, 255, 0.3);
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+    box-shadow: none;
+  }
+`;
+
 const StatsContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -503,6 +540,57 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 通信记录弹窗相关状态
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [selectedIp, setSelectedIp] = useState(null);
+
+  // 导出状态
+  const [isExporting, setIsExporting] = useState(false);
+
+  // 导出数据库函数
+  const handleExportDatabase = async () => {
+    if (!networkType) {
+      alert('请先选择僵尸网络类型');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // 调用后端API导出数据
+      const response = await fetch(getApiUrl(`/api/export-database?botnet_type=${networkType}`), {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error('导出失败');
+      }
+
+      // 获取文件名
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${networkType}_database_export.zip`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // 下载文件
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      alert('数据导出成功！');
+    } catch (error) {
+      console.error('导出失败:', error);
+      alert('导出失败: ' + error.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // 当从 props 接收到新的 networkType 时更新本地状态
   useEffect(() => {
@@ -1044,6 +1132,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         </TableContainer>
 
         <Pagination>
+          <ExportButton onClick={handleExportDatabase} disabled={isExporting || !networkType}>
+            <span style={{ fontSize: '14px' }}>📥</span>
+            {isExporting ? '导出中...' : '导出数据库'}
+          </ExportButton>
           <PageButton
             onClick={() => setCurrentPage(1)}
             disabled={currentPage === 1 || isLoading}
