@@ -181,6 +181,10 @@ const DataDisplay = ({ botnetData, displayMode, dispatch }) => {
       type: 'mapState/setDisplayMode',
       payload: mode
     });
+    // 切换显示模式时重新获取行业分布数据
+    dispatch({
+      type: 'mapState/fetchIndustryData'
+    });
   };
 
   // 根据显示模式获取相应的数据

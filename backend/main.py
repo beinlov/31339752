@@ -688,6 +688,8 @@ async def get_active_botnet_communications(botnet_type: str = 'asruex'):
                     DATE_FORMAT(communication_time, '%Y-%m-%d %H:%i:%s') as time,
                     ip,
                     COALESCE(country, '未知') as country,
+                    COALESCE(province, '') as province,
+                    COALESCE(city, '') as city,
                     status,
                     unit,
                     industry
@@ -703,6 +705,10 @@ async def get_active_botnet_communications(botnet_type: str = 'asruex'):
             logger.info(f"[ACTIVE-BOTNET-COMM] Returned {len(results)} records")
             if results:
                 logger.info(f"[ACTIVE-BOTNET-COMM] Keys: {list(results[0].keys())}")
+                logger.info(f"[ACTIVE-BOTNET-COMM] First record: {results[0]}")
+                # 特别检查province和city
+                logger.info(f"[ACTIVE-BOTNET-COMM] First record province: '{results[0].get('province')}'")
+                logger.info(f"[ACTIVE-BOTNET-COMM] First record city: '{results[0].get('city')}'")
             
             return results
         except Exception as e:

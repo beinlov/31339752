@@ -12,7 +12,7 @@ export const LeftPage = styled.div`
 
 export const LeftTopBox = styled.div`
   width: 100%;
-  height: 55%;  // 改为百分比
+  height: 50%;  // 减小上部高度
   padding-bottom: 0.25rem;
   display: flex;
   flex-direction: column;
@@ -74,7 +74,7 @@ export const LeftTopBox = styled.div`
 
 export const LeftBottomBox = styled.div`
   width: 100%;
-  height: 40%;  // 改为百分比
+  height: 45%;  // 增加底部高度以显示更多行业信息
   display: flex;
   flex-direction: column;
   

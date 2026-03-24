@@ -301,7 +301,7 @@ class Map extends PureComponent {
             background: 'rgba(0,0,0,0.3)',
             padding: '8px',
             borderRadius: '4px',
-            display: 'flex',
+            display: 'none',
             alignItems: 'center',
             color: '#fff',
             transition: 'all 0.3s ease',

@@ -7,7 +7,7 @@ export const RightPageStyle = styled.div`
 
 export const RightTopBox = styled.div`
   position: relative;
-  height: 34%;
+  height: 37%;
   width: 100%;
   margin-bottom: 1%;
   top:0%;
@@ -58,7 +58,7 @@ export const RightCenterBox = styled.div`
 
 export const RightBottomBox = styled.div`
   position: relative;
-  height: 58.5%;
+  height: 55%;
   width: 100%;
   margin-top: 0.06rem;
   // top: 0.1%;
@@ -74,7 +74,7 @@ export const RightBottomBox = styled.div`
       
       .diffusion-trend-box {
         width: 100%;
-        height: calc(100% - 0.5rem);
+        height: calc(100% - 1.2rem);
         margin-top: 0.1rem;
       }
     }

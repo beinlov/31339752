@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     asn VARCHAR(50) COMMENT 'AS号',
     event_type VARCHAR(50) COMMENT '事件类型',
     status VARCHAR(50) DEFAULT 'active' COMMENT '通信状态',
+    unit VARCHAR(255) COMMENT '所属单位',
+    industry VARCHAR(100) COMMENT '所属行业',
     is_china BOOLEAN DEFAULT FALSE COMMENT '是否为中国节点',
     UNIQUE KEY idx_unique_communication (ip, communication_time) COMMENT '唯一约束：防止重复数据',
     INDEX idx_node_id (node_id),

@@ -43,7 +43,8 @@ export default {
     botnetDistribution: [], // Store botnet distribution data
     worldData: null,  // Store world map data
     cityData: null,  // Add city data state
-    currentProvince: null  // Add current province state
+    currentProvince: null,  // Add current province state
+    industryData: null  // Add industry distribution data
   },
 
   reducers: {
@@ -94,6 +95,12 @@ export default {
       return {
         ...state,
         currentProvince: payload
+      };
+    },
+    updateIndustryData(state, { payload }) {
+      return {
+        ...state,
+        industryData: payload
       };
     }
   },
@@ -206,6 +213,26 @@ export default {
       }
     },
 
+    *fetchIndustryData({ payload }, { call, put, select }) {
+      try {
+        const state = yield select(state => state.mapState);
+        const networkToUse = payload || state.selectedNetwork || 'utg_q_008';
+        const displayMode = state.displayMode || 'active';
+
+        // Fetch industry distribution data with display mode
+        const response = yield call(request, getApiUrl(`/api/industry-distribution?botnet_type=${networkToUse}&display_mode=${displayMode}`));
+
+        if (response) {
+          yield put({
+            type: 'updateIndustryData',
+            payload: response
+          });
+        }
+      } catch (error) {
+        console.error('获取行业分布数据失败:', error);
+      }
+    },
+
     *changeMap({ payload }, { put }) {
       yield put({ type: 'setCurrentMap', payload });
       yield put({ type: 'setCurrentProvince', payload });
@@ -224,6 +251,7 @@ export default {
       yield put({ type: 'fetchProvinceData', payload });
       yield put({ type: 'fetchWorldData', payload });
       yield put({ type: 'fetchBotnetDistribution', payload });
+      yield put({ type: 'fetchIndustryData', payload });
 
       // 如果在省份视图中，也重新获取城市数据
       if (state.currentMap !== 'china') {
@@ -248,18 +276,20 @@ export default {
           dispatch({ type: 'fetchProvinceData' });
           dispatch({ type: 'fetchBotnetDistribution' });
           dispatch({ type: 'fetchWorldData' });
+          dispatch({ type: 'fetchIndustryData' });
 
           // Set up single timer for all data updates with 10 second interval
           dataTimer = setInterval(() => {
             dispatch({ type: 'fetchProvinceData' });
             dispatch({ type: 'fetchBotnetDistribution' });
             dispatch({ type: 'fetchWorldData' });
+            dispatch({ type: 'fetchIndustryData' });
             // Only fetch city data if we're in a province view
             const state = window.g_app._store.getState().mapState;
             if (state.currentMap !== 'china') {
               dispatch({ type: 'fetchCityData' });
             }
-          }, 10000); // 10秒轮询一次，避免过于频繁导致后端压力
+          }, 5000); // 5秒轮询一次，避免过于频繁导致后端压力
         }
       });
     }

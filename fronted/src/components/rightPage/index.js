@@ -7,6 +7,7 @@ import { connect } from '../../utils/ModernConnect';
 import earthRotateGif from '../../assets/images/earth-rotate.gif';
 import { Select } from 'antd';
 import styled from 'styled-components';
+import CleanupModal from '../CleanupModal';
 import {
   RightPageStyle,
   RightTopBox,
@@ -15,19 +16,58 @@ import {
 
 const { Option } = Select;
 
-const TimeRangeBar = styled.div`
-  width: 100%;
-  height: 0.55rem;
-  margin: 0.02rem 0 0.18rem 0;
+const CleanupButton = styled.button`
+  width: calc(100% - 2.5rem);
+  height: 0.6rem;
+  margin: 0;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0 0.25rem;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.6);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
+  font-size: 0.22rem;
+  font-weight: 600;
+  color: #f34236ff;
+  text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 212, 255, 0.15);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.5);
+    border-color: rgba(0, 212, 255, 0.9);
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: rgba(100, 100, 100, 0.2);
+    border-color: rgba(100, 100, 100, 0.3);
+    box-shadow: none;
+    color: rgba(255, 255, 255, 0.3);
+  }
+`;
+
+const TimeRangeBar = styled.div`
+  width: 100%;
+  height: 0.55rem;
+  margin: 0.2rem 0 0.18rem 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 0;
   box-sizing: border-box;
   position: relative;
 
   .ant-select {
-    width: 92%;
+    width: calc(100% - 0.5rem);
     height: 100%;
     z-index: 10;
 
@@ -196,12 +236,21 @@ class RightPage extends PureComponent {
   constructor(props) {
     super(props);
     this.state = {
-      timeRange: 'realtime'
+      timeRange: 'realtime',
+      showCleanupModal: false
     };
   }
 
   handleTimeRangeChange = (value) => {
     this.setState({ timeRange: value });
+  };
+
+  handleCleanup = () => {
+    const userRole = localStorage.getItem('role');
+    const canOperate = userRole === '管理员' || userRole === '操作员';
+    if (canOperate) {
+      this.setState({ showCleanupModal: true });
+    }
   };
 
   render() {
@@ -240,6 +289,14 @@ class RightPage extends PureComponent {
             </div>
           </div>
         </RightTopBox>
+
+        <CleanupButton 
+          onClick={this.handleCleanup}
+          disabled={localStorage.getItem('role') === '访客'}
+          title={localStorage.getItem('role') === '访客' ? '访客无操作权限' : '一键清除僵尸网络节点'}
+        >
+          一键清除
+        </CleanupButton>
 
         <TimeRangeBar>
           <Select
@@ -286,6 +343,15 @@ class RightPage extends PureComponent {
             </div>
           </BorderBox13>
         </RightBottomBox>
+
+        {/* 清除模态框 */}
+        {this.state.showCleanupModal && (
+          <CleanupModal 
+            onClose={() => this.setState({ showCleanupModal: false })} 
+            dispatch={this.props.dispatch}
+            selectedNetwork={this.props.selectedNetwork}
+          />
+        )}
       </RightPageStyle>
     );
   }

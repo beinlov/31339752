@@ -38,8 +38,8 @@ const useStyles = makeStyles((theme) => ({
   buttonText: {
     fontSize: '0.26rem',  // 放大字体
     fontWeight: 'bold',
-    color: '#FFFFFF',  // 纯白色文字
-    textShadow: '0 0 8px rgba(255, 255, 200, 0.8), 0 0 3px rgba(0, 0, 0, 0.5)',  // 浅黄色光晕+黑色描边
+    color: '#FFD700',  // 黄色文字
+    textShadow: '0 0 8px rgba(255, 215, 0, 0.8), 0 0 3px rgba(0, 0, 0, 0.5)',  // 黄色光晕+黑色描边
     margin: 0,
     padding: 0,
   }

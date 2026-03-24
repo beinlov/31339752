@@ -154,3 +154,86 @@ async def get_city_amounts(province_name: str, botnet_type: str = None):
             cursor.close()
         if 'connection' in locals():
             connection.close()
+
+
+@router.get("/industry-distribution")
+async def get_industry_distribution(botnet_type: str = 'utg_q_008', display_mode: str = 'active'):
+    """
+    获取行业分布数据 - 从botnet_nodes表按industry字段统计
+    display_mode: 'active' 或 'cleaned'
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor(DictCursor)
+        
+        # 验证僵尸网络类型
+        safe_botnet_type = (botnet_type or '').strip().lower()
+        if not safe_botnet_type:
+            raise HTTPException(status_code=400, detail="botnet_type is required")
+        
+        # 验证显示模式
+        safe_display_mode = display_mode.lower() if display_mode else 'active'
+        if safe_display_mode not in ['active', 'cleaned']:
+            safe_display_mode = 'active'
+        
+        table_name = f"botnet_nodes_{safe_botnet_type}"
+        
+        # 检查表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = %s
+        """, (DB_CONFIG['database'], table_name))
+        
+        if cursor.fetchone()['count'] == 0:
+            logger.warning(f"Table {table_name} does not exist")
+            return []
+        
+        # 按行业统计节点数量（根据显示模式过滤，只统计中国节点）
+        query = f"""
+            SELECT 
+                CASE 
+                    WHEN industry IS NULL OR industry = '' THEN '其他'
+                    ELSE industry
+                END as name,
+                COUNT(*) as value
+            FROM {table_name}
+            WHERE status = '{safe_display_mode}'
+                AND country = '中国'
+            GROUP BY name
+            ORDER BY value DESC
+        """
+        
+        cursor.execute(query)
+        results = cursor.fetchall()
+        
+        # 计算总数和百分比
+        total = sum(item['value'] for item in results)
+        
+        if total == 0:
+            return []
+        
+        # 添加百分比
+        formatted_results = []
+        for item in results:
+            percentage = round((item['value'] / total) * 100, 1)
+            formatted_results.append({
+                'name': item['name'] if item['name'] else '未知',
+                'value': item['value'],
+                'percentage': percentage
+            })
+        
+        logger.info(f"[INDUSTRY-DISTRIBUTION] Returned {len(formatted_results)} industries for {botnet_type} ({safe_display_mode}), total nodes: {total}")
+        
+        return formatted_results
+        
+    except Exception as e:
+        logger.error(f"Error fetching industry distribution for {botnet_type}: {e}")
+        return []
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

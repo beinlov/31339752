@@ -2,7 +2,6 @@ import React, { PureComponent } from 'react';
 import { CenterPage, MapContainer, CenterBottom } from './style';
 import Map from './charts/Map';
 import WorldMap from '../leftPage/charts/WorldMap';
-import Takeover from './charts/Takeover';
 import ActivityStream from './charts/ActivityStream';
 import NetworkTitle from './charts/NetworkTitle';
 import { Select } from 'antd';
@@ -446,14 +445,6 @@ class index extends PureComponent {
             isLeftPage={false}
             selectedNetwork={this.state.selectedNetwork}
           />
-          <div style={{
-            position: 'absolute',
-            left: '85%',
-            top: '70%',
-            zIndex: 999,
-          }}>
-            <Takeover />
-          </div>
         </MapContainer>
 
         <CenterBottom>

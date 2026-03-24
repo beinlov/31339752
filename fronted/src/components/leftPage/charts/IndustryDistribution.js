@@ -18,7 +18,12 @@ class IndustryDistribution extends PureComponent {
 
   componentDidUpdate(prevProps) {
     if (prevProps.industryData !== this.props.industryData ||
-        prevProps.selectedNetwork !== this.props.selectedNetwork) {
+        prevProps.selectedNetwork !== this.props.selectedNetwork ||
+        prevProps.displayMode !== this.props.displayMode) {
+      // 清空图表后再更新，避免残留
+      if (this.chart) {
+        this.chart.clear();
+      }
       this.updateChart();
     }
   }
@@ -42,18 +47,27 @@ class IndustryDistribution extends PureComponent {
 
     const { industryData } = this.props;
     
-    // 模拟行业分布数据，实际项目中应该从props或API获取
-    const defaultData = [
-      { name: '金融服务', value: 1245, percentage: 28.5 },
-      { name: '制造业', value: 987, percentage: 22.6 },
-      { name: '教育机构', value: 756, percentage: 17.3 },
-      { name: '医疗健康', value: 543, percentage: 12.4 },
-      { name: '政府机构', value: 432, percentage: 9.9 },
-      { name: '电信运营', value: 289, percentage: 6.6 },
-      { name: '其他', value: 123, percentage: 2.8 }
-    ];
-
-    const data = industryData || defaultData;
+    // 使用真实数据，如果没有数据则显示空图表
+    const data = industryData || [];
+    
+    // 如果没有数据，清除图表并显示提示
+    if (!data || data.length === 0) {
+      this.chart.setOption({
+        backgroundColor: 'transparent',
+        title: {
+          text: '暂无数据',
+          left: 'center',
+          top: 'center',
+          textStyle: {
+            color: '#00d4ff',
+            fontSize: 16
+          }
+        },
+        series: []  // 清除所有系列
+      }, { notMerge: true });  // 完全替换配置
+      return;
+    }
+    
     const total = data.reduce((sum, item) => sum + item.value, 0);
 
     const option = {
@@ -76,16 +90,17 @@ class IndustryDistribution extends PureComponent {
       },
       legend: {
         orient: 'vertical',
-        right: '3%',
-        top: 'center',
+        right: '0',
+        top: 'middle',
+        align: 'left',
         textStyle: {
           color: '#fff',
-          fontSize: 13,
+          fontSize: 14,
           fontWeight: 500
         },
         itemWidth: 12,
         itemHeight: 12,
-        itemGap: 12,
+        itemGap: 10,
         formatter: (name) => {
           const item = data.find(d => d.name === name);
           return item ? `${name}  ${item.percentage}%` : name;
@@ -95,8 +110,8 @@ class IndustryDistribution extends PureComponent {
         {
           name: '行业分布',
           type: 'pie',
-          radius: ['45%', '75%'],
-          center: ['40%', '50%'],
+          radius: ['40%', '65%'],
+          center: ['30%', '50%'],
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
@@ -143,8 +158,8 @@ class IndustryDistribution extends PureComponent {
         {
           name: '总计',
           type: 'pie',
-          radius: ['0%', '40%'],
-          center: ['40%', '50%'],
+          radius: ['0%', '35%'],
+          center: ['30%', '50%'],
           silent: true,
           label: {
             show: true,
@@ -278,7 +293,8 @@ class IndustryDistribution extends PureComponent {
 // 从全局状态中获取行业数据
 const mapStateToProps = state => ({
   selectedNetwork: state.mapState.selectedNetwork || 'utg_q_008',
-  industryData: state.mapState.industryData
+  industryData: state.mapState.industryData,
+  displayMode: state.mapState.displayMode || 'active'
 });
 
 export default connect(mapStateToProps)(IndustryDistribution);

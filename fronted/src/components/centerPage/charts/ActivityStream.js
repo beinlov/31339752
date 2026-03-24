@@ -17,7 +17,7 @@ class UserSituation extends PureComponent {
         evenRowBGC: 'rgba(0, 21, 41, 0.3)',
         index: false,
         columnWidth: [],
-        align: ['center', 'center', 'center', 'center', 'center', 'center'],
+        align: ['center', 'center', 'center', 'center', 'center'],
         rowNum: 4,
         headerHeight: 60,
         rowHeight: 70,
@@ -69,11 +69,11 @@ class UserSituation extends PureComponent {
   updateColumnWidth = () => {
     if (this.containerRef.current) {
       const width = this.containerRef.current.clientWidth;
-      const colWidth = Math.floor(width / 6);
+      const colWidth = Math.floor(width / 5);
       this.setState(prevState => ({
         config: {
           ...prevState.config,
-          columnWidth: [colWidth, colWidth, colWidth, colWidth, colWidth, colWidth]
+          columnWidth: [colWidth, colWidth, colWidth, colWidth, colWidth]
         }
       }));
     }
@@ -89,6 +89,15 @@ class UserSituation extends PureComponent {
         ? response
         : (response && Array.isArray(response.data) ? response.data : []);
 
+      // DEBUG: 打印接收到的数据
+      console.log('[ActivityStream] Received rows:', rows.length);
+      if (rows.length > 0) {
+        console.log('[ActivityStream] First row:', rows[0]);
+        console.log('[ActivityStream] First row keys:', Object.keys(rows[0]));
+        console.log('[ActivityStream] province:', rows[0].province);
+        console.log('[ActivityStream] city:', rows[0].city);
+      }
+
       const formattedData = rows.map(event => {
         // 根据 status 显示节点状态
         let statusText = '未知';
@@ -101,13 +110,32 @@ class UserSituation extends PureComponent {
           statusColor = '#FFA500';
         }
         
+        // 构建地区信息：country + province + city
+        const locationParts = [];
+        if (event.country) locationParts.push(event.country);
+        if (event.province) locationParts.push(event.province);
+        if (event.city) locationParts.push(event.city);
+        const location = locationParts.join(' ') || '-';
+        
+        // DEBUG: 打印地区信息构建过程
+        if (rows.indexOf(event) === 0) {  // 只打印第一条
+          console.log('[ActivityStream] Building location for first row:');
+          console.log('  event.country:', event.country);
+          console.log('  event.province:', event.province);
+          console.log('  event.city:', event.city);
+          console.log('  locationParts:', locationParts);
+          console.log('  location:', location);
+        }
+        
+        // 单位逻辑：如果有 unit 数据就显示，否则显示地区信息
+        const unit = event.unit || location;
+        
         return [
           `<span style="color: #00EAFF; font-weight: bold;">${event.time}</span>`,
           `<span style="color: #ffffff; font-weight: bold;">${event.ip}</span>`,
-          `<span style="color: #00EAFF; font-weight: bold;">${event.country}</span>`,
+          `<span style="color: #00EAFF; font-weight: bold;">${location}</span>`,
           `<span style="color: ${statusColor}; font-weight: bold;">${statusText}</span>`,
-          `<span style="color: #FFD700; font-weight: bold;">${event.unit || '-'}</span>`,
-          `<span style="color: #FFD700; font-weight: bold;">${event.industry || '-'}</span>`
+          `<span style="color: #FFD700; font-weight: bold;">${unit}</span>`
         ];
       });
       
