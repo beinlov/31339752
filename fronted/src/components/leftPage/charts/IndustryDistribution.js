@@ -95,7 +95,7 @@ class IndustryDistribution extends PureComponent {
         align: 'left',
         textStyle: {
           color: '#fff',
-          fontSize: 14,
+          fontSize: 16,
           fontWeight: 500
         },
         itemWidth: 12,
