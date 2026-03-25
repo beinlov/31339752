@@ -191,18 +191,18 @@ async def get_industry_distribution(botnet_type: str = 'utg_q_008', display_mode
             logger.warning(f"Table {table_name} does not exist")
             return []
         
-        # 按行业统计节点数量（根据显示模式过滤，只统计中国节点）
+        # 按行业统计节点数量（根据显示模式过滤，只统计中国节点，排除"其他"）
         query = f"""
             SELECT 
-                CASE 
-                    WHEN industry IS NULL OR industry = '' THEN '其他'
-                    ELSE industry
-                END as name,
+                industry as name,
                 COUNT(*) as value
             FROM {table_name}
             WHERE status = '{safe_display_mode}'
                 AND country = '中国'
-            GROUP BY name
+                AND industry IS NOT NULL
+                AND industry != ''
+                AND industry != '其他'
+            GROUP BY industry
             ORDER BY value DESC
         """
         
