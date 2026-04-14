@@ -1,0 +1,56 @@
+{
+  "description": "中转服务器配置文件 - 示例模板",
+  "comment": "部署时复制为relay_config.json并修改实际值",
+  
+  "storage": {
+    "db_file": "./relay_cache.db",
+    "retention_days": 7
+  },
+  
+  "puller": {
+    "comment": "从C2服务器拉取数据的配置",
+    "c2_servers": [
+      {
+        "id": "c2-server-1",
+        "url": "http://10.8.0.1:8888",
+        "api_key": "your-c2-api-key-here",
+        "description": "C2服务器1 (通过OpenVPN连接)",
+        "enabled": true
+      }
+    ],
+    "batch_size": 1000,
+    "timeout": 30,
+    "use_two_phase_commit": true
+  },
+  
+  "pusher": {
+    "comment": "向平台服务器推送数据的配置",
+    "platform_url": "http://your-platform-server:8000",
+    "platform_api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+    "signature_secret": "CHANGE_ME_IN_PRODUCTION_use_strong_random_key_here",
+    "relay_id": "relay-001",
+    "batch_size": 1000,
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 2
+  },
+  
+  "intervals": {
+    "comment": "各种定时任务的间隔（秒）",
+    "pull": 10,
+    "push": 5,
+    "cleanup": 3600,
+    "retry": 300
+  },
+  
+  "ip_change": {
+    "comment": "动态IP切换配置",
+    "enabled": true,
+    "change_interval": 600,
+    "max_eips": 5,
+    "aws_region": "us-east-2",
+    "instance_id": "i-0edf3378b3cdc3d49",
+    "openvpn_config": "/etc/openvpn/client.conf",
+    "resume_delay": 30
+  }
+}

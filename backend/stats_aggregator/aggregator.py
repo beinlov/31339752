@@ -394,14 +394,15 @@ class StatsAggregator:
     def aggregate_all(self, max_retries=3):
         """聚合所有僵尸网络的统计数据（支持重试）"""
         logger.info("=" * 60)
-        logger.info("开始聚合统计数据（仅utg_q_008）")
+        logger.info("开始聚合统计数据（所有启用的僵尸网络）")
         logger.info("=" * 60)
         
         start_time = time.time()
         results = {}
         
-        # 只聚合utg_q_008以提高实时性
-        botnet_types_to_aggregate = ['utg_q_008']
+        # 聚合所有启用的僵尸网络类型
+        botnet_types_to_aggregate = get_enabled_botnet_types()
+        logger.info(f"将聚合以下僵尸网络: {', '.join(botnet_types_to_aggregate)}")
         
         for botnet_type in botnet_types_to_aggregate:
             retry_count = 0
@@ -432,7 +433,7 @@ class StatsAggregator:
         
         logger.info("=" * 60)
         logger.info(f"聚合完成！耗时: {elapsed:.2f}秒")
-        logger.info(f"成功: {success_count}/{len(botnet_types_to_aggregate)} (仅utg_q_008)")
+        logger.info(f"成功: {success_count}/{len(botnet_types_to_aggregate)} 个僵尸网络")
         logger.info(f"总计: 中国统计 {total_china} 条，全球统计 {total_global} 条")
         logger.info("=" * 60)
         

@@ -381,6 +381,54 @@ C2_ENDPOINTS = [
 # 是否启用远程拉取功能
 ENABLE_REMOTE_PULLING = len(C2_ENDPOINTS) > 0 and any(c.get('enabled') for c in C2_ENDPOINTS)
 
+# ============================================================
+# 数据传输模式配置（Data Transfer Mode Configuration）
+# ============================================================
+
+# 数据传输模式：'pull' 或 'push'
+# - 'pull': 本服务器主动从C2端拉取数据（传统模式）
+# - 'push': 本服务器被动接收中转服务器推送的数据（新模式）
+DATA_TRANSFER_MODE = os.environ.get('DATA_TRANSFER_MODE', 'pull')  # 默认使用pull模式
+
+# 推送模式配置（仅在 DATA_TRANSFER_MODE='push' 时生效）
+PUSH_MODE_CONFIG = {
+    # 是否启用推送模式
+    'enabled': DATA_TRANSFER_MODE == 'push',
+    
+    # HMAC签名验证配置（安全认证）
+    'use_signature': True,
+    'signature_secret': os.environ.get('PUSH_SIGNATURE_SECRET', 'CHANGE_ME_IN_PRODUCTION_use_strong_random_key_here'),
+    'signature_algorithm': 'sha256',  # 签名算法：sha256, sha512等
+    
+    # 时间戳防重放攻击配置
+    'timestamp_tolerance': 300,  # 时间戳容忍度（秒），5分钟
+    'enable_nonce_cache': True,  # 是否启用nonce缓存防重放
+    'nonce_cache_size': 10000,   # nonce缓存大小
+    'nonce_cache_ttl': 600,      # nonce缓存过期时间（秒），10分钟
+    
+    # API密钥认证（作为HMAC签名的补充）
+    'api_key': os.environ.get('PUSH_API_KEY', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
+    
+    # IP白名单（可选，由于中转服务器使用动态IP，建议留空或禁用）
+    # 留空表示不限制IP，仅依赖HMAC签名和API密钥
+    'allowed_ips': [],  # 例如: ['192.168.1.100', '10.0.0.50']
+    
+    # 数据接收限制
+    'max_batch_size': 5000,  # 单次推送最大数据条数
+    'max_request_size_mb': 50,  # 最大请求体大小（MB）
+    
+    # 请求超时配置
+    'timeout': 30,  # 处理超时（秒）
+    
+    # 推送确认配置
+    'require_confirmation': True,  # 是否要求确认（返回处理结果）
+    'return_detailed_stats': True,  # 是否返回详细处理统计
+}
+
+# 自动调整拉取模式启用状态
+if DATA_TRANSFER_MODE == 'push':
+    ENABLE_REMOTE_PULLING = False  # 推送模式下禁用主动拉取
+
 # 安全配置
 SECURITY_CONFIG = {
     # 是否强制HTTPS（生产环境必须True）

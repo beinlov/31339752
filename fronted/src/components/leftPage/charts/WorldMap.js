@@ -62,9 +62,9 @@ class WorldMap extends PureComponent {
     // 使用防抖，避免频繁更新
     this.updateTimer = setTimeout(() => {
       const { worldData, selectedNetwork, mapData, isLeftPage, displayMode } = this.props;
-      if (!worldData) return;
+      if (!worldData || !selectedNetwork) return;
 
-      const networkToUse = selectedNetwork || 'utg_q_008';
+      const networkToUse = selectedNetwork;
       const countryData = worldData[networkToUse] || [];
 
       const option = worldMapOptions({
@@ -137,7 +137,7 @@ class WorldMap extends PureComponent {
 
 // 从全局状态中获取选择的网络类型和世界数据
 const mapStateToProps = state => ({
-  selectedNetwork: state.mapState.selectedNetwork || 'utg_q_008',
+  selectedNetwork: state.mapState.selectedNetwork,
   worldData: state.mapState.worldData,
   displayMode: state.mapState.displayMode
 });

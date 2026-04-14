@@ -28,7 +28,10 @@ from router.takeover_stats_api import router as takeover_stats_router
 import logging
 import re
 from ip_location.ip_query import ip_query  # 导入IP查询模块
-from config import API_KEY, ALLOWED_UPLOAD_IPS, MAX_LOGS_PER_UPLOAD, ALLOWED_BOTNET_TYPES, DB_CONFIG
+from config import (
+    API_KEY, ALLOWED_UPLOAD_IPS, MAX_LOGS_PER_UPLOAD, 
+    ALLOWED_BOTNET_TYPES, DB_CONFIG, DATA_TRANSFER_MODE, PUSH_MODE_CONFIG
+)
 
 # 设置日志
 logging.basicConfig(
@@ -118,6 +121,12 @@ app.include_router(cleanup_router, prefix="/api", tags=["cleanup"])
 
 # 包含接管节点统计API路由
 app.include_router(takeover_stats_router, tags=["takeover-statistics"])
+
+# 包含数据推送接收路由（仅在push模式下启用）
+if DATA_TRANSFER_MODE == 'push' and PUSH_MODE_CONFIG.get('enabled', False):
+    from api_push_receiver import router as push_receiver_router
+    app.include_router(push_receiver_router, tags=["data-push"])
+    logger.info("✅ 数据推送接收模式已启用 (DATA_TRANSFER_MODE=push)")
 
 # 数据模型
 class ProvinceAmount(BaseModel):

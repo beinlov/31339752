@@ -177,10 +177,9 @@ class Map extends PureComponent {
   // 获取当前选择网络的省份数据
   getProvinceDataForCurrentNetwork = () => {
     const { provinceData, selectedNetwork } = this.props;
-    if (!provinceData) return null;
+    if (!provinceData || !selectedNetwork) return null;
 
-    const networkToUse = selectedNetwork || 'utg_q_008';
-    return provinceData[networkToUse];
+    return provinceData[selectedNetwork];
   }
 
   handleMapClick = async (params) => {

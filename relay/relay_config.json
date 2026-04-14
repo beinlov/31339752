@@ -1,0 +1,111 @@
+{
+  "__comment_1": "========================================",
+  "__comment_2": "中转服务器配置文件（已与C2端和平台端对齐）",
+  "__comment_3": "⚠️ 请修改所有标记为 [TODO] 的配置项",
+  "__comment_4": "========================================",
+  
+  "storage": {
+    "__comment": "本地SQLite缓存配置",
+    "db_file": "./relay_cache.db",
+    "retention_days": 7
+  },
+  
+  "puller": {
+    "__comment_title": "========== 从C2端拉取数据配置 ==========",
+    "__comment_servers": "支持多个C2服务器，至少配置一个",
+    
+    "c2_servers": [
+      {
+        "id": "c2-server-1",
+        
+        "__comment_url": "[TODO] C2服务器URL（通过OpenVPN内网）",
+        "__example_url": "http://10.8.0.1:8888 (OpenVPN内网IP)",
+        "url": "http://10.8.0.1:8888",
+        
+        "__comment_api_key": "⚠️ 必须与C2端配置一致！",
+        "__sync_with": "pull_mode/config.production.json -> http_server.api_key",
+        "__current_value": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+        "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+        
+        "description": "C2服务器1 (通过OpenVPN连接)",
+        "enabled": true
+      }
+    ],
+    
+    "batch_size": 1000,
+    "timeout": 30,
+    
+    "__comment_two_phase": "启用两阶段提交（强烈推荐）",
+    "use_two_phase_commit": true
+  },
+  
+  "pusher": {
+    "__comment_title": "========== 向平台服务器推送数据配置 ==========",
+    
+    "__comment_platform_url": "[TODO] 平台服务器URL（公网IP或域名）",
+    "__example_platform_url": "http://your-platform-server.com:8000 或 http://公网IP:8000",
+    "platform_url": "http://YOUR_PLATFORM_IP_OR_DOMAIN:8000",
+    
+    "__comment_platform_api_key": "⚠️ 必须与平台端配置一致！",
+    "__sync_with_1": "backend/config.py -> PUSH_MODE_CONFIG['api_key']",
+    "__current_value_1": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+    "platform_api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
+    
+    "__comment_signature_secret": "⚠️ 必须与平台端配置一致！",
+    "__sync_with_2": "backend/config.py -> PUSH_MODE_CONFIG['signature_secret']",
+    "__security_notice": "生产环境必须修改为强随机密钥！",
+    "__generate_command": "openssl rand -hex 32",
+    "signature_secret": "CHANGE_ME_IN_PRODUCTION_use_strong_random_key_here",
+    
+    "__comment_relay_id": "中转服务器唯一标识",
+    "relay_id": "relay-001",
+    
+    "batch_size": 1000,
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 2
+  },
+  
+  "intervals": {
+    "__comment": "定时任务间隔配置（秒）",
+    "__comment_pull": "从C2拉取数据的间隔",
+    "pull": 10,
+    
+    "__comment_push": "向平台推送数据的间隔",
+    "push": 5,
+    
+    "__comment_cleanup": "清理过期数据的间隔",
+    "cleanup": 3600,
+    
+    "__comment_retry": "重试失败数据的间隔",
+    "retry": 300
+  },
+  
+  "ip_change": {
+    "__comment_title": "========== 动态IP切换配置 ==========",
+    "__comment_notice": "使用AWS EIP实现IP动态切换",
+    
+    "enabled": true,
+    
+    "__comment_change_interval": "IP切换间隔（秒），默认10分钟",
+    "change_interval": 600,
+    
+    "__comment_max_eips": "EIP池最大数量",
+    "max_eips": 5,
+    
+    "__comment_aws_region": "[TODO] AWS区域",
+    "__example_aws_region": "us-east-2, ap-southeast-1等",
+    "aws_region": "us-east-2",
+    
+    "__comment_instance_id": "[TODO] AWS实例ID",
+    "__example_instance_id": "i-0edf3378b3cdc3d49",
+    "__get_command": "aws ec2 describe-instances --region us-east-2",
+    "instance_id": "i-YOUR_INSTANCE_ID_HERE",
+    
+    "__comment_openvpn_config": "OpenVPN配置文件路径",
+    "openvpn_config": "/etc/openvpn/client.conf",
+    
+    "__comment_resume_delay": "IP切换后恢复服务延迟（秒）",
+    "resume_delay": 30
+  }
+}

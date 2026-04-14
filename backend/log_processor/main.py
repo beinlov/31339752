@@ -14,12 +14,17 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import (
-    BOTNET_CONFIG, DB_CONFIG, DB_BATCH_SIZE, 
-    DB_COMMIT_INTERVAL, POSITION_STATE_FILE,
-    LOG_PROCESSOR_LOG_FILE, C2_ENDPOINTS, ENABLE_REMOTE_PULLING,
-    QUEUE_MODE_ENABLED,  # 队列模式开关
-    INTERNAL_WORKER_CONFIG  # 内置Worker配置
-)
+    BOTNET_CONFIG, 
+    MONITOR_INTERVAL, 
+    POSITION_STATE_FILE, 
+    DB_CONFIG,
+    ENABLE_REMOTE_PULLING,
+    C2_ENDPOINTS,
+    QUEUE_MODE_ENABLED,
+    INTERNAL_WORKER_CONFIG,
+    DATA_TRANSFER_MODE,
+    PUSH_MODE_CONFIG
+)  
 from log_processor.parser import LogParser
 from log_processor.enricher import IPEnricher
 from log_processor.db_writer import BotnetDBWriter
@@ -134,18 +139,29 @@ class BotnetLogProcessor:
                 
         logger.info(f"Initialized processors for {len(self.parsers)} botnet types")
         
-        # 初始化远程拉取器（如果启用）
-        logger.info(f"检查远程拉取配置: ENABLE_REMOTE_PULLING={ENABLE_REMOTE_PULLING}")
-        if ENABLE_REMOTE_PULLING:
-            try:
-                logger.info(f"准备初始化远程拉取器，C2端点数量: {len(C2_ENDPOINTS)}")
-                self.remote_puller = RemotePuller(C2_ENDPOINTS, self)
-                logger.info(f"[OK] 远程拉取器已初始化（{len([c for c in C2_ENDPOINTS if c.get('enabled')])} 个C2端点）")
-            except Exception as e:
-                logger.error(f"远程拉取器初始化失败: {e}", exc_info=True)
-                self.remote_puller = None
+        # 初始化远程拉取器（仅在pull模式下启用）
+        logger.info(f"数据传输模式: {DATA_TRANSFER_MODE}")
+        
+        if DATA_TRANSFER_MODE == 'push':
+            # 推送模式：被动接收数据，不主动拉取
+            logger.info("✅ 推送模式已启用 - 本服务器将被动接收中转服务器推送的数据")
+            self.remote_puller = None
+        elif DATA_TRANSFER_MODE == 'pull':
+            # 拉取模式：主动从C2端拉取数据
+            logger.info(f"检查远程拉取配置: ENABLE_REMOTE_PULLING={ENABLE_REMOTE_PULLING}")
+            if ENABLE_REMOTE_PULLING:
+                try:
+                    logger.info(f"准备初始化远程拉取器，C2端点数量: {len(C2_ENDPOINTS)}")
+                    self.remote_puller = RemotePuller(C2_ENDPOINTS, self)
+                    logger.info(f"✅ 远程拉取器已初始化（{len([c for c in C2_ENDPOINTS if c.get('enabled')])} 个C2端点）")
+                except Exception as e:
+                    logger.error(f"远程拉取器初始化失败: {e}", exc_info=True)
+                    self.remote_puller = None
+            else:
+                logger.warning("⚠️  远程拉取功能未启用")
         else:
-            logger.warning("⚠️  远程拉取功能未启用")
+            logger.error(f"❌ 未知的数据传输模式: {DATA_TRANSFER_MODE}，应为 'pull' 或 'push'")
+            self.remote_puller = None
 
     async def process_api_data(self, botnet_type: str, ip_data: List[Dict]):
         """

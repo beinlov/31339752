@@ -229,7 +229,7 @@ const GlobalSelectStyle = createGlobalStyle`
 
 class index extends PureComponent {
   state = {
-    selectedNetwork: 'utg_q_008',  // 默认选择
+    selectedNetwork: null,  // 动态选择第一个可用的僵尸网络
     rankings: { global: [], china: [] },
     activeRanking: null,
     dropdownOpen: false,
@@ -250,22 +250,24 @@ class index extends PureComponent {
       ]);
 
       if (globalRes.data.status === 'success' && chinaRes.data.status === 'success') {
-        // 自定义排序函数，确保utg_q_008排在第一位
-        const sortWithUtgFirst = (data) => {
-          const utgItem = data.find(item => item.name === 'utg_q_008');
-          const otherItems = data.filter(item => item.name !== 'utg_q_008');
-          return utgItem ? [utgItem, ...otherItems] : otherItems;
-        };
+        // 使用自然排序，不再特殊处理任何特定的僵尸网络
+        const globalData = globalRes.data.data || [];
+        const chinaData = chinaRes.data.data || [];
 
         this.setState({
           rankings: {
-            global: sortWithUtgFirst(globalRes.data.data || []),
-            china: sortWithUtgFirst(chinaRes.data.data || []),
+            global: globalData,
+            china: chinaData,
           },
           loading: false
         });
+        
+        // 选择第一个可用的僵尸网络（优先使用有数据的）
+        const firstNetwork = globalData.length > 0 ? globalData[0].name : (chinaData.length > 0 ? chinaData[0].name : null);
+        if (firstNetwork) {
+          this.handleNetworkChange(firstNetwork);
+        }
       }
-      this.handleNetworkChange("utg_q_008")
     } catch (error) {
       console.error('Error fetching botnet rankings:', error);
       this.setState({ loading: false });
@@ -320,7 +322,6 @@ class index extends PureComponent {
             padding: '10px',
             borderRadius: '4px',
             minWidth: '240px',
-            display: 'none'  // ← 删除此行可恢复显示
           }}
         >
           <ModuleTitle className='module-title' style={{ marginBottom: '5px' }}>

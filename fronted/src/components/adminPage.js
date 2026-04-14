@@ -348,8 +348,8 @@ const TutorialButton = styled.button`
 
 const AdminPage = ({ history }) => {
   const [activeMenu, setActiveMenu] = useState('clear');
-  const [selectedNetwork, setSelectedNetwork] = useState('utg_q_008');
-  const [currentContent, setCurrentContent] = useState(<NodeManagement networkType="utg_q_008" />);
+  const [selectedNetwork, setSelectedNetwork] = useState(null);
+  const [currentContent, setCurrentContent] = useState(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [networkTypes, setNetworkTypes] = useState([]);
@@ -381,14 +381,18 @@ const AdminPage = ({ history }) => {
     try {
       const response = await axios.get(getApiUrl('/api/botnet-types'));
       if (response.data.status === 'success') {
-        setNetworkTypes(response.data.data);
+        const types = response.data.data;
+        setNetworkTypes(types);
+        // 选择第一个可用的僵尸网络类型
+        if (types.length > 0) {
+          handleNetChange(types[0].id);
+        }
       }
     } catch (error) {
       console.error('Error fetching network types:', error);
     } finally {
       setLoading(false);
     }
-    handleNetChange("ramnit")
   };
 
   const getMenuGroups = (networkId) => {
@@ -568,9 +572,6 @@ const AdminPage = ({ history }) => {
           listHeight={240} // 显示约6个选项（每项约40px）
           dropdownStyle={{ maxHeight: 240, overflowY: 'auto' }}
         >
-          <Option key="placeholder" value="">
-            请选择僵尸网络
-          </Option>
           {networkTypes.map(network => (
             <Option key={network.name} value={network.name}>
               {network.display_name}

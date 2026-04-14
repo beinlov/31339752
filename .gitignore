@@ -8,21 +8,14 @@ __pycache__/
 
 # runtime logs
 backend/logs/
-botnet_navicat.sql
-backend/ip_location/IP_city_single_WGS84.awdb
 
 # Large / binary data
 *.awdb
+backend/ip_location/IP_city_single_WGS84.awdb
 
 # SQL dumps (prefer patterns over fixed names)
 *.sql
-botnet.sql
-data_only.sql
-data_optimized.sql
-data_new_optimized.sql
-schema_only.sql
-schema_clean.sql
-schema_new.sql
+botnet_navicat.sql
 
 # Backups
 backup_*.sql
