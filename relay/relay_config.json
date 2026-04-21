@@ -27,7 +27,7 @@
         "__current_value": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
         "api_key": "KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4",
         
-        "description": "C2服务器1 (通过OpenVPN连接)",
+        "description": "mozi",
         "enabled": true
       }
     ],
@@ -62,8 +62,14 @@
     
     "batch_size": 1000,
     "timeout": 30,
+    
+    "__comment_max_retries": "单次推送的立即重试次数（指数退避）",
     "max_retries": 3,
-    "retry_delay": 2
+    "retry_delay": 2,
+    
+    "__comment_storage_max_retries": "失败数据的最大重试轮数（每轮间隔5分钟）",
+    "__example": "20轮 = 100分钟，足够网络恢复",
+    "storage_max_retries": 20
   },
   
   "intervals": {

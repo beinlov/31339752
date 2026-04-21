@@ -22,7 +22,13 @@ STOPPED_COUNT=0
 
 # 停止前端
 echo -e "${YELLOW}[Stopping]${NC} 前端界面..."
-pkill -f "node.*vite" && STOPPED_COUNT=$((STOPPED_COUNT + 1))
+if [ -f "$SCRIPT_DIR/backend/logs/frontend.pid" ]; then
+    PID=$(cat "$SCRIPT_DIR/backend/logs/frontend.pid")
+    kill $PID 2>/dev/null && STOPPED_COUNT=$((STOPPED_COUNT + 1))
+    rm -f "$SCRIPT_DIR/backend/logs/frontend.pid"
+else
+    pkill -f "node.*vite" && STOPPED_COUNT=$((STOPPED_COUNT + 1))
+fi
 
 # 停止后端API
 echo -e "${YELLOW}[Stopping]${NC} 平台后端API..."

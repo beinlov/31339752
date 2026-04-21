@@ -156,11 +156,26 @@ if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 16 ]; then
     echo -e "${RED}[ERROR]${NC} Node.js版本不足 (需要 >= 16)"
     echo "前端无法启动，但后端服务已启动"
 else
-    echo -e "${YELLOW}[Starting]${NC} 前端将在前台运行..."
-    echo -e "${YELLOW}[INFO]${NC} 如需后台运行，请按Ctrl+C后执行:"
-    echo "    cd fronted && nohup npm run dev > ../backend/logs/frontend.log 2>&1 &"
-    echo
-    sleep 2
+    # 检查端口是否被占用
+    if lsof -i:9000 > /dev/null 2>&1; then
+        echo -e "${YELLOW}[WARNING]${NC} 端口9000已被占用，尝试停止旧进程..."
+        pkill -f "vite"
+        sleep 2
+    fi
+    
+    echo -e "${YELLOW}[Starting]${NC} 启动前端界面（后台运行）..."
+    mkdir -p "$SCRIPT_DIR/backend/logs"
+    nohup npm run dev > "$SCRIPT_DIR/backend/logs/frontend.log" 2>&1 &
+    FRONTEND_PID=$!
+    echo $FRONTEND_PID > "$SCRIPT_DIR/backend/logs/frontend.pid"
+    sleep 3
+    
+    # 验证前端是否启动
+    if curl -s http://localhost:9000 > /dev/null 2>&1; then
+        echo -e "${GREEN}[OK]${NC} 前端界面已启动 (PID: $FRONTEND_PID, http://localhost:9000)"
+    else
+        echo -e "${RED}[ERROR]${NC} 前端启动失败，请检查日志: backend/logs/frontend.log"
+    fi
 fi
 
 # ============================================================
@@ -178,10 +193,10 @@ echo "  [3] 平台后端API      - PID: $API_PID (http://localhost:8000)"
 echo "  [4] 日志处理器       - PID: $LOG_PROCESSOR_PID"
 echo "  [5] 统计聚合器       - PID: $AGGREGATOR_PID"
 echo "  [6] Timeset数据确保器 - PID: $TIMESET_PID"
-if [ ! -z "$NODE_VERSION" ] && [ "$NODE_VERSION" -ge 16 ]; then
-    echo "  [7] 前端界面         - 准备启动 (http://localhost:9000)"
+if [ ! -z "$NODE_VERSION" ] && [ "$NODE_VERSION" -ge 16 ] && [ ! -z "$FRONTEND_PID" ]; then
+    echo "  [7] 前端界面         - PID: $FRONTEND_PID (http://localhost:9000)"
 else
-    echo "  [7] 前端界面         - 未启动 (Node.js版本不足)"
+    echo "  [7] 前端界面         - 未启动"
 fi
 echo
 echo "访问地址:"
@@ -194,17 +209,12 @@ echo "  - 后端API:    backend/logs/api_backend.log"
 echo "  - 日志处理器: backend/logs/log_processor.log"
 echo "  - 统计聚合器: backend/logs/aggregator.log"
 echo "  - Timeset:    backend/logs/timeset_ensurer.log"
+echo "  - 前端界面:   backend/logs/frontend.log"
 echo
 echo "停止服务:"
 echo "  - 运行: ./stop_all_services.sh"
 echo
 echo "============================================================"
 echo
-
-# 如果Node.js可用，启动前端（前台运行）
-if [ ! -z "$NODE_VERSION" ] && [ "$NODE_VERSION" -ge 16 ]; then
-    echo -e "${YELLOW}[启动前端...]${NC}"
-    echo "按 Ctrl+C 可停止前端（其他服务将继续运行）"
-    echo
-    npm run dev
-fi
+echo -e "${GREEN}所有服务已在后台运行，可以安全关闭终端${NC}"
+echo

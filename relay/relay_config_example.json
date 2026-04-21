@@ -32,7 +32,8 @@
     "batch_size": 1000,
     "timeout": 30,
     "max_retries": 3,
-    "retry_delay": 2
+    "retry_delay": 2,
+    "storage_max_retries": 20
   },
   
   "intervals": {

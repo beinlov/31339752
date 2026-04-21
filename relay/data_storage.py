@@ -187,23 +187,51 @@ class DataStorage:
                 logger.info(f"标记失败: {updated} 条")
                 return updated
     
-    def retry_failed_data(self, max_retries: int = 3) -> int:
-        """重试失败的数据"""
+    def retry_failed_data(self, max_retries: int = 20) -> int:
+        """
+        重试失败的数据
+        
+        Args:
+            max_retries: 最大重试轮数（默认20轮 = 100分钟，间隔5分钟）
+            
+        Returns:
+            重试的数据条数
+        """
         with self.lock:
             with sqlite3.connect(self.db_file) as conn:
                 cursor = conn.cursor()
                 
+                # ✅ 修复：使用 <= 而不是 <，允许更多重试轮数
                 cursor.execute("""
                     UPDATE data_records 
                     SET status = 'pending'
-                    WHERE status = 'failed' AND retry_count < ?
+                    WHERE status = 'failed' AND retry_count <= ?
                 """, (max_retries,))
                 
                 updated = cursor.rowcount
+                
+                # 统计即将被放弃的数据（告警）
+                cursor.execute("""
+                    SELECT COUNT(*), MAX(retry_count) FROM data_records
+                    WHERE status = 'failed' AND retry_count > ?
+                """, (max_retries,))
+                
+                row = cursor.fetchone()
+                abandoned_count = row[0] if row else 0
+                max_retry = row[1] if row and row[1] else 0
+                
+                if abandoned_count > 0:
+                    logger.warning("=" * 70)
+                    logger.warning(f"⚠️ 数据推送告警")
+                    logger.warning(f"   {abandoned_count} 条数据已超过最大重试次数({max_retries}轮)")
+                    logger.warning(f"   最大重试次数: {max_retry} 轮")
+                    logger.warning(f"   这些数据将不再自动重试，请检查平台连接状态")
+                    logger.warning("=" * 70)
+                
                 conn.commit()
                 
                 if updated > 0:
-                    logger.info(f"重试失败数据: {updated} 条")
+                    logger.info(f"重试失败数据: {updated} 条 (retry_count <= {max_retries})")
                 
                 return updated
     

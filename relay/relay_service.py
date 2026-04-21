@@ -221,7 +221,7 @@ class RelayService:
         if (now - self.last_retry).total_seconds() >= self.retry_interval:
             logger.info("重试失败数据...")
             retried = self.storage.retry_failed_data(
-                max_retries=self.config.get('pusher', {}).get('max_retries', 3)
+                max_retries=self.config.get('pusher', {}).get('storage_max_retries', 20)
             )
             self.last_retry = now
     
