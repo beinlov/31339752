@@ -64,13 +64,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
       <Box className={classes.buttonContainer}>
         <Box 
           className={classes.actionButton}
-          onClick={canOperate ? handleClean : undefined}
+          onClick={undefined}
           style={{ 
-            opacity: canOperate ? 1 : 0.5, 
-            cursor: canOperate ? 'pointer' : 'not-allowed',
-            pointerEvents: canOperate ? 'auto' : 'none'
+            opacity: 0.5, 
+            cursor: 'not-allowed',
+            pointerEvents: 'none'
           }}
-          title={isGuest ? '访客无操作权限' : ''}
+          title='此按钮已被禁用'
         >
           <Typography className={classes.buttonText}>
             一键清除
