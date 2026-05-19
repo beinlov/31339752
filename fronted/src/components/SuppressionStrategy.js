@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+import { currentUserHasPermission, isCurrentUserReadOnly, USER_ROLES } from '../utils/permissions';
 
 const Container = styled.div`
   width: 100%;
@@ -117,6 +118,32 @@ const Input = styled.input`
 
   &::placeholder {
     color: rgba(255, 255, 255, 0.4);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #667eea;
+    background: rgba(26, 115, 232, 0.2);
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+  }
+`;
+
+const Select = styled.select`
+  width: 100%;
+  min-width: 150px;
+  padding: 12px 15px;
+  border: 2px solid rgba(100, 181, 246, 0.3);
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(26, 115, 232, 0.1);
+  color: #fff;
+  transition: all 0.3s;
+  box-sizing: border-box;
+  cursor: pointer;
+
+  option {
+    background: #1a2838;
+    color: #fff;
   }
 
   &:focus {
@@ -389,9 +416,163 @@ const PageInfo = styled.span`
   margin: 0 10px;
 `;
 
+const FormGroup4 = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 15px;
+  margin-bottom: 20px;
+`;
+
+const FormGroup6 = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+`;
+
+const FormGroup7 = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+`;
+
+// 模态框样式
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  padding: 20px;
+`;
+
+const ModalContent = styled.div`
+  background: linear-gradient(135deg, #1a2838 0%, #0f1923 100%);
+  border-radius: 12px;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+`;
+
+const ModalHeader = styled.div`
+  padding: 20px 25px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px 12px 0 0;
+`;
+
+const ModalTitle = styled.h2`
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+`;
+
+const ModalCloseButton = styled.button`
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+  }
+`;
+
+const ModalBody = styled.div`
+  padding: 25px;
+  overflow-y: auto;
+  flex: 1;
+  color: #b8d4f1;
+`;
+
+const ResultSection = styled.div`
+  margin-bottom: 20px;
+  padding: 15px;
+  background: rgba(15, 48, 87, 0.3);
+  border-radius: 8px;
+  border-left: 4px solid ${props => props.success ? '#4caf50' : '#f44336'};
+`;
+
+const ResultLabel = styled.div`
+  font-size: 16px;
+  font-weight: 600;
+  color: #9fd3ff;
+  margin-bottom: 10px;
+`;
+
+const ResultValue = styled.div`
+  font-size: 18px;
+  font-weight: 700;
+  color: ${props => props.success ? '#4caf50' : '#f44336'};
+  margin-bottom: 15px;
+`;
+
+const OutputBox = styled.pre`
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  padding: 15px;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 500px;
+  overflow-y: auto;
+  
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.5);
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.7);
+  }
+`;
+
 const API_URL = API_BASE_URL;
 
 const SuppressionStrategy = () => {
+  // 权限控制
+  const isReadOnly = isCurrentUserReadOnly();
+  const hasAdminPermission = currentUserHasPermission(USER_ROLES.ADMIN);
+  
   const [activeTab, setActiveTab] = useState('port-consume');
   const [tasks, setTasks] = useState([]);
   const [ipBlacklist, setIpBlacklist] = useState([]);
@@ -405,6 +586,40 @@ const SuppressionStrategy = () => {
   const [ipForm, setIpForm] = useState({ ip: '', description: '' });
   const [domainForm, setDomainForm] = useState({ domain: '', description: '' });
   const [packetLossForm, setPacketLossForm] = useState({ ip: '', description: '', lossRate: 0 });
+  
+  // 新增策略的状态变量
+  const [computeForm, setComputeForm] = useState({ url: '', rate: '50', concurrency: '100', duration: '60' });
+  const [tcpSynForm, setTcpSynForm] = useState({ target: '', port: '', captureInterface: '', injectInterface: '' });
+  const [tcpSynConnections, setTcpSynConnections] = useState([]);
+  const [currentAttackId, setCurrentAttackId] = useState(null);
+  const [attackStatus, setAttackStatus] = useState(null);
+  const [witchForm, setWitchForm] = useState({ 
+    target_node: 'node-1', 
+    attack_nodes_per_bucket: 8, 
+    test_type: 'docker',
+    description: '' 
+  });
+  const [sybilTestTasks, setSybilTestTasks] = useState([]);
+  const [dockerStatus, setDockerStatus] = useState({ containers: [], running: 0 });
+  const [selectedTestTask, setSelectedTestTask] = useState(null);
+  
+  // 真实网络环境VPS管理状态 - 已删除
+  // const [vpsServers, setVpsServers] = useState([]);
+  // const [vpsForm, setVpsForm] = useState({...});
+  // const [distributedTasks, setDistributedTasks] = useState([]);
+  // const [distributedForm, setDistributedForm] = useState({...});
+  // const [showVpsForm, setShowVpsForm] = useState(false);
+  // const [showDistributedForm, setShowDistributedForm] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [deployLogs, setDeployLogs] = useState([]);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [relayStatus, setRelayStatus] = useState(null);
+  const [ipBlacklistStatus, setIpBlacklistStatus] = useState(null);
+  const [domainBlacklistStatus, setDomainBlacklistStatus] = useState(null);
+  const [packetLossStatus, setPacketLossStatus] = useState(null);
+  const [deployType, setDeployType] = useState('');
   
   // 分页状态
   const [portTaskPage, setPortTaskPage] = useState(1);
@@ -420,19 +635,35 @@ const SuppressionStrategy = () => {
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
-  }, [activeTab]);
+    
+    // 轮询中继节点状态（仅当有活动攻击时）
+    const statusInterval = setInterval(() => {
+      if (currentAttackId) {
+        loadAttackStatus(currentAttackId);
+      }
+    }, 2000); // 每2秒轮询一次
+    
+    return () => {
+      clearInterval(interval);
+      clearInterval(statusInterval);
+    };
+  }, [activeTab, currentAttackId]);
 
   const loadData = async () => {
     try {
-      if (activeTab === 'port-consume' || activeTab === 'syn-flood') {
+      if (activeTab === 'port-consume' || activeTab === 'syn-flood' || 
+          activeTab === 'compute-consume') {
         await Promise.all([loadTasks(), loadLogs()]);
+      } else if (activeTab === 'tcp-syn-flood') {
+        await Promise.all([loadTasks(), loadLogs(), loadRelayStatus()]);
+      } else if (activeTab === 'witch-attack') {
+        await Promise.all([loadSybilTestTasks(), loadDockerStatus(), loadLogs()]);
       } else if (activeTab === 'ip-blacklist') {
-        await loadIPBlacklist();
+        await Promise.all([loadIPBlacklist(), loadConfigServiceStatus('ip-blacklist', setIpBlacklistStatus)]);
       } else if (activeTab === 'domain-blacklist') {
-        await loadDomainBlacklist();
+        await Promise.all([loadDomainBlacklist(), loadConfigServiceStatus('domain-blacklist', setDomainBlacklistStatus)]);
       } else if (activeTab === 'packet-loss') {
-        await loadPacketLossPolicies();
+        await Promise.all([loadPacketLossPolicies(), loadConfigServiceStatus('packet-loss', setPacketLossStatus)]);
       }
     } catch (error) {
       console.error('加载数据失败:', error);
@@ -575,6 +806,100 @@ const SuppressionStrategy = () => {
     }
   };
 
+  // 新增策略的启动函数
+  const startComputeConsume = async () => {
+    if (!computeForm.url) {
+      alert('请填写目标URL');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/compute-consume/start`, computeForm);
+      if (response.data.status === 'success') {
+        alert('计算资源消耗任务启动成功');
+        setComputeForm({ url: '', rate: '50', concurrency: '100', duration: '60' });
+        await loadTasks();
+      } else {
+        alert(response.data.message || '启动失败');
+      }
+    } catch (error) {
+      alert('启动失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startTcpSynFlood = async () => {
+    if (!tcpSynForm.target || !tcpSynForm.port) {
+      alert('请填写目标地址和端口');
+      return;
+    }
+    setLoading(true);
+    try {
+      // 调用文件API下发命令
+      const response = await axios.post(`${API_URL}/api/suppression/relay-file/attack/start`, {
+        target_ip: tcpSynForm.target,
+        target_port: parseInt(tcpSynForm.port),
+        capture_interface: tcpSynForm.captureInterface || null,
+        inject_interface: tcpSynForm.injectInterface || null
+      });
+      
+      if (response.data.status === 'success') {
+        const attackId = response.data.attack_id;
+        setCurrentAttackId(attackId);
+        alert('TCP RST攻击命令已写入中继位置，等待执行...');
+        // 立即加载一次状态
+        setTimeout(() => loadAttackStatus(attackId), 1000);
+      } else {
+        alert(response.data.message || '启动失败');
+      }
+    } catch (error) {
+      alert('启动失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const loadAttackStatus = async (attackId) => {
+    try {
+      const response = await axios.get(`${API_URL}/api/suppression/relay-file/attack/${attackId}/status`);
+      if (response.data.status === 'success') {
+        const data = response.data.data;
+        if (data.connections) {
+          setTcpSynConnections(data.connections.connections || []);
+        }
+        if (data.attack) {
+          setAttackStatus(data.attack);
+        }
+      }
+    } catch (error) {
+      console.error('加载攻击状态失败:', error);
+    }
+  };
+  
+  const stopTcpSynFlood = async () => {
+    if (!currentAttackId) {
+      alert('没有正在运行的攻击');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/relay-file/attack/stop?attack_id=${currentAttackId}`);
+      if (response.data.status === 'success') {
+        alert('停止命令已下发');
+        setCurrentAttackId(null);
+        setTcpSynConnections([]);
+        setAttackStatus(null);
+      } else {
+        alert(response.data.message || '停止失败');
+      }
+    } catch (error) {
+      alert('停止失败: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const stopTask = async (taskId) => {
     if (!window.confirm('确定要停止这个任务吗？')) return;
     try {
@@ -589,6 +914,252 @@ const SuppressionStrategy = () => {
       alert('停止失败: ' + error.message);
     }
   };
+
+  // ==================== 女巫攻击测试相关函数 ====================
+  const startSybilDockerTest = async () => {
+    if (!witchForm.target_node) {
+      alert('请选择目标节点');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/sybil-attack/test/docker/start`, witchForm);
+      if (response.data.status === 'success') {
+        alert(`女巫攻击测试已启动\n任务ID: ${response.data.task_id}\nDocker环境正在构建中，请稍候...`);
+        await loadSybilTestTasks();
+        await loadDockerStatus();
+      }
+    } catch (error) {
+      alert('启动失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSybilTestTasks = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/sybil-attack/test/tasks`);
+      if (response.data.status === 'success') {
+        setSybilTestTasks(response.data.data);
+      }
+    } catch (error) {
+      console.error('加载女巫攻击测试任务失败:', error);
+    }
+  };
+
+  const loadDockerStatus = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/sybil-attack/test/docker/status`);
+      if (response.data.status === 'success') {
+        setDockerStatus(response.data);
+      }
+    } catch (error) {
+      console.error('加载Docker状态失败:', error);
+    }
+  };
+
+  const stopSybilDockerTest = async (taskId) => {
+    if (!window.confirm('确定要停止Docker环境吗？这将关闭所有容器')) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/sybil-attack/test/docker/stop/${taskId}`);
+      if (response.data.status === 'success') {
+        alert('Docker环境已停止');
+        await loadSybilTestTasks();
+        await loadDockerStatus();
+      }
+    } catch (error) {
+      alert('停止失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cleanupDockerEnvironment = async () => {
+    if (!window.confirm('确定要清理Docker环境吗？\n\n这将执行以下操作：\n✓ 停止并删除所有容器\n✓ 删除Docker网络\n✓ 清理未完成的任务记录')) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/sybil-attack/test/docker/cleanup`);
+      if (response.data.status === 'success') {
+        const details = response.data.details;
+        let message = '✅ 环境清理完成！\n\n';
+        message += `🗑️ 删除容器: ${details.containers_removed} 个\n`;
+        message += `🌐 删除网络: ${details.networks_removed} 个\n`;
+        message += `📋 清理任务: ${details.tasks_cleaned} 个\n`;
+        
+        if (details.errors && details.errors.length > 0) {
+          message += `\n⚠️ 警告:\n${details.errors.join('\n')}`;
+        }
+        
+        alert(message);
+        await loadSybilTestTasks();
+        await loadDockerStatus();
+      }
+    } catch (error) {
+      alert('清理失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteSybilTestTask = async (taskId) => {
+    if (!window.confirm('确定要删除这个测试任务吗？\n\n如果任务正在运行，Docker环境也会被停止。')) return;
+    
+    setLoading(true);
+    try {
+      const response = await axios.delete(`${API_URL}/api/sybil-attack/test/tasks/${taskId}`);
+      if (response.data.status === 'success') {
+        alert('✅ 任务已删除');
+        await loadSybilTestTasks();
+        await loadDockerStatus();
+      }
+    } catch (error) {
+      alert('删除失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const viewTestAnalysis = async (taskId) => {
+    try {
+      const response = await axios.get(`${API_URL}/api/sybil-attack/test/analysis/${taskId}`);
+      if (response.data.status === 'success') {
+        const data = response.data.data;
+        const result = data.attack_result;
+        if (result) {
+          setTestResult(result);
+          setShowResultModal(true);
+        } else {
+          alert('测试还在进行中，请稍后查看');
+        }
+      }
+    } catch (error) {
+      alert('获取分析结果失败: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const getDockerLogs = async (container) => {
+    try {
+      const response = await axios.get(`${API_URL}/api/sybil-attack/test/docker/logs/${container}?tail=100`);
+      if (response.data.status === 'success') {
+        const logs = response.data.logs.substring(0, 2000);
+        alert(`容器日志: ${container}\n\n${logs}`);
+      }
+    } catch (error) {
+      alert('获取日志失败: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  // 一键部署中继节点
+  const deployRelayNode = async () => {
+    if (!window.confirm('⚠️ 确定要部署中继节点吗？\n\n这将在远程服务器上执行以下操作：\n1. 创建目录结构\n2. 上传攻击脚本\n3. 安装依赖包\n4. 设置网络权限\n5. 启动服务\n\n请确保config.py中的SSH配置正确！')) return;
+    
+    setIsDeploying(true);
+    setDeployLogs([]);
+    setDeployType('TCP RST中继节点');
+    setShowDeployModal(true);
+    
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/relay-file/deploy`);
+      
+      if (response.data.status === 'success') {
+        setDeployLogs(response.data.logs || []);
+        setTimeout(() => {
+          loadRelayStatus();
+        }, 1000);
+      } else {
+        setDeployLogs(response.data.logs || [{ 
+          step: '部署失败', 
+          status: 'error', 
+          message: response.data.message,
+          timestamp: new Date().toISOString()
+        }]);
+      }
+    } catch (error) {
+      setDeployLogs([{ 
+        step: '请求失败', 
+        status: 'error', 
+        message: error.response?.data?.detail || error.message,
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
+  // 加载中继节点状态
+  const loadRelayStatus = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/suppression/relay-file/status`);
+      if (response.data.status === 'success') {
+        setRelayStatus(response.data.data);
+      }
+    } catch (error) {
+      console.error('获取中继节点状态失败:', error);
+    }
+  };
+
+  // 加载配置服务状态
+  const loadConfigServiceStatus = async (serviceType, setStatusFunc) => {
+    try {
+      const response = await axios.get(`${API_URL}/api/suppression/config-push/status/${serviceType}`);
+      if (response.data.status === 'success') {
+        setStatusFunc(response.data.data);
+      }
+    } catch (error) {
+      console.error(`获取${serviceType}状态失败:`, error);
+    }
+  };
+
+  // 一键部署配置服务
+  const deployConfigService = async (serviceType, serviceName) => {
+    if (!window.confirm(`⚠️ 确定要部署${serviceName}吗？\n\n这将在远程服务器上执行以下操作：\n1. 创建配置目录\n2. 设置目录权限\n3. 创建初始配置文件\n4. 验证部署\n\n请确保config.py中的SSH配置正确！`)) return;
+    
+    setIsDeploying(true);
+    setDeployLogs([]);
+    setDeployType(serviceName);
+    setShowDeployModal(true);
+    
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/config-push/deploy/${serviceType}`);
+      
+      if (response.data.status === 'success') {
+        setDeployLogs(response.data.logs || []);
+        setTimeout(() => {
+          if (serviceType === 'ip-blacklist') loadConfigServiceStatus('ip-blacklist', setIpBlacklistStatus);
+          else if (serviceType === 'domain-blacklist') loadConfigServiceStatus('domain-blacklist', setDomainBlacklistStatus);
+          else if (serviceType === 'packet-loss') loadConfigServiceStatus('packet-loss', setPacketLossStatus);
+        }, 1000);
+      } else {
+        setDeployLogs(response.data.logs || [{ 
+          step: '部署失败', 
+          status: 'error', 
+          message: response.data.message,
+          timestamp: new Date().toISOString()
+        }]);
+      }
+    } catch (error) {
+      setDeployLogs([{ 
+        step: '请求失败', 
+        status: 'error', 
+        message: error.response?.data?.detail || error.message,
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
+  // ==================== 真实网络环境VPS管理函数 - 已删除 ====================
+  // const loadVpsServers = async () => {...};
+  // const addVpsServer = async () => {...};
+  // const testVpsConnection = async (vpsId) => {...};
+  // const deleteVpsServer = async (vpsId) => {...};
+  // const loadDistributedTasks = async () => {...};
+  // const deployDistributedAttack = async () => {...};
+  // const stopDistributedAttack = async (taskId) => {...};
 
   const addIPBlacklist = async () => {
     if (!ipForm.ip) {
@@ -773,6 +1344,76 @@ const SuppressionStrategy = () => {
     }
   };
 
+  // 配置推送相关函数
+  const pushIPBlacklist = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/config-push/ip-blacklist`);
+      if (response.data.status === 'success') {
+        alert(`IP黑名单已推送到网关设备，共${response.data.count}条`);
+      } else {
+        alert(response.data.message || '推送失败');
+      }
+    } catch (error) {
+      alert('推送失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pushDomainBlacklist = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/config-push/domain-blacklist`);
+      if (response.data.status === 'success') {
+        alert(`域名黑名单已推送到DNS服务器，共${response.data.count}条`);
+      } else {
+        alert(response.data.message || '推送失败');
+      }
+    } catch (error) {
+      alert('推送失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pushPacketLossPolicy = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/config-push/packet-loss`);
+      if (response.data.status === 'success') {
+        alert(`丢包策略已推送到网关设备，共${response.data.count}条`);
+      } else {
+        alert(response.data.message || '推送失败');
+      }
+    } catch (error) {
+      alert('推送失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pushAllConfig = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/suppression/config-push/all`);
+      if (response.data.status === 'success' || response.data.status === 'partial') {
+        const details = response.data.details;
+        const msg = `配置推送完成:\n` +
+          `- IP黑名单: ${details.ip_blacklist.count}条 ${details.ip_blacklist.success ? '✓' : '✗'}\n` +
+          `- 域名黑名单: ${details.domain_blacklist.count}条 ${details.domain_blacklist.success ? '✓' : '✗'}\n` +
+          `- 丢包策略: ${details.packet_loss.count}条 ${details.packet_loss.success ? '✓' : '✗'}`;
+        alert(msg);
+      } else {
+        alert(response.data.message || '推送失败');
+      }
+    } catch (error) {
+      alert('推送失败: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 分页辅助函数
   const getPaginatedData = (data, page, perPage) => {
     const startIndex = (page - 1) * perPage;
@@ -850,7 +1491,11 @@ const SuppressionStrategy = () => {
             onChange={(e) => setPortForm({ ...portForm, threads: e.target.value })}
           />
         </FormGroup3>
-        <PrimaryButton onClick={startPortConsume} disabled={loading}>
+        <PrimaryButton 
+          onClick={startPortConsume} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
           启动端口资源消耗
         </PrimaryButton>
       </Section>
@@ -969,7 +1614,11 @@ const SuppressionStrategy = () => {
             onChange={(e) => setSynForm({ ...synForm, rate: e.target.value })}
           />
         </FormGroup5>
-        <PrimaryButton onClick={startSynFlood} disabled={loading}>
+        <PrimaryButton 
+          onClick={startSynFlood} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
           启动SYN洪水攻击
         </PrimaryButton>
       </Section>
@@ -1052,8 +1701,687 @@ const SuppressionStrategy = () => {
     </>
   );
 
+  // 新增策略的渲染函数
+  const renderComputeConsumeTab = () => (
+    <>
+      <Section>
+        <SectionTitle>启动计算资源消耗攻击</SectionTitle>
+        <FormGroup4>
+          <Input
+            type="text"
+            placeholder="目标URL (如: http://192.168.1.1:80/content/faq.php)"
+            value={computeForm.url}
+            onChange={(e) => setComputeForm({ ...computeForm, url: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder="每秒序列数 (rate)"
+            value={computeForm.rate}
+            onChange={(e) => setComputeForm({ ...computeForm, rate: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder="并发数 (concurrency)"
+            value={computeForm.concurrency}
+            onChange={(e) => setComputeForm({ ...computeForm, concurrency: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder="持续时间(秒)"
+            value={computeForm.duration}
+            onChange={(e) => setComputeForm({ ...computeForm, duration: e.target.value })}
+          />
+        </FormGroup4>
+        <PrimaryButton 
+          onClick={startComputeConsume} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
+          启动计算资源消耗
+        </PrimaryButton>
+      </Section>
+
+      <Section>
+        <SectionTitle>
+          运行中的任务 <AutoRefreshIndicator title="自动刷新中" />
+        </SectionTitle>
+        <InfoButton onClick={loadTasks}>刷新任务列表</InfoButton>
+        {(() => {
+          const computeTasks = tasks.filter(task => task.task_id && task.task_id.includes('compute-consume'));
+          const totalPages = getTotalPages(computeTasks.length, tasksPerPage);
+          const paginatedTasks = getPaginatedData(computeTasks, 1, tasksPerPage);
+          
+          return computeTasks.length > 0 ? (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>目标</Th>
+                  <Th>核心数</Th>
+                  <Th>强度</Th>
+                  <Th>状态</Th>
+                  <Th>启动时间</Th>
+                  <Th>操作</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTasks.map(task => (
+                  <Tr key={task.task_id}>
+                    <Td>{task.target}</Td>
+                    <Td>{task.cores}</Td>
+                    <Td>{task.intensity}</Td>
+                    <Td>
+                      <Badge type={task.status === 'running' ? 'success' : 'danger'}>
+                        {task.status === 'running' ? '运行中' : '已停止'}
+                      </Badge>
+                    </Td>
+                    <Td>{task.start_time}</Td>
+                    <Td>
+                      {task.status === 'running' ? (
+                        <DangerButton onClick={() => stopTask(task.task_id)}>停止</DangerButton>
+                      ) : (
+                        <span style={{ color: '#7a9cc6' }}>已停止</span>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <EmptyState>暂无计算资源消耗任务</EmptyState>
+          );
+        })()}
+      </Section>
+    </>
+  );
+
+  const renderTcpSynFloodTab = () => (
+    <>
+      {/* 中继节点部署状态 */}
+      <Section>
+        <SectionTitle>🛰️ 中继节点状态</SectionTitle>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '15px',
+          marginBottom: '15px'
+        }}>
+          <div style={{ 
+            padding: '15px', 
+            background: relayStatus?.is_deployed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${relayStatus?.is_deployed ? '#4caf50' : '#f44336'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>部署状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: relayStatus?.is_deployed ? '#4caf50' : '#f44336' }}>
+              {relayStatus?.is_deployed ? '✅ 已部署' : '❌ 未部署'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: relayStatus?.is_running ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${relayStatus?.is_running ? '#4caf50' : '#ff9800'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>服务状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: relayStatus?.is_running ? '#4caf50' : '#ff9800' }}>
+              {relayStatus?.is_running ? '🟢 运行中' : '⚪ 未运行'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: 'rgba(102, 126, 234, 0.1)',
+            borderRadius: '8px',
+            borderLeft: '4px solid #667eea'
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>服务器地址</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#b8d4f1' }}>
+              {relayStatus?.host || '未配置'}
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <PrimaryButton 
+            onClick={deployRelayNode} 
+            disabled={isDeploying || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
+            {isDeploying ? '⏳ 部署中...' : '🚀 一键部署中继节点'}
+          </PrimaryButton>
+          
+          <InfoButton onClick={loadRelayStatus} disabled={loading}>
+            🔄 刷新状态
+          </InfoButton>
+          
+          {relayStatus?.available_interfaces && relayStatus.available_interfaces.length > 0 && (
+            <div style={{ 
+              marginLeft: '15px',
+              padding: '8px 12px',
+              background: 'rgba(102, 126, 234, 0.1)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: '#9fd3ff'
+            }}>
+              可用接口: {relayStatus.available_interfaces.join(', ')}
+            </div>
+          )}
+        </div>
+        
+        <div style={{ 
+          marginTop: '15px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          borderLeft: '3px solid #2196f3',
+          color: '#9fd3ff',
+          fontSize: '13px'
+        }}>
+          <strong>💡 提示：</strong>
+          <ul style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '0' }}>
+            <li>首次使用请点击"一键部署中继节点"自动完成所有配置</li>
+            <li>部署将读取 config.py 中的 RELAY_CONFIG 配置</li>
+            <li>请确保中继服务器SSH连接信息正确且有sudo权限</li>
+          </ul>
+        </div>
+      </Section>
+
+      <Section>
+        <SectionTitle>启动TCP RST攻击（通过中继节点）</SectionTitle>
+        <FormGroup4>
+          <Input
+            type="text"
+            placeholder="目标IP (如: 192.168.1.10)"
+            value={tcpSynForm.target}
+            onChange={(e) => setTcpSynForm({ ...tcpSynForm, target: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder="目标端口 (如: 80)"
+            value={tcpSynForm.port}
+            onChange={(e) => setTcpSynForm({ ...tcpSynForm, port: e.target.value })}
+          />
+          <Input
+            type="text"
+            placeholder="捕获接口 (可选, 如: eth0)"
+            value={tcpSynForm.captureInterface}
+            onChange={(e) => setTcpSynForm({ ...tcpSynForm, captureInterface: e.target.value })}
+          />
+          <Input
+            type="text"
+            placeholder="注入接口 (可选, 如: eth0)"
+            value={tcpSynForm.injectInterface}
+            onChange={(e) => setTcpSynForm({ ...tcpSynForm, injectInterface: e.target.value })}
+          />
+        </FormGroup4>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <PrimaryButton 
+            onClick={startTcpSynFlood} 
+            disabled={loading || isReadOnly || currentAttackId}
+            title={isReadOnly ? '仅管理员可使用此功能' : currentAttackId ? '已有攻击正在运行' : ''}
+          >
+            启动TCP RST攻击
+          </PrimaryButton>
+          {currentAttackId && (
+            <DangerButton 
+              onClick={stopTcpSynFlood} 
+              disabled={loading || isReadOnly}
+            >
+              停止当前攻击
+            </DangerButton>
+          )}
+        </div>
+        {attackStatus && (
+          <div style={{ 
+            marginTop: '10px', 
+            padding: '10px', 
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            borderRadius: '5px',
+            color: '#9fd3ff',
+            fontSize: '13px'
+          }}>
+            <div>攻击ID: {attackStatus.attack_id}</div>
+            <div>状态: <strong>{attackStatus.status === 'running' ? '运行中' : '已停止'}</strong></div>
+            {attackStatus.pid && <div>进程ID: {attackStatus.pid}</div>}
+            {attackStatus.target_ip && <div>目标: {attackStatus.target_ip}:{attackStatus.target_port}</div>}
+          </div>
+        )}
+      </Section>
+
+      <Section>
+        <SectionTitle>
+          运行中的任务 <AutoRefreshIndicator title="自动刷新中" />
+        </SectionTitle>
+        <InfoButton onClick={loadTasks}>刷新任务列表</InfoButton>
+        {(() => {
+          const tcpSynTasks = tasks.filter(task => task.task_id && task.task_id.includes('tcp-syn-flood'));
+          const totalPages = getTotalPages(tcpSynTasks.length, tasksPerPage);
+          const paginatedTasks = getPaginatedData(tcpSynTasks, 1, tasksPerPage);
+          
+          return tcpSynTasks.length > 0 ? (
+            <Table>
+              <thead>
+                <tr>
+                  <Th>目标</Th>
+                  <Th>端口</Th>
+                  <Th>线程数</Th>
+                  <Th>速率</Th>
+                  <Th>状态</Th>
+                  <Th>启动时间</Th>
+                  <Th>操作</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTasks.map(task => (
+                  <Tr key={task.task_id}>
+                    <Td>{task.target}:{task.port}</Td>
+                    <Td>{task.threads}</Td>
+                    <Td>{task.rate}</Td>
+                    <Td>
+                      <Badge type={task.status === 'running' ? 'success' : 'danger'}>
+                        {task.status === 'running' ? '运行中' : '已停止'}
+                      </Badge>
+                    </Td>
+                    <Td>{task.start_time}</Td>
+                    <Td>
+                      {task.status === 'running' ? (
+                        <DangerButton onClick={() => stopTask(task.task_id)}>停止</DangerButton>
+                      ) : (
+                        <span style={{ color: '#7a9cc6' }}>已停止</span>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <EmptyState>暂无TCP RST攻击任务</EmptyState>
+          );
+        })()}
+      </Section>
+
+      <Section>
+        <SectionTitle>
+          目标连接状态监控 <AutoRefreshIndicator title="实时更新中" />
+        </SectionTitle>
+        <div style={{ marginBottom: '15px', color: '#9fd3ff' }}>
+          {currentAttackId ? (
+            <span>当前监控攻击ID: {currentAttackId}</span>
+          ) : (
+            <span>暂无活动监控</span>
+          )}
+        </div>
+        {tcpSynConnections.length > 0 ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>源地址</Th>
+                <Th>源端口</Th>
+                <Th>目标地址</Th>
+                <Th>目标端口</Th>
+                <Th>连接状态</Th>
+                <Th>数据包数量</Th>
+                <Th>最后更新</Th>
+                <Th>TCP标志</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tcpSynConnections.map((conn, index) => (
+                <Tr key={index}>
+                  <Td>{conn.src_ip}</Td>
+                  <Td>{conn.src_port}</Td>
+                  <Td>{conn.dst_ip}</Td>
+                  <Td>{conn.dst_port}</Td>
+                  <Td>
+                    <Badge type={
+                      conn.status === 'active' ? 'success' : 
+                      conn.status === 'closed' ? 'danger' : 
+                      'warning'
+                    }>
+                      {conn.status === 'active' ? '通信中' : 
+                       conn.status === 'closed' ? '已断开' : 
+                       '超时'}
+                    </Badge>
+                  </Td>
+                  <Td>{conn.packet_count}</Td>
+                  <Td style={{ fontSize: '12px' }}>
+                    {new Date(conn.last_seen).toLocaleTimeString()}
+                  </Td>
+                  <Td>
+                    {conn.flags && conn.flags.length > 0 ? (
+                      <span style={{ 
+                        fontSize: '11px', 
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        padding: '2px 6px',
+                        borderRadius: '3px'
+                      }}>
+                        {conn.flags.join(',')}
+                      </span>
+                    ) : '-'}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState>
+            {currentAttackId ? 
+              '等待连接数据...' : 
+              '请先启动TCP RST攻击以监控连接状态'
+            }
+          </EmptyState>
+        )}
+        <div style={{ 
+          marginTop: '15px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(26, 115, 232, 0.1)',
+          borderLeft: '3px solid #667eea',
+          color: '#9fd3ff',
+          fontSize: '13px'
+        }}>
+          <strong>说明：</strong>
+          <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+            <li>此功能需要中继节点部署在能够监听C2和Bot通信的网络位置</li>
+            <li>"通信中"表示中继节点正在监听到双向数据包传输</li>
+            <li>"已断开"表示检测到FIN或RST标志，连接已关闭</li>
+            <li>"超时"表示超过10秒未收到数据包</li>
+            <li>数据每2秒自动更新一次</li>
+          </ul>
+        </div>
+      </Section>
+    </>
+  );
+
+  const renderWitchAttackTab = () => (
+    <>
+      <Section>
+        <SectionTitle>🐋 Docker女巫攻击测试</SectionTitle>
+        <p style={{ color: '#7a9cc6', marginBottom: '15px' }}>
+          在本地Docker环境中模拟DHT网络进行女巫攻击测试
+        </p>
+        
+        <FormGroup2>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#7a9cc6' }}>
+              目标节点
+            </label>
+            <select
+              value={witchForm.target_node}
+              onChange={(e) => setWitchForm({ ...witchForm, target_node: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '10px',
+                backgroundColor: '#1e3a5f',
+                color: '#fff',
+                border: '1px solid #2c5282',
+                borderRadius: '4px'
+              }}
+            >
+              <option value="node-1">node-1 (种子节点)</option>
+              <option value="node-2">node-2</option>
+              <option value="node-3">node-3</option>
+              <option value="node-4">node-4</option>
+              <option value="node-5">node-5</option>
+              <option value="node-6">node-6</option>
+              <option value="node-7">node-7</option>
+              <option value="node-8">node-8</option>
+              <option value="node-9">node-9</option>
+              <option value="node-10">node-10</option>
+            </select>
+          </div>
+          
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#7a9cc6' }}>
+              每个Bucket的攻击节点数
+            </label>
+            <Input
+              type="number"
+              value={witchForm.attack_nodes_per_bucket}
+              onChange={(e) => setWitchForm({ ...witchForm, attack_nodes_per_bucket: parseInt(e.target.value) })}
+              min="1"
+              max="20"
+            />
+            <small style={{ color: '#7a9cc6', fontSize: '12px' }}>
+              总节点数 = {witchForm.attack_nodes_per_bucket} × 32 = {witchForm.attack_nodes_per_bucket * 32}
+            </small>
+          </div>
+        </FormGroup2>
+
+        <div style={{ marginBottom: '15px' }}>
+          <Input
+            type="text"
+            placeholder="测试描述（可选）"
+            value={witchForm.description}
+            onChange={(e) => setWitchForm({ ...witchForm, description: e.target.value })}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <PrimaryButton 
+            onClick={startSybilDockerTest} 
+            disabled={loading || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
+            🚀 启动Docker测试
+          </PrimaryButton>
+          <InfoButton onClick={() => { loadSybilTestTasks(); loadDockerStatus(); }}>
+            🔄 刷新状态
+          </InfoButton>
+          <WarningButton 
+            onClick={cleanupDockerEnvironment}
+            disabled={loading || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : '清理所有容器、网络和未完成任务'}
+          >
+            🧹 清理环境
+          </WarningButton>
+        </div>
+      </Section>
+
+      <Section>
+        <SectionTitle>Docker容器状态</SectionTitle>
+        {dockerStatus.running > 0 && dockerStatus.containers && dockerStatus.containers.length > 0 ? (
+          <div>
+            <p style={{ color: '#10b981', marginBottom: '10px' }}>
+              ✅ Docker环境运行中 ({dockerStatus.running} 个容器)
+            </p>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>容器名称</Th>
+                  <Th>状态</Th>
+                  <Th>操作</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {dockerStatus.containers.map((container, idx) => (
+                  <Tr key={idx}>
+                    <Td>{container.name || 'Unknown'}</Td>
+                    <Td>
+                      <Badge type={container.status?.includes('Up') ? 'success' : 'danger'}>
+                        {container.status || 'Unknown'}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <InfoButton onClick={() => getDockerLogs(container.name)}>
+                        查看日志
+                      </InfoButton>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        ) : (
+          <EmptyState>Docker环境未运行</EmptyState>
+        )}
+      </Section>
+
+      <Section>
+        <SectionTitle>
+          测试任务 <AutoRefreshIndicator title="自动刷新中" />
+        </SectionTitle>
+        {sybilTestTasks.length > 0 ? (
+          <Table>
+            <thead>
+              <tr>
+                <Th>任务ID</Th>
+                <Th>目标节点</Th>
+                <Th>攻击节点数</Th>
+                <Th>状态</Th>
+                <Th>启动时间</Th>
+                <Th>操作</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {sybilTestTasks.map(task => (
+                <Tr key={task.task_id}>
+                  <Td style={{ fontSize: '12px' }}>{task.task_id.substring(0, 20)}...</Td>
+                  <Td>{task.target_node}</Td>
+                  <Td>{task.attack_nodes_count}</Td>
+                  <Td>
+                    <Badge type={
+                      task.status === 'completed' ? 'success' :
+                      task.status === 'failed' ? 'danger' :
+                      task.status === 'running' || task.status === 'attacking' ? 'warning' :
+                      'info'
+                    }>
+                      {task.status === 'preparing' ? '准备中' :
+                       task.status === 'starting_docker' ? '启动Docker' :
+                       task.status === 'attacking' ? '攻击中' :
+                       task.status === 'verifying' ? '验证中' :
+                       task.status === 'completed' ? '已完成' :
+                       task.status === 'failed' ? '失败' :
+                       task.status === 'stopped' ? '已停止' :
+                       task.status === 'cleaned' ? '已清理' :
+                       task.status}
+                    </Badge>
+                  </Td>
+                  <Td>{task.start_time}</Td>
+                  <Td>
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                      {task.status === 'completed' ? (
+                        <InfoButton onClick={() => viewTestAnalysis(task.task_id)}>
+                          查看结果
+                        </InfoButton>
+                      ) : task.status !== 'stopped' && task.status !== 'failed' && task.status !== 'cleaned' ? (
+                        <DangerButton onClick={() => stopSybilDockerTest(task.task_id)}>
+                          停止
+                        </DangerButton>
+                      ) : null}
+                      <DangerButton 
+                        onClick={() => deleteSybilTestTask(task.task_id)}
+                        disabled={loading || isReadOnly}
+                        title={isReadOnly ? '仅管理员可使用此功能' : '删除此任务'}
+                      >
+                        删除
+                      </DangerButton>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        ) : (
+          <EmptyState>暂无测试任务</EmptyState>
+        )}
+      </Section>
+
+      {/* VPS服务器管理和分布式女巫攻击部署功能已删除 */}
+    </>
+  );
+
   const renderIPBlacklistTab = () => (
     <>
+      {/* 配置服务部署状态 */}
+      <Section>
+        <SectionTitle>🌐 网关设备配置状态</SectionTitle>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '15px',
+          marginBottom: '15px'
+        }}>
+          <div style={{ 
+            padding: '15px', 
+            background: ipBlacklistStatus?.is_deployed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${ipBlacklistStatus?.is_deployed ? '#4caf50' : '#f44336'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>部署状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: ipBlacklistStatus?.is_deployed ? '#4caf50' : '#f44336' }}>
+              {ipBlacklistStatus?.is_deployed ? '✅ 已部署' : '❌ 未部署'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: ipBlacklistStatus?.is_configured ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${ipBlacklistStatus?.is_configured ? '#4caf50' : '#ff9800'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>配置状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: ipBlacklistStatus?.is_configured ? '#4caf50' : '#ff9800' }}>
+              {ipBlacklistStatus?.is_configured ? '🟢 已配置' : '⚪ 未配置'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: 'rgba(102, 126, 234, 0.1)',
+            borderRadius: '8px',
+            borderLeft: '4px solid #667eea'
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>网关设备地址</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#b8d4f1' }}>
+              {ipBlacklistStatus?.host || '未配置'}
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <PrimaryButton 
+            onClick={() => deployConfigService('ip-blacklist', 'IP黑名单服务')} 
+            disabled={isDeploying || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
+            {isDeploying ? '⏳ 部署中...' : '🚀 一键部署配置服务'}
+          </PrimaryButton>
+          
+          <InfoButton onClick={() => loadConfigServiceStatus('ip-blacklist', setIpBlacklistStatus)} disabled={loading}>
+            🔄 刷新状态
+          </InfoButton>
+          
+          {ipBlacklistStatus?.config_file && (
+            <div style={{ 
+              marginLeft: '15px',
+              padding: '8px 12px',
+              background: 'rgba(102, 126, 234, 0.1)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: '#9fd3ff'
+            }}>
+              配置文件: {ipBlacklistStatus.config_file}
+            </div>
+          )}
+        </div>
+        
+        <div style={{ 
+          marginTop: '15px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          borderLeft: '3px solid #2196f3',
+          color: '#9fd3ff',
+          fontSize: '13px'
+        }}>
+          <strong>💡 提示：</strong>
+          <ul style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '0' }}>
+            <li>首次使用请点击"一键部署配置服务"在网关设备创建配置目录</li>
+            <li>部署将读取 config.py 中的 IP_BLACKLIST_CONFIG 配置</li>
+            <li>部署完成后可使用"推送到网关设备"功能同步黑名单数据</li>
+          </ul>
+        </div>
+      </Section>
+
       <Section>
         <SectionTitle>添加IP到黑名单</SectionTitle>
         <FormGroup2>
@@ -1070,8 +2398,22 @@ const SuppressionStrategy = () => {
             onChange={(e) => setIpForm({ ...ipForm, description: e.target.value })}
           />
         </FormGroup2>
-        <SuccessButton onClick={addIPBlacklist} disabled={loading}>添加IP</SuccessButton>
+        <SuccessButton 
+          onClick={addIPBlacklist} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
+          添加IP
+        </SuccessButton>
         <InfoButton onClick={loadIPBlacklist}>刷新列表</InfoButton>
+        <PrimaryButton 
+          onClick={pushIPBlacklist} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          style={{ marginLeft: '10px' }}
+        >
+          📤 推送到网关设备
+        </PrimaryButton>
       </Section>
 
       <Section>
@@ -1122,6 +2464,96 @@ const SuppressionStrategy = () => {
 
   const renderDomainBlacklistTab = () => (
     <>
+      {/* 配置服务部署状态 */}
+      <Section>
+        <SectionTitle>🌐 DNS服务器配置状态</SectionTitle>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '15px',
+          marginBottom: '15px'
+        }}>
+          <div style={{ 
+            padding: '15px', 
+            background: domainBlacklistStatus?.is_deployed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${domainBlacklistStatus?.is_deployed ? '#4caf50' : '#f44336'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>部署状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: domainBlacklistStatus?.is_deployed ? '#4caf50' : '#f44336' }}>
+              {domainBlacklistStatus?.is_deployed ? '✅ 已部署' : '❌ 未部署'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: domainBlacklistStatus?.is_configured ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${domainBlacklistStatus?.is_configured ? '#4caf50' : '#ff9800'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>配置状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: domainBlacklistStatus?.is_configured ? '#4caf50' : '#ff9800' }}>
+              {domainBlacklistStatus?.is_configured ? '🟢 已配置' : '⚪ 未配置'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: 'rgba(102, 126, 234, 0.1)',
+            borderRadius: '8px',
+            borderLeft: '4px solid #667eea'
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>DNS服务器地址</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#b8d4f1' }}>
+              {domainBlacklistStatus?.host || '未配置'}
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <PrimaryButton 
+            onClick={() => deployConfigService('domain-blacklist', '域名黑名单服务')} 
+            disabled={isDeploying || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
+            {isDeploying ? '⏳ 部署中...' : '🚀 一键部署配置服务'}
+          </PrimaryButton>
+          
+          <InfoButton onClick={() => loadConfigServiceStatus('domain-blacklist', setDomainBlacklistStatus)} disabled={loading}>
+            🔄 刷新状态
+          </InfoButton>
+          
+          {domainBlacklistStatus?.config_file && (
+            <div style={{ 
+              marginLeft: '15px',
+              padding: '8px 12px',
+              background: 'rgba(102, 126, 234, 0.1)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: '#9fd3ff'
+            }}>
+              配置文件: {domainBlacklistStatus.config_file}
+            </div>
+          )}
+        </div>
+        
+        <div style={{ 
+          marginTop: '15px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          borderLeft: '3px solid #2196f3',
+          color: '#9fd3ff',
+          fontSize: '13px'
+        }}>
+          <strong>💡 提示：</strong>
+          <ul style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '0' }}>
+            <li>首次使用请点击"一键部署配置服务"在DNS服务器创建配置目录</li>
+            <li>部署将读取 config.py 中的 DOMAIN_BLACKLIST_CONFIG 配置</li>
+            <li>部署完成后可使用"推送到DNS服务器"功能同步黑名单数据</li>
+          </ul>
+        </div>
+      </Section>
+
       <Section>
         <SectionTitle>添加域名到黑名单</SectionTitle>
         <FormGroup2>
@@ -1138,8 +2570,22 @@ const SuppressionStrategy = () => {
             onChange={(e) => setDomainForm({ ...domainForm, description: e.target.value })}
           />
         </FormGroup2>
-        <SuccessButton onClick={addDomainBlacklist} disabled={loading}>添加域名</SuccessButton>
+        <SuccessButton 
+          onClick={addDomainBlacklist} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
+          添加域名
+        </SuccessButton>
         <InfoButton onClick={loadDomainBlacklist}>刷新列表</InfoButton>
+        <PrimaryButton 
+          onClick={pushDomainBlacklist} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          style={{ marginLeft: '10px' }}
+        >
+          📤 推送到DNS服务器
+        </PrimaryButton>
       </Section>
 
       <Section>
@@ -1190,6 +2636,96 @@ const SuppressionStrategy = () => {
 
   const renderPacketLossTab = () => (
     <>
+      {/* 配置服务部署状态 */}
+      <Section>
+        <SectionTitle>🌐 网关设备配置状态</SectionTitle>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '15px',
+          marginBottom: '15px'
+        }}>
+          <div style={{ 
+            padding: '15px', 
+            background: packetLossStatus?.is_deployed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${packetLossStatus?.is_deployed ? '#4caf50' : '#f44336'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>部署状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: packetLossStatus?.is_deployed ? '#4caf50' : '#f44336' }}>
+              {packetLossStatus?.is_deployed ? '✅ 已部署' : '❌ 未部署'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: packetLossStatus?.is_configured ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+            borderRadius: '8px',
+            borderLeft: `4px solid ${packetLossStatus?.is_configured ? '#4caf50' : '#ff9800'}`
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>配置状态</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: packetLossStatus?.is_configured ? '#4caf50' : '#ff9800' }}>
+              {packetLossStatus?.is_configured ? '🟢 已配置' : '⚪ 未配置'}
+            </div>
+          </div>
+          
+          <div style={{ 
+            padding: '15px', 
+            background: 'rgba(102, 126, 234, 0.1)',
+            borderRadius: '8px',
+            borderLeft: '4px solid #667eea'
+          }}>
+            <div style={{ fontSize: '13px', color: '#9fd3ff', marginBottom: '8px' }}>网关设备地址</div>
+            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#b8d4f1' }}>
+              {packetLossStatus?.host || '未配置'}
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <PrimaryButton 
+            onClick={() => deployConfigService('packet-loss', '丢包策略服务')} 
+            disabled={isDeploying || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
+            {isDeploying ? '⏳ 部署中...' : '🚀 一键部署配置服务'}
+          </PrimaryButton>
+          
+          <InfoButton onClick={() => loadConfigServiceStatus('packet-loss', setPacketLossStatus)} disabled={loading}>
+            🔄 刷新状态
+          </InfoButton>
+          
+          {packetLossStatus?.config_file && (
+            <div style={{ 
+              marginLeft: '15px',
+              padding: '8px 12px',
+              background: 'rgba(102, 126, 234, 0.1)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: '#9fd3ff'
+            }}>
+              配置文件: {packetLossStatus.config_file}
+            </div>
+          )}
+        </div>
+        
+        <div style={{ 
+          marginTop: '15px', 
+          padding: '10px', 
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
+          borderLeft: '3px solid #2196f3',
+          color: '#9fd3ff',
+          fontSize: '13px'
+        }}>
+          <strong>💡 提示：</strong>
+          <ul style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '0' }}>
+            <li>首次使用请点击"一键部署配置服务"在网关设备创建配置目录</li>
+            <li>部署将读取 config.py 中的 PACKET_LOSS_CONFIG 配置</li>
+            <li>部署完成后可使用"推送到网关设备"功能同步丢包策略数据</li>
+          </ul>
+        </div>
+      </Section>
+
       <Section>
         <SectionTitle>添加丢包策略</SectionTitle>
         <FormGroup2>
@@ -1217,8 +2753,22 @@ const SuppressionStrategy = () => {
           />
           <SliderValue>{packetLossForm.lossRate}%</SliderValue>
         </SliderContainer>
-        <SuccessButton onClick={addPacketLossPolicy} disabled={loading}>添加策略</SuccessButton>
+        <SuccessButton 
+          onClick={addPacketLossPolicy} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
+          添加策略
+        </SuccessButton>
         <InfoButton onClick={loadPacketLossPolicies}>刷新列表</InfoButton>
+        <PrimaryButton 
+          onClick={pushPacketLossPolicy} 
+          disabled={loading || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          style={{ marginLeft: '10px' }}
+        >
+          📤 推送到网关设备
+        </PrimaryButton>
       </Section>
 
       <Section>
@@ -1287,6 +2837,15 @@ const SuppressionStrategy = () => {
         <Tab active={activeTab === 'syn-flood'} onClick={() => setActiveTab('syn-flood')}>
           SYN洪水攻击
         </Tab>
+        <Tab active={activeTab === 'compute-consume'} onClick={() => setActiveTab('compute-consume')}>
+          计算资源消耗
+        </Tab>
+        <Tab active={activeTab === 'tcp-syn-flood'} onClick={() => setActiveTab('tcp-syn-flood')}>
+          TCP RST攻击
+        </Tab>
+        <Tab active={activeTab === 'witch-attack'} onClick={() => setActiveTab('witch-attack')}>
+          女巫攻击
+        </Tab>
         <Tab active={activeTab === 'ip-blacklist'} onClick={() => setActiveTab('ip-blacklist')}>
           IP黑名单
         </Tab>
@@ -1300,9 +2859,131 @@ const SuppressionStrategy = () => {
 
       {activeTab === 'port-consume' && renderPortConsumeTab()}
       {activeTab === 'syn-flood' && renderSynFloodTab()}
+      {activeTab === 'compute-consume' && renderComputeConsumeTab()}
+      {activeTab === 'tcp-syn-flood' && renderTcpSynFloodTab()}
+      {activeTab === 'witch-attack' && renderWitchAttackTab()}
       {activeTab === 'ip-blacklist' && renderIPBlacklistTab()}
       {activeTab === 'domain-blacklist' && renderDomainBlacklistTab()}
       {activeTab === 'packet-loss' && renderPacketLossTab()}
+
+      {/* 部署进度模态框 */}
+      {showDeployModal && (
+        <ModalOverlay onClick={() => !isDeploying && setShowDeployModal(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalHeader>
+              <ModalTitle>🚀 {deployType || '服务'}自动部署</ModalTitle>
+              {!isDeploying && (
+                <ModalCloseButton onClick={() => setShowDeployModal(false)}>
+                  ×
+                </ModalCloseButton>
+              )}
+            </ModalHeader>
+            <ModalBody>
+              {deployLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#9fd3ff' }}>
+                  <div style={{ fontSize: '18px', marginBottom: '10px' }}>⏳ 正在准备部署...</div>
+                </div>
+              ) : (
+                <div>
+                  {deployLogs.map((log, index) => (
+                    <div 
+                      key={index} 
+                      style={{
+                        padding: '12px',
+                        marginBottom: '10px',
+                        background: log.status === 'error' ? 'rgba(244, 67, 54, 0.1)' : 
+                                   log.status === 'success' ? 'rgba(76, 175, 80, 0.1)' :
+                                   log.status === 'warning' ? 'rgba(255, 152, 0, 0.1)' :
+                                   'rgba(33, 150, 243, 0.1)',
+                        borderLeft: `4px solid ${log.status === 'error' ? '#f44336' : 
+                                                 log.status === 'success' ? '#4caf50' :
+                                                 log.status === 'warning' ? '#ff9800' :
+                                                 '#2196f3'}`,
+                        borderRadius: '6px'
+                      }}
+                    >
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '5px'
+                      }}>
+                        <strong style={{ 
+                          color: log.status === 'error' ? '#f44336' : 
+                                log.status === 'success' ? '#4caf50' :
+                                log.status === 'warning' ? '#ff9800' :
+                                '#2196f3'
+                        }}>
+                          {log.status === 'error' ? '❌' : 
+                           log.status === 'success' ? '✅' :
+                           log.status === 'warning' ? '⚠️' : '⏳'} {log.step}
+                        </strong>
+                        <span style={{ fontSize: '11px', color: '#7a9cc6' }}>
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#b8d4f1' }}>
+                        {log.message}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {!isDeploying && deployLogs.length > 0 && (
+                <div style={{ 
+                  marginTop: '20px', 
+                  textAlign: 'center',
+                  paddingTop: '15px',
+                  borderTop: '1px solid rgba(102, 126, 234, 0.3)'
+                }}>
+                  <PrimaryButton onClick={() => setShowDeployModal(false)}>
+                    关闭
+                  </PrimaryButton>
+                </div>
+              )}
+            </ModalBody>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* 测试结果模态框 */}
+      {showResultModal && testResult && (
+        <ModalOverlay onClick={() => setShowResultModal(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
+            <ModalHeader>
+              <ModalTitle>🔍 女巫攻击测试结果</ModalTitle>
+              <ModalCloseButton onClick={() => setShowResultModal(false)}>
+                ×
+              </ModalCloseButton>
+            </ModalHeader>
+            <ModalBody>
+              <ResultSection success={testResult.attack_success}>
+                <ResultLabel>攻击成功</ResultLabel>
+                <ResultValue success={testResult.attack_success}>
+                  {testResult.attack_success ? '✅ 是' : '❌ 否'}
+                </ResultValue>
+              </ResultSection>
+
+              <ResultSection success={testResult.attack_success}>
+                <ResultLabel>验证输出</ResultLabel>
+                <OutputBox>
+                  {testResult.verify_output || '无验证输出'}
+                </OutputBox>
+              </ResultSection>
+
+              {testResult.attack_output && (
+                <ResultSection>
+                  <ResultLabel>攻击输出（部分）</ResultLabel>
+                  <OutputBox>
+                    {testResult.attack_output}
+                  </OutputBox>
+                </ResultSection>
+              )}
+            </ModalBody>
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </Container>
   );
 };

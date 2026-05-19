@@ -269,6 +269,20 @@ def update_task_status_callback(task_id: str, status: str, message: str):
                     SET status = 'stopped', stop_time = NOW()
                     WHERE task_id = %s
                 """, (task_id,))
+        elif task_id.startswith('tcp-rst'):
+            if status in ["已完成", "已停止", "错误"]:
+                cursor.execute("""
+                    UPDATE tcp_rst_task
+                    SET status = 'stopped', stop_time = NOW()
+                    WHERE task_id = %s
+                """, (task_id,))
+        elif task_id.startswith('compute-consume'):
+            if status in ["已完成", "已停止", "错误"]:
+                cursor.execute("""
+                    UPDATE compute_consume_task
+                    SET status = 'stopped', stop_time = NOW()
+                    WHERE task_id = %s
+                """, (task_id,))
         
         conn.commit()
         conn.close()
@@ -385,6 +399,42 @@ def init_suppression_tables():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         
+        # TCP RST攻击任务表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tcp_rst_task (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                task_id VARCHAR(100) UNIQUE NOT NULL,
+                attack_id VARCHAR(100) UNIQUE NOT NULL,
+                target_ip VARCHAR(45) NOT NULL,
+                target_port INT NOT NULL,
+                capture_interface VARCHAR(50),
+                inject_interface VARCHAR(50),
+                status VARCHAR(20) DEFAULT 'running',
+                start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                stop_time DATETIME,
+                INDEX idx_task_id (task_id),
+                INDEX idx_attack_id (attack_id),
+                INDEX idx_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        
+        # 计算资源消耗任务表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS compute_consume_task (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                task_id VARCHAR(100) UNIQUE NOT NULL,
+                target_url VARCHAR(500) NOT NULL,
+                rate INT DEFAULT 50,
+                concurrency INT DEFAULT 100,
+                duration INT DEFAULT 60,
+                status VARCHAR(20) DEFAULT 'running',
+                start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                stop_time DATETIME,
+                INDEX idx_task_id (task_id),
+                INDEX idx_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        
         conn.commit()
         logger.info("数据库表初始化完成")
     except Exception as e:
@@ -434,7 +484,32 @@ async def get_tasks():
         """)
         syn_tasks = cursor.fetchall()
         
-        all_tasks = port_tasks + syn_tasks
+        # 获取TCP RST攻击任务
+        cursor.execute("""
+            SELECT task_id, attack_id, target_ip as ip, target_port as port, 
+                   capture_interface, inject_interface,
+                   status, DATE_FORMAT(start_time, '%Y-%m-%d %H:%i:%s') as start_time,
+                   DATE_FORMAT(stop_time, '%Y-%m-%d %H:%i:%s') as stop_time,
+                   'tcp-syn-flood' as task_type
+            FROM tcp_rst_task
+            ORDER BY start_time DESC
+            LIMIT 100
+        """)
+        tcp_rst_tasks = cursor.fetchall()
+        
+        # 获取计算资源消耗任务
+        cursor.execute("""
+            SELECT task_id, target_url as url, rate, concurrency, duration,
+                   status, DATE_FORMAT(start_time, '%Y-%m-%d %H:%i:%s') as start_time,
+                   DATE_FORMAT(stop_time, '%Y-%m-%d %H:%i:%s') as stop_time,
+                   'compute-consume' as task_type
+            FROM compute_consume_task
+            ORDER BY start_time DESC
+            LIMIT 100
+        """)
+        compute_tasks = cursor.fetchall()
+        
+        all_tasks = port_tasks + syn_tasks + tcp_rst_tasks + compute_tasks
         # 排序时处理None值，None放在最后
         all_tasks.sort(key=lambda x: x.get('start_time') or '1900-01-01 00:00:00', reverse=True)
         
@@ -597,6 +672,22 @@ async def stop_task(task_id: str):
             # 尝试更新SYN洪水攻击任务
             cursor.execute("""
                 UPDATE syn_flood_task
+                SET status = 'stopped', stop_time = NOW()
+                WHERE task_id = %s AND status = 'running'
+            """, (task_id,))
+        
+        if cursor.rowcount == 0:
+            # 尝试更新TCP RST攻击任务
+            cursor.execute("""
+                UPDATE tcp_rst_task
+                SET status = 'stopped', stop_time = NOW()
+                WHERE task_id = %s AND status = 'running'
+            """, (task_id,))
+        
+        if cursor.rowcount == 0:
+            # 尝试更新计算资源消耗任务
+            cursor.execute("""
+                UPDATE compute_consume_task
                 SET status = 'stopped', stop_time = NOW()
                 WHERE task_id = %s AND status = 'running'
             """, (task_id,))
@@ -1019,3 +1110,243 @@ async def export_packet_loss_policies():
         raise HTTPException(status_code=500, detail=f"导出丢包策略失败: {str(e)}")
     finally:
         conn.close()
+
+# ==================== 新增策略API端点 ====================
+
+class ComputeConsumeRequest(BaseModel):
+    """计算资源消耗攻击请求模型 - 基于as_count_consume.py脚本"""
+    url: str = Field(..., description="目标URL")
+    rate: float = Field(50.0, ge=1, le=1000, description="每秒启动序列数")
+    concurrency: int = Field(100, ge=1, le=10000, description="并发序列数")
+    duration: int = Field(60, ge=1, le=3600, description="持续时间(秒)")
+    
+    @validator('url')
+    def validate_url(cls, v):
+        """验证目标URL"""
+        if not v or not v.strip():
+            raise ValueError('目标URL不能为空')
+        v = v.strip()
+        # 自动添加http://前缀
+        if not v.startswith('http://') and not v.startswith('https://'):
+            v = 'http://' + v
+        return v
+    
+    @validator('rate')
+    def validate_rate(cls, v):
+        """验证速率"""
+        if not isinstance(v, (int, float)) or v < 1:
+            raise ValueError('每秒序列数必须大于0')
+        if v > 1000:
+            raise ValueError('每秒序列数不能超过1000')
+        return v
+    
+    @validator('concurrency')
+    def validate_concurrency(cls, v):
+        """验证并发数"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError('并发数必须大于0')
+        if v > 10000:
+            raise ValueError('并发数不能超过10000')
+        return v
+    
+    @validator('duration')
+    def validate_duration(cls, v):
+        """验证持续时间"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError('持续时间必须大于0秒')
+        if v > 3600:
+            raise ValueError('持续时间不能超过3600秒(1小时)')
+        return v
+
+class TcpSynFloodRequest(BaseModel):
+    """TCP SYN洪水攻击请求模型"""
+    target: str = Field(..., description="目标地址")
+    port: int = Field(..., ge=1, le=65535, description="目标端口")
+    threads: int = Field(100, ge=1, le=1000, description="线程数")
+    duration: int = Field(60, ge=1, le=3600, description="持续时间(秒)")
+    rate: int = Field(1000, ge=1, le=100000, description="发送速率(包/秒)")
+    
+    @validator('target')
+    def validate_target(cls, v):
+        """验证目标地址"""
+        if not v or not v.strip():
+            raise ValueError('目标地址不能为空')
+        return v.strip()
+    
+    @validator('port')
+    def validate_port(cls, v):
+        """验证端口号"""
+        if not isinstance(v, int) or v < 1 or v > 65535:
+            raise ValueError(f'端口号必须在1-65535之间: {v}')
+        return v
+    
+    @validator('threads')
+    def validate_threads(cls, v):
+        """验证线程数"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError(f'线程数必须大于0: {v}')
+        if v > 1000:
+            raise ValueError(f'TCP SYN洪水攻击线程数不能超过1000: {v}')
+        return v
+    
+    @validator('duration')
+    def validate_duration(cls, v):
+        """验证持续时间"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError(f'持续时间必须大于0秒: {v}')
+        if v > 3600:
+            raise ValueError(f'持续时间不能超过3600秒(1小时): {v}')
+        return v
+    
+    @validator('rate')
+    def validate_rate(cls, v):
+        """验证速率"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError(f'速率必须大于0: {v}')
+        if v > 100000:
+            raise ValueError(f'速率不能超过100000包/秒: {v}')
+        return v
+
+class WitchAttackRequest(BaseModel):
+    """女巫攻击请求模型"""
+    target: str = Field(..., description="目标地址")
+    nodes: int = Field(10, ge=1, le=1000, description="节点数量")
+    duration: int = Field(60, ge=1, le=3600, description="持续时间(秒)")
+    strategy: Optional[str] = Field(None, description="攻击策略(已废弃)")
+    
+    @validator('target')
+    def validate_target(cls, v):
+        """验证目标地址"""
+        if not v or not v.strip():
+            raise ValueError('目标地址不能为空')
+        return v.strip()
+    
+    @validator('nodes')
+    def validate_nodes(cls, v):
+        """验证节点数量"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError(f'节点数量必须大于0: {v}')
+        if v > 1000:
+            raise ValueError(f'节点数量不能超过1000: {v}')
+        return v
+    
+    @validator('duration')
+    def validate_duration(cls, v):
+        """验证持续时间"""
+        if not isinstance(v, int) or v < 1:
+            raise ValueError(f'持续时间必须大于0秒: {v}')
+        if v > 3600:
+            raise ValueError(f'持续时间不能超过3600秒(1小时): {v}')
+        return v
+
+@router.post("/compute-consume/start")
+async def start_compute_consume(request: ComputeConsumeRequest, background_tasks: BackgroundTasks):
+    """启动计算资源消耗攻击 - 调用as_count_consume.py脚本"""
+    try:
+        # 生成唯一任务ID
+        task_id = f"compute-consume_{request.url.split('/')[2]}_{int(datetime.now().timestamp())}"
+        
+        # 获取脚本路径
+        script_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'suppression_scripts')
+        script_path = os.path.join(script_dir, 'as_count_consume.py')
+        
+        # 构建命令行参数
+        cmd = [
+            'python3',
+            script_path,
+            '-u', request.url,
+            '-r', str(request.rate),
+            '-c', str(request.concurrency),
+            '-d', str(request.duration)
+        ]
+        
+        # 启动子进程
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # 保存任务信息到数据库
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO compute_consume_task 
+                (task_id, target_url, rate, concurrency, duration, status, start_time)
+                VALUES (%s, %s, %s, %s, %s, 'running', NOW())
+            """, (
+                task_id,
+                request.url,
+                request.rate,
+                request.concurrency,
+                request.duration
+            ))
+            conn.commit()
+            logger.info(f"计算资源消耗任务已保存到数据库: {task_id}")
+        except Exception as db_error:
+            logger.error(f"保存任务到数据库失败: {db_error}")
+            conn.rollback()
+        finally:
+            conn.close()
+        
+        # 记录进程ID
+        with task_lock:
+            running_tasks[task_id] = process
+        
+        logger.info(f"计算资源消耗攻击任务启动成功: {task_id}, PID={process.pid}")
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "计算资源消耗攻击任务启动成功",
+                "task_id": task_id,
+                "pid": process.pid
+            }
+        )
+    except Exception as e:
+        logger.error(f"启动计算资源消耗攻击失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动计算资源消耗攻击失败: {str(e)}")
+
+@router.post("/tcp-syn-flood/start")
+async def start_tcp_syn_flood(request: TcpSynFloodRequest, background_tasks: BackgroundTasks):
+    """启动TCP SYN洪水攻击"""
+    try:
+        task_id = f"tcp-syn-flood_{request.target}_{request.port}_{int(datetime.now().timestamp())}"
+        
+        # TODO: 在这里实现TCP SYN洪水攻击的具体逻辑
+        # 目前先返回成功响应，预留实现位置
+        logger.info(f"TCP SYN洪水攻击任务启动: {task_id}")
+        
+        return JSONResponse(
+            content={
+                "status": "success", 
+                "message": "TCP SYN洪水攻击任务启动成功",
+                "task_id": task_id
+            }
+        )
+    except Exception as e:
+        logger.error(f"启动TCP SYN洪水攻击失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动TCP SYN洪水攻击失败: {str(e)}")
+
+@router.post("/witch-attack/start")
+async def start_witch_attack(request: WitchAttackRequest, background_tasks: BackgroundTasks):
+    """启动女巫攻击"""
+    try:
+        task_id = f"witch-attack_{request.target}_{request.strategy}_{int(datetime.now().timestamp())}"
+        
+        # TODO: 在这里实现女巫攻击的具体逻辑
+        # 目前先返回成功响应，预留实现位置
+        logger.info(f"女巫攻击任务启动: {task_id}")
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "女巫攻击任务启动成功", 
+                "task_id": task_id
+            }
+        )
+    except Exception as e:
+        logger.error(f"启动女巫攻击失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动女巫攻击失败: {str(e)}")

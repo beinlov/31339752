@@ -1,0 +1,42 @@
+创建DHT网络：
+	创建专用网络：docker network create kad-net
+	准备docker镜像：Dockerfile
+	构建镜像：docker build -t my-dht-node.
+DHT网络构建：
+	 main.py：
+		从环境变量读取节点配置（NODE_ID_HEX, PORT, BOOTSTRAP_HOST）
+		创建并启动 Kademlia 节点
+		如果配置了 bootstrap 节点，连接并加入网络
+		每10秒打印一次路由表信息（显示已知的其他节点）
+	启动攻击节点程序（sybil.py）：docker exec -it attacker python sybil.py
+				      （sybil-2.py）：docker exec -it attacker python sybil-2.py
+	测试1—verify_sybil_attack.py：验证女巫攻击是否成功
+		启动测试节点
+			测试1：直接 Ping node-1（测试底层连通性）
+			测试2：发送 FIND_NODE 请求（测试路由表污染）
+			分析返回的节点列表
+			识别合法节点 vs 女巫节点
+			计算女巫节点占比
+			输出攻击效果报告
+		docker exec -it node-2 python verify_sybil_attack.py
+	测试2—test_node2.py：测试 node-2 能否通过 DHT 网络找到 node-3
+		步骤1：枚举 node-1 的路由表（发送多次随机 FIND_NODE 查询）
+		步骤2：检查 node-3 是否在返回结果中
+		步骤3：如果找到，直接向 node-3 发送应用层 UDP 消息
+		docker exec -it node-2 python test_node2.py
+
+	node3_listen.py：node-3 的应用层监听服务
+		在 8001 端口（非 DHT 端口）监听 UDP 消息
+		接收任何请求后立即回复 ACK
+		用于测试 node-2 能否通过 DHT 发现并联系 node-3
+		docker exec -it node-3 python node3_listen.py 
+
+进入节点,执行python程序：docker exec -it node-x python3
+
+获取节点日志：docker logs node-1
+Remove-Item -Recurse -Force nodes_data：删除挂在目录
+
+协议级 Ping (Application-level RPC):
+运行在 应用层 (Layer 7) 或 传输层 (Layer 4, UDP/TCP)。
+在 Kademlia 或 BitTorrent 网络中，PING 是一种 RPC（远程过程调用）。它通常是发往特定端口（比如 6881）的一个 UDP 数据包。
+关键点：如果一个节点要参与 P2P 网络，它必须打开对应的应用端口。防火墙会允许发往该端口的 UDP 包通过，否则该节点将无法接收任何数据，也就彻底脱离了网络。

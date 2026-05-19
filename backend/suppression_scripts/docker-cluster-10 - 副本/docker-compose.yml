@@ -1,0 +1,168 @@
+version: '3.3'
+
+networks:
+  dht_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+services:
+  node-1:
+    image: dht-node:latest
+    container_name: node-1
+    hostname: node-1
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00623457
+
+  attacker:
+    image: dht-node:latest
+    container_name: attacker
+    networks:
+      - dht_net
+    entrypoint: ["sleep", "infinity"]
+    # 挂载最新的攻击脚本和验证脚本
+    volumes:
+      - ./sybil.py:/app/sybil.py
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    # 确保目标先启动
+    depends_on: [node-1] 
+
+  node-2:
+    image: dht-node:latest 
+    container_name: node-2
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00547832
+      - BOOTSTRAP_HOST=node-1
+
+  node-3:
+    image: dht-node:latest 
+    container_name: node-3
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00275278
+      - BOOTSTRAP_HOST=node-1
+
+  node-4:
+    image: dht-node:latest 
+    container_name: node-4
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00237418
+      - BOOTSTRAP_HOST=node-1
+
+  node-5:
+    image: dht-node:latest 
+    container_name: node-5
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00957358
+      - BOOTSTRAP_HOST=node-1
+
+  node-6:
+    image: dht-node:latest 
+    container_name: node-6
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00986574
+      - BOOTSTRAP_HOST=node-1
+
+  node-7:
+    image: dht-node:latest 
+    container_name: node-7
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00fd6752
+      - BOOTSTRAP_HOST=node-1
+
+  node-8:
+    image: dht-node:latest 
+    container_name: node-8
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=008578d7
+      - BOOTSTRAP_HOST=node-1
+
+  node-9:
+    image: dht-node:latest 
+    container_name: node-9
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=008a5d3a
+      - BOOTSTRAP_HOST=node-1
+
+  node-10:
+    image: dht-node:latest 
+    container_name: node-10
+    networks:
+      - dht_net
+    entrypoint: ["python3", "main.py"]
+    depends_on: [node-1]
+    # 挂载验证脚本
+    volumes:
+      - ./verify_sybil_attack.py:/app/verify_sybil_attack.py
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=0097ad54
+      - BOOTSTRAP_HOST=node-1

@@ -1,0 +1,280 @@
+# -*- coding: utf-8 -*-
+"""
+ÖÐ¼Ì½ÚµãÎÄ¼þAPIÄ£¿é - »ùÓÚÎÄ¼þÏµÍ³µÄÃüÁîÏÂ·¢ºÍ×´Ì¬¶ÁÈ¡
+
+¹¤×÷Ô­Àí:
+1. Æ½Ì¨Í¨¹ýSSH/SMB/HTTP½«ÃüÁîÎÄ¼þÐ´ÈëÖÐ¼ÌÎ»ÖÃµÄ commands/ Ä¿Â¼
+2. Æ½Ì¨¶¨Ê±¶ÁÈ¡ÖÐ¼ÌÎ»ÖÃ status/ Ä¿Â¼µÄ×´Ì¬ÎÄ¼þ
+"""
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional, List
+import json
+import logging
+import os
+from datetime import datetime
+from pathlib import Path
+import paramiko
+from config import RELAY_CONFIG
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+class TcpSynAttackRequest(BaseModel):
+    """TCP SYNºéË®¹¥»÷ÇëÇó"""
+    target_ip: str
+    target_port: int
+    capture_interface: Optional[str] = None
+    inject_interface: Optional[str] = None
+
+class RelayFileManager:
+    """ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷ - Í¨¹ýSSH/SFTP²Ù×÷Ô¶³ÌÎÄ¼þ"""
+    
+    def __init__(self, host: str, port: int, username: str, password: str, share_path: str):
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.share_path = share_path
+        
+    def _get_sftp_client(self):
+        """»ñÈ¡SFTP¿Í»§¶Ë"""
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(self.host, port=self.port, username=self.username, password=self.password)
+        return ssh.open_sftp(), ssh
+        
+    def write_command(self, attack_id: str, command_data: dict) -> bool:
+        """Ð´ÈëÃüÁîÎÄ¼þµ½ÖÐ¼ÌÎ»ÖÃ"""
+        try:
+            sftp, ssh = self._get_sftp_client()
+            
+            # ÃüÁîÎÄ¼þÂ·¾¶
+            remote_file = f"{self.share_path}/commands/{attack_id}_{int(datetime.now().timestamp())}.json"
+            
+            # Ð´ÈëÃüÁî
+            with sftp.open(remote_file, 'w') as f:
+                f.write(json.dumps(command_data, indent=2, ensure_ascii=False))
+                
+            logger.info(f"ÃüÁîÎÄ¼þÒÑÐ´Èë: {remote_file}")
+            
+            sftp.close()
+            ssh.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ð´ÈëÃüÁîÎÄ¼þÊ§°Ü: {e}")
+            return False
+            
+    def read_status(self, attack_id: str) -> Optional[dict]:
+        """¶ÁÈ¡¹¥»÷×´Ì¬ÎÄ¼þ"""
+        try:
+            sftp, ssh = self._get_sftp_client()
+            
+            # ×´Ì¬ÎÄ¼þÂ·¾¶
+            status_file = f"{self.share_path}/status/{attack_id}_status.json"
+            attack_file = f"{self.share_path}/status/{attack_id}_attack.json"
+            
+            result = {}
+            
+            # ¶ÁÈ¡Á¬½Ó×´Ì¬
+            try:
+                with sftp.open(status_file, 'r') as f:
+                    result['connections'] = json.load(f)
+            except FileNotFoundError:
+                result['connections'] = None
+                
+            # ¶ÁÈ¡¹¥»÷×´Ì¬
+            try:
+                with sftp.open(attack_file, 'r') as f:
+                    result['attack'] = json.load(f)
+            except FileNotFoundError:
+                result['attack'] = None
+                
+            sftp.close()
+            ssh.close()
+            
+            return result if result.get('connections') or result.get('attack') else None
+            
+        except Exception as e:
+            logger.error(f"¶ÁÈ¡×´Ì¬ÎÄ¼þÊ§°Ü: {e}")
+            return None
+            
+    def list_all_status(self) -> List[dict]:
+        """ÁÐ³öËùÓÐ×´Ì¬ÎÄ¼þ"""
+        try:
+            sftp, ssh = self._get_sftp_client()
+            
+            status_dir = f"{self.share_path}/status"
+            files = sftp.listdir(status_dir)
+            
+            all_status = []
+            for filename in files:
+                if filename.endswith('_status.json'):
+                    try:
+                        with sftp.open(f"{status_dir}/{filename}", 'r') as f:
+                            all_status.append(json.load(f))
+                    except Exception as e:
+                        logger.error(f"¶ÁÈ¡ÎÄ¼þ {filename} Ê§°Ü: {e}")
+                        
+            sftp.close()
+            ssh.close()
+            
+            return all_status
+            
+        except Exception as e:
+            logger.error(f"ÁÐ³ö×´Ì¬ÎÄ¼þÊ§°Ü: {e}")
+            return []
+
+# È«¾ÖÎÄ¼þ¹ÜÀíÆ÷ÊµÀý
+relay_manager = None
+
+def init_relay_manager():
+    """³õÊ¼»¯ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷"""
+    global relay_manager
+    try:
+        relay_manager = RelayFileManager(
+            host=RELAY_CONFIG['host'],
+            port=RELAY_CONFIG.get('port', 22),
+            username=RELAY_CONFIG['username'],
+            password=RELAY_CONFIG['password'],
+            share_path=RELAY_CONFIG['share_path']
+        )
+        logger.info("ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷³õÊ¼»¯³É¹¦")
+    except KeyError as e:
+        logger.error(f"ÅäÖÃÈ±ÉÙ±ØÒª×Ö¶Î: {e}")
+    except Exception as e:
+        logger.error(f"³õÊ¼»¯ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Ê§°Ü: {e}")
+
+@router.post("/relay-file/attack/start")
+async def start_attack_via_file(request: TcpSynAttackRequest):
+    """Í¨¹ýÎÄ¼þÏÂ·¢Æô¶¯¹¥»÷ÃüÁî"""
+    if not relay_manager:
+        raise HTTPException(status_code=500, detail="ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Î´³õÊ¼»¯")
+        
+    try:
+        attack_id = f"tcp-syn-{int(datetime.now().timestamp())}"
+        
+        command_data = {
+            'type': 'start_attack',
+            'attack_id': attack_id,
+            'target_ip': request.target_ip,
+            'target_port': request.target_port,
+            'capture_interface': request.capture_interface,
+            'inject_interface': request.inject_interface,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        success = relay_manager.write_command(attack_id, command_data)
+        
+        if success:
+            return {
+                'status': 'success',
+                'message': '¹¥»÷ÃüÁîÒÑÏÂ·¢',
+                'attack_id': attack_id
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Ð´ÈëÃüÁîÎÄ¼þÊ§°Ü")
+            
+    except Exception as e:
+        logger.error(f"ÏÂ·¢¹¥»÷ÃüÁîÊ§°Ü: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/relay-file/attack/stop")
+async def stop_attack_via_file(attack_id: str):
+    """Í¨¹ýÎÄ¼þÏÂ·¢Í£Ö¹¹¥»÷ÃüÁî"""
+    if not relay_manager:
+        raise HTTPException(status_code=500, detail="ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Î´³õÊ¼»¯")
+        
+    try:
+        command_data = {
+            'type': 'stop_attack',
+            'attack_id': attack_id,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        success = relay_manager.write_command(attack_id, command_data)
+        
+        if success:
+            return {
+                'status': 'success',
+                'message': 'Í£Ö¹ÃüÁîÒÑÏÂ·¢',
+                'attack_id': attack_id
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Ð´ÈëÃüÁîÎÄ¼þÊ§°Ü")
+            
+    except Exception as e:
+        logger.error(f"ÏÂ·¢Í£Ö¹ÃüÁîÊ§°Ü: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/relay-file/attack/{attack_id}/status")
+async def get_attack_status_from_file(attack_id: str):
+    """´ÓÎÄ¼þ¶ÁÈ¡¹¥»÷×´Ì¬"""
+    if not relay_manager:
+        raise HTTPException(status_code=500, detail="ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Î´³õÊ¼»¯")
+        
+    try:
+        status = relay_manager.read_status(attack_id)
+        
+        if status:
+            return {
+                'status': 'success',
+                'data': status
+            }
+        else:
+            return {
+                'status': 'not_found',
+                'message': '×´Ì¬ÎÄ¼þ²»´æÔÚ»òÉÐÎ´Éú³É'
+            }
+            
+    except Exception as e:
+        logger.error(f"¶ÁÈ¡×´Ì¬ÎÄ¼þÊ§°Ü: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/relay-file/status/all")
+async def get_all_status_from_file():
+    """¶ÁÈ¡ËùÓÐ¹¥»÷×´Ì¬"""
+    if not relay_manager:
+        raise HTTPException(status_code=500, detail="ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Î´³õÊ¼»¯")
+        
+    try:
+        all_status = relay_manager.list_all_status()
+        
+        return {
+            'status': 'success',
+            'data': all_status,
+            'count': len(all_status)
+        }
+            
+    except Exception as e:
+        logger.error(f"¶ÁÈ¡ËùÓÐ×´Ì¬Ê§°Ü: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/relay-file/health")
+async def check_relay_connection():
+    """¼ì²éÖÐ¼ÌÁ¬½Ó½¡¿µ×´Ì¬"""
+    if not relay_manager:
+        return {
+            'status': 'error',
+            'message': 'ÖÐ¼ÌÎÄ¼þ¹ÜÀíÆ÷Î´³õÊ¼»¯'
+        }
+        
+    try:
+        # ³¢ÊÔÁ¬½Ó²¢ÁÐ³öÄ¿Â¼
+        sftp, ssh = relay_manager._get_sftp_client()
+        files = sftp.listdir(relay_manager.share_path)
+        sftp.close()
+        ssh.close()
+        
+        return {
+            'status': 'healthy',
+            'message': 'ÖÐ¼ÌÁ¬½ÓÕý³£',
+            'share_path': relay_manager.share_path,
+            'files_count': len(files)
+        }
+    except Exception as e:
+        return {
+            'status': 'unhealthy',
+            'message': f'ÖÐ¼ÌÁ¬½ÓÒì³£: {str(e)}'
+        }

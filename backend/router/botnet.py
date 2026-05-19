@@ -181,19 +181,8 @@ async def get_botnet_rankings(mode: str = "global"):
             name = bot["name"]
             display_name = bot.get("display_name") or name
 
-            # 计算全球节点数量
+            # 计算全球活跃节点数量（使用global_botnet表的active_num字段）
             global_count = 0
-            node_table = f"botnet_nodes_{name}"
-            cursor.execute("""
-                SELECT COUNT(*) AS cnt FROM information_schema.tables
-                WHERE table_schema = %s AND table_name = %s
-            """, (DB_CONFIG['database'], node_table))
-            if cursor.fetchone()["cnt"] > 0:
-                cursor.execute(f"SELECT COUNT(*) AS total FROM {node_table}")
-                global_count = cursor.fetchone()["total"] or 0
-
-            # 计算中国影响程度（global表的中国 infected_num）
-            china_count = 0
             global_table = f"global_botnet_{name}"
             cursor.execute("""
                 SELECT COUNT(*) AS cnt FROM information_schema.tables
@@ -201,13 +190,22 @@ async def get_botnet_rankings(mode: str = "global"):
             """, (DB_CONFIG['database'], global_table))
             if cursor.fetchone()["cnt"] > 0:
                 cursor.execute(f"""
-                    SELECT infected_num FROM {global_table}
-                    WHERE country = %s
-                    LIMIT 1
-                """, ("中国",))
-                row = cursor.fetchone()
-                if row:
-                    china_count = row.get("infected_num") or 0
+                    SELECT COALESCE(SUM(active_num), 0) AS total FROM {global_table}
+                """)
+                global_count = cursor.fetchone()["total"] or 0
+
+            # 计算中国活跃节点数量（使用china_botnet表的active_num字段）
+            china_count = 0
+            china_table = f"china_botnet_{name}"
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            """, (DB_CONFIG['database'], china_table))
+            if cursor.fetchone()["cnt"] > 0:
+                cursor.execute(f"""
+                    SELECT COALESCE(SUM(active_num), 0) AS total FROM {china_table}
+                """)
+                china_count = cursor.fetchone()["total"] or 0
 
             results.append({
                 "name": name,

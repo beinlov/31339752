@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { getApiUrl } from '../config/api';
+import { currentUserHasPermission, isCurrentUserReadOnly, USER_ROLES } from '../utils/permissions';
 
 const Container = styled.div`
   padding: 40px 50px;
@@ -375,6 +376,10 @@ const FormHeader = styled.div`
 `;
 
 const BotnetRegistration = () => {
+  // 权限控制
+  const isReadOnly = isCurrentUserReadOnly();
+  const hasAdminPermission = currentUserHasPermission(USER_ROLES.ADMIN);
+  
   const [formData, setFormData] = useState({
     name: '',
     display_name: '',
@@ -542,7 +547,11 @@ const BotnetRegistration = () => {
         
         {error && <ErrorMessage>{error}</ErrorMessage>}
         
-        <SubmitButton type="submit" disabled={isSubmitting}>
+        <SubmitButton 
+          type="submit" 
+          disabled={isSubmitting || isReadOnly}
+          title={isReadOnly ? '仅管理员可使用此功能' : ''}
+        >
           <span className="iconfont">&#xe146;</span>
           {isSubmitting ? '添加中...' : '添加新僵尸网络'}
         </SubmitButton>

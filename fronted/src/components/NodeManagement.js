@@ -393,6 +393,89 @@ const LoadingOverlay = styled.div`
   backdrop-filter: blur(2px);
 `;
 
+// 下载按钮容器
+const DownloadButtonContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const DownloadButton = styled.button`
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%);
+  color: white;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  min-width: 140px;
+
+  &:hover {
+    background: linear-gradient(135deg, #1b5e20 0%, #388e3c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+    border-color: rgba(76, 175, 80, 0.6);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: linear-gradient(135deg, #616161 0%, #424242 100%);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.7;
+  }
+`;
+
+const ExportMenu = styled.div`
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, rgba(15, 25, 35, 0.95) 0%, rgba(26, 35, 50, 0.95) 100%);
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  padding: 8px 0;
+  min-width: 200px;
+  z-index: 1001;
+  backdrop-filter: blur(10px);
+`;
+
+const ExportMenuItem = styled.button`
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #e0e0e0;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &:hover {
+    background: rgba(26, 115, 232, 0.2);
+    color: #64b5f6;
+  }
+
+  &:disabled {
+    color: #666;
+    cursor: not-allowed;
+  }
+`;
+
 const Spinner = styled.div`
   border: 4px solid rgba(100, 181, 246, 0.1);
   border-radius: 50%;
@@ -503,6 +586,10 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
   // 通信记录弹窗相关状态
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [selectedIp, setSelectedIp] = useState(null);
+  
+  // 下载功能相关状态
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // 当从 props 接收到新的 networkType 时更新本地状态
   useEffect(() => {
@@ -693,6 +780,66 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
       selectedCount: selectedNodes.length
     }));
   }, [selectedNodes]);
+
+  // 下载功能处理函数
+  const handleExport = async (exportType, tableType) => {
+    if (!networkType) {
+      alert('请先选择僵尸网络类型');
+      return;
+    }
+
+    setIsExporting(true);
+    setShowExportMenu(false);
+
+    try {
+      const baseUrl = getApiUrl('/api/export/csv');
+      const params = new URLSearchParams({
+        botnet_type: networkType,
+        table_type: tableType
+      });
+
+      // 如果是合并导出，使用不同的接口
+      const url = exportType === 'combined' 
+        ? getApiUrl(`/api/export/csv/combined?${params.toString()}`)
+        : `${baseUrl}?${params.toString()}`;
+
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `导出失败: ${response.statusText}`);
+      }
+
+      // 获取文件名
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `export_${Date.now()}.csv`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // 创建下载链接
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      console.log(`${exportType === 'combined' ? '合并' : tableType}数据导出成功`);
+
+    } catch (error) {
+      console.error('导出失败:', error);
+      alert(`导出失败: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // 后端已处理搜索过滤，直接使用返回的节点数据
   const displayedNodes = useMemo(() => {
@@ -1065,6 +1212,63 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
         </TableContainer>
 
         <Pagination>
+          <DownloadButtonContainer>
+            <div style={{ position: 'relative' }}>
+              <DownloadButton
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                disabled={isExporting || !networkType}
+                style={{ minWidth: '120px', fontSize: '12px' }}
+                title={networkType ? '导出数据' : '请先选择僵尸网络类型'}
+              >
+                {isExporting ? (
+                  <>
+                    <div style={{
+                      width: '14px',
+                      height: '14px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderRadius: '50%',
+                      borderTop: '2px solid white',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    导出中...
+                  </>
+                ) : (
+                  <>
+                    <span>📥</span>
+                    导出数据
+                  </>
+                )}
+              </DownloadButton>
+
+              {/* 导出菜单 */}
+              {showExportMenu && !isExporting && (
+                <ExportMenu>
+                  <ExportMenuItem
+                    onClick={() => handleExport('nodes', 'nodes')}
+                    disabled={!networkType}
+                  >
+                    <span>📊</span>
+                    导出节点数据
+                  </ExportMenuItem>
+                  <ExportMenuItem
+                    onClick={() => handleExport('communications', 'communications')}
+                    disabled={!networkType}
+                  >
+                    <span>📡</span>
+                    导出通信数据
+                  </ExportMenuItem>
+                  <ExportMenuItem
+                    onClick={() => handleExport('combined', 'combined')}
+                    disabled={!networkType}
+                  >
+                    <span>📦</span>
+                    导出完整数据
+                  </ExportMenuItem>
+                </ExportMenu>
+              )}
+            </div>
+          </DownloadButtonContainer>
+
           <PageButton
             onClick={() => setCurrentPage(1)}
             disabled={currentPage === 1 || isLoading}
@@ -1150,7 +1354,23 @@ const NodeManagement = ({ networkType: propNetworkType }) => {
           }}
         />
       )}
-    </Container>
+
+      {/* 点击其他地方关闭导出菜单 */}
+      {showExportMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999
+          }}
+          onClick={() => setShowExportMenu(false)}
+        />
+      )}
+
+          </Container>
   );
 };
 

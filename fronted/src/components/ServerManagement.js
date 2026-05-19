@@ -5,6 +5,7 @@ import { Table, Button, Modal, Form, Input, Select, message, Popconfirm } from '
 import { PlusOutlined, EditOutlined, DeleteOutlined, CodeOutlined, ClearOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { getApiUrl } from '../config/api';
+import { currentUserHasPermission, isCurrentUserReadOnly, USER_ROLES } from '../utils/permissions';
 
 const { Option } = Select;
 
@@ -396,6 +397,10 @@ const PageTitle = styled.div`
 `;
 
 const ServerManagement = () => {
+  // 权限控制
+  const isReadOnly = isCurrentUserReadOnly();
+  const hasAdminPermission = currentUserHasPermission(USER_ROLES.ADMIN);
+  
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -615,6 +620,8 @@ const ServerManagement = () => {
             type="link" 
             icon={<EditOutlined />} 
             onClick={() => handleEdit(record)}
+            disabled={isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
           >
             编辑
           </Button>
@@ -623,11 +630,14 @@ const ServerManagement = () => {
             onConfirm={() => handleDelete(record.id)}
             okText="确定"
             cancelText="取消"
+            disabled={isReadOnly}
           >
             <Button 
               type="link" 
               danger 
               icon={<DeleteOutlined />}
+              disabled={isReadOnly}
+              title={isReadOnly ? '仅管理员可使用此功能' : ''}
             >
               删除
             </Button>
@@ -738,10 +748,12 @@ const ServerManagement = () => {
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={showAddModal}
+            disabled={isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
             style={{
-              background: 'linear-gradient(90deg, #0078d4, #106ebe)',
+              background: isReadOnly ? '#d9d9d9' : 'linear-gradient(90deg, #0078d4, #106ebe)',
               border: 'none',
-              boxShadow: '0 2px 8px rgba(0, 120, 215, 0.4)'
+              boxShadow: isReadOnly ? 'none' : '0 2px 8px rgba(0, 120, 215, 0.4)'
             }}
           >
             添加服务器
@@ -778,10 +790,20 @@ const ServerManagement = () => {
             </span>
           </TerminalTitle>
           <TerminalControls>
-            <TerminalBtn onClick={clearTerminal} title="清空终端">
+            <TerminalBtn 
+              onClick={clearTerminal} 
+              title={isReadOnly ? '仅管理员可使用此功能' : '清空终端'}
+              disabled={isReadOnly}
+              style={{ opacity: isReadOnly ? 0.5 : 1 }}
+            >
               <ClearOutlined /> 清空
             </TerminalBtn>
-            <TerminalBtn onClick={() => setExpanded(!expanded)} title={expanded ? '收起' : '展开'}>
+            <TerminalBtn 
+              onClick={() => setExpanded(!expanded)} 
+              title={isReadOnly ? '仅管理员可使用此功能' : (expanded ? '收起' : '展开')}
+              disabled={isReadOnly}
+              style={{ opacity: isReadOnly ? 0.5 : 1 }}
+            >
               {expanded ? <CompressOutlined /> : <ExpandOutlined />}
               {expanded ? '收起' : '展开'}
             </TerminalBtn>
@@ -801,14 +823,19 @@ const ServerManagement = () => {
           <PromptText>PS C:\&gt;</PromptText>
           <TerminalInput
             ref={inputRef}
-            placeholder={busy ? '命令执行中...' : '输入 PowerShell 命令，按 Enter 执行，↑↓ 浏览历史...'}
+            placeholder={busy ? '命令执行中...' : (isReadOnly ? '仅管理员可使用此功能' : '输入 PowerShell 命令，按 Enter 执行，↑↓ 浏览历史...')}
             value={command}
             onChange={e => setCommand(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={busy}
-            autoFocus
+            disabled={busy || isReadOnly}
+            autoFocus={!isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
           />
-          <RunButton onClick={runCommand} disabled={busy || !command.trim()}>
+          <RunButton 
+            onClick={runCommand} 
+            disabled={busy || !command.trim() || isReadOnly}
+            title={isReadOnly ? '仅管理员可使用此功能' : ''}
+          >
             {busy ? '执行中' : '▶ 运行'}
           </RunButton>
         </TerminalInputRow>

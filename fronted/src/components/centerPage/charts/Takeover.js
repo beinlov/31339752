@@ -49,10 +49,9 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
   const classes = useStyles();
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   
-  // 获取用户角色，判断是否有操作权限
-  const userRole = localStorage.getItem('role');
-  const canOperate = userRole === '管理员' || userRole === '操作员';  // 只有管理员和操作员可以操作
-  const isGuest = userRole === '访客';  // 访客只能查看
+  // 获取用户名，判断是否有操作权限
+  const username = localStorage.getItem('username');
+  const canOperate = username === 'admin';  // 只有admin账户可以操作一键清除
 
   const handleClean = () => {
     // 打开清除模态框
@@ -64,13 +63,13 @@ const Takeover = ({ dispatch, selectedNetwork, botnetData }) => {
       <Box className={classes.buttonContainer}>
         <Box 
           className={classes.actionButton}
-          onClick={undefined}
+          onClick={canOperate ? handleClean : undefined}
           style={{ 
-            opacity: 0.5, 
-            cursor: 'not-allowed',
-            pointerEvents: 'none'
+            opacity: canOperate ? 1 : 0.5, 
+            cursor: canOperate ? 'pointer' : 'not-allowed',
+            pointerEvents: canOperate ? 'auto' : 'none'
           }}
-          title='此按钮已被禁用'
+          title={canOperate ? '点击清除僵尸网络' : '您没有权限执行此操作（仅admin账户可用）'}
         >
           <Typography className={classes.buttonText}>
             一键清除

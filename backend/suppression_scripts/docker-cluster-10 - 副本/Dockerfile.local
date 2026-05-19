@@ -1,0 +1,22 @@
+FROM ubuntu:20.04
+
+# 避免交互式提示
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# 安装Python3（使用apt，无需外网下载Python镜像）
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# 复制代码
+COPY . .
+
+# 暴露UDP端口
+EXPOSE 8000/udp
+
+# 启动命令
+CMD ["python3", "main.py"]

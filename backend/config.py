@@ -57,7 +57,9 @@ ALLOWED_BOTNET_TYPES = [
     'moobot',
     'ramnit',
     'leethozer',
-    'utg_q_008'
+    'utg_q_008',
+    'autoupdate',
+    'fodcha'
 ]
 
 # ============================================================
@@ -164,6 +166,18 @@ BOTNET_CONFIG = {
         'enabled': True,
         'description': 'UTG-q-008僵尸网络'
     },
+    'autoupdate': {
+        'log_dir': os.path.join(LOGS_DIR, 'autoupdate'),
+        'important_events': ['scan', 'exploit', 'infection', 'beacon'],
+        'enabled': True,
+        'description': 'Autoupdate僵尸网络'
+    },
+    'fodcha': {
+        'log_dir': os.path.join(LOGS_DIR, 'Fodcha'),
+        'important_events': ['scan', 'exploit', 'infection', 'beacon'],
+        'enabled': True,
+        'description': 'Fodcha僵尸网络'
+    }
 }
 
 # ============================================================
@@ -354,16 +368,19 @@ BACKPRESSURE_CONFIG = {
 # 注意：API密钥应该从环境变量读取，这里仅作示例
 # 警告：生产环境必须使用HTTPS协议
 C2_ENDPOINTS = [
-    # 示例配置1 - 远程C2服务器
+    # 中继节点配置 - 从中继节点拉取C2数据
     {
          'name': 'C2-utg_q_008-remote',
          'url': os.environ.get('C2_ENDPOINT_1', 'http://43.99.37.118:8888'),  # ⬅️ 改为你的公网IP
          'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),
+
+         'url': os.environ.get('C2_ENDPOINT_1', 'http://43.132.149.145:8888'),  # 中继节点地址
+         'api_key': os.environ.get('C2_API_KEY_1', 'KiypG4zWLXqnREqGPH8L2Oh9ybvi6Yh4'),  # ⚠️ 需与中继节点配置的API密钥一致
          'enabled': True,
          'pull_interval': C2_PULL_INTERVAL_MINUTES * 60,  # 使用统一配置（转换为秒）
          'batch_size': 5000,   # 每次拉取数量
          'timeout': 30,        # 请求超时（秒）
-         'verify_ssl': False,  # HTTP不需要验证SSL（如果是HTTPS改为True）
+         'verify_ssl': False,  # HTTP不需要验证SSL（如果中继节点启用HTTPS改为True）
      },
     # 示例配置2
     # {
@@ -547,3 +564,64 @@ C2_CLEANUP_CONFIG = {
         }
     }
 }
+
+# ============================================================
+# 抑制阻断策略SSH配置（Suppression Strategies SSH Config）
+# ============================================================
+
+# TCP RST攻击 - 中继节点SSH配置
+TCP_RST_CONFIG = {
+    # 中继节点SSH连接信息
+    'host': os.environ.get('TCP_RST_HOST', '192.168.1.100'),      # 中继节点IP地址
+    'port': int(os.environ.get('TCP_RST_PORT', '22')),            # SSH端口
+    'username': os.environ.get('TCP_RST_USERNAME', 'relay'),      # SSH用户名
+    'password': os.environ.get('TCP_RST_PASSWORD', 'relay123'),   # SSH密码
+    
+    # 共享目录路径（中继节点上的绝对路径）
+    'share_path': os.environ.get('TCP_RST_SHARE_PATH', '/opt/relay_share'),
+    
+    # 轮询间隔（秒）- 平台读取状态文件的频率
+    'poll_interval': int(os.environ.get('TCP_RST_POLL_INTERVAL', '2')),
+    
+    # 连接超时（秒）
+    'connection_timeout': int(os.environ.get('TCP_RST_TIMEOUT', '10')),
+    
+    # 是否启用
+    'enabled': os.environ.get('TCP_RST_ENABLED', 'true').lower() == 'true',
+}
+
+# IP黑名单 - 网关设备SSH配置
+IP_BLACKLIST_CONFIG = {
+    'host': os.environ.get('IP_BLACKLIST_HOST', '192.168.1.200'),       # 网关设备IP
+    'port': int(os.environ.get('IP_BLACKLIST_PORT', '22')),
+    'username': os.environ.get('IP_BLACKLIST_USERNAME', 'gateway'),
+    'password': os.environ.get('IP_BLACKLIST_PASSWORD', 'gateway123'),
+    'config_path': os.environ.get('IP_BLACKLIST_PATH', '/opt/suppression_config'),  # 远程配置目录
+    'connection_timeout': int(os.environ.get('IP_BLACKLIST_TIMEOUT', '10')),
+    'enabled': os.environ.get('IP_BLACKLIST_ENABLED', 'true').lower() == 'true',
+}
+
+# 域名黑名单 - DNS服务器SSH配置
+DOMAIN_BLACKLIST_CONFIG = {
+    'host': os.environ.get('DOMAIN_BLACKLIST_HOST', '192.168.1.201'),   # DNS服务器IP
+    'port': int(os.environ.get('DOMAIN_BLACKLIST_PORT', '22')),
+    'username': os.environ.get('DOMAIN_BLACKLIST_USERNAME', 'dns'),
+    'password': os.environ.get('DOMAIN_BLACKLIST_PASSWORD', 'dns123'),
+    'config_path': os.environ.get('DOMAIN_BLACKLIST_PATH', '/opt/suppression_config'),
+    'connection_timeout': int(os.environ.get('DOMAIN_BLACKLIST_TIMEOUT', '10')),
+    'enabled': os.environ.get('DOMAIN_BLACKLIST_ENABLED', 'true').lower() == 'true',
+}
+
+# 丢包策略 - 网关设备SSH配置
+PACKET_LOSS_CONFIG = {
+    'host': os.environ.get('PACKET_LOSS_HOST', '192.168.1.200'),        # 网关设备IP（可与IP黑名单同一设备）
+    'port': int(os.environ.get('PACKET_LOSS_PORT', '22')),
+    'username': os.environ.get('PACKET_LOSS_USERNAME', 'gateway'),
+    'password': os.environ.get('PACKET_LOSS_PASSWORD', 'gateway123'),
+    'config_path': os.environ.get('PACKET_LOSS_PATH', '/opt/suppression_config'),
+    'connection_timeout': int(os.environ.get('PACKET_LOSS_TIMEOUT', '10')),
+    'enabled': os.environ.get('PACKET_LOSS_ENABLED', 'true').lower() == 'true',
+}
+
+# 向后兼容：RELAY_CONFIG指向TCP_RST_CONFIG
+RELAY_CONFIG = TCP_RST_CONFIG

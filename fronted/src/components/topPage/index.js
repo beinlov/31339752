@@ -75,9 +75,9 @@ class TopPage extends PureComponent {
   render() {
     const { title, dateStr, timeStr, weekDay, loading } = this.state;
     
-    // 获取用户角色
-    const userRole = localStorage.getItem('role');
-    const isAdmin = userRole === '管理员';
+    // 获取用户信息 - 所有登录用户都显示返回按钮
+    const username = localStorage.getItem('username');
+    const showBackButton = !!username; // 只要有登录用户就显示返回按钮
     
     if (loading) {
       return (
@@ -118,8 +118,8 @@ class TopPage extends PureComponent {
               />
             </div>
             <Decoration10 className='top_decoration10 top_decoration10_reverse' />
-            {/* 只有管理员才显示返回按钮 */}
-            {isAdmin && (
+            {/* 所有登录用户都显示返回按钮 */}
+            {showBackButton && (
               <BackButton onClick={this.handleBackClick}>
                 <span className='back-icon'>←</span>
                 <span className='back-text'>返回</span>

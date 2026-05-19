@@ -1,0 +1,59 @@
+version: '3'
+
+networks:
+  dht_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+services:
+  # 目标节点
+  node-1:
+    build: .
+    container_name: node-1
+    hostname: node-1
+    networks:
+      dht_net:
+        ipv4_address: 172.25.0.10
+    environment:
+      - PORT=8000
+      - NODE_ID_HEX=00623457
+
+  # 女巫攻击节点 - 每个独立IP
+  # 这模拟了"多IP攻击"，但仍需多容器
+  sybil-node-1:
+  
+    build: .
+    networks:
+      dht_net:
+        ipv4_address: 172.25.1.1  # 独立IP
+    depends_on: [node-1]
+    command: python sybil_single_node.py 0
+    
+  sybil-node-2:
+    build: .
+    networks:
+      dht_net:
+        ipv4_address: 172.25.1.2
+    depends_on: [node-1]
+    command: python sybil_single_node.py 1
+    
+  sybil-node-3:
+    build: .
+    networks:
+      dht_net:
+        ipv4_address: 172.25.1.3
+    depends_on: [node-1]
+    command: python sybil_single_node.py 2
+    
+  # ... 可以继续添加更多容器，每个有独立IP
+  # 但这不是"单机伪造IP"，而是"多容器多IP"
+  
+  sybil-node-10:
+    build: .
+    networks:
+      dht_net:
+        ipv4_address: 172.25.1.10
+    depends_on: [node-1]
+    command: python sybil_single_node.py 9

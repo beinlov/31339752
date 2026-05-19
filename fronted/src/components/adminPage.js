@@ -5,7 +5,7 @@ import { Select } from 'antd';
 import NodeManagement from './NodeManagement';
 import LogContent from './LogContent';
 import UserContent from './UserContent';
-import ReportContent from './ReportContent';
+import ControllabilityAssessmentV2 from './ControllabilityAssessmentV2';
 import ExtensionContent from './ExtensionContent';
 import BotnetRegistration from './BotnetRegistration';
 import NodeDistribution from './NodeDistribution';
@@ -416,10 +416,10 @@ const AdminPage = ({ history }) => {
         icon: '🛡️'
       },
       {
-        id: 'report',
-        name: '节点失控日志',
-        component: ReportContent,
-        icon: '&#xe86e;'
+        id: 'controllability',
+        name: '僵尸网络可控性评估',
+        component: ControllabilityAssessmentV2,
+        icon: '📊'
       },
       {
         id: 'register_botnet',

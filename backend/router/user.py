@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import bcrypt
 import logging
 import hashlib
+import secrets
 from config import DB_CONFIG, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from auth_middleware import require_admin
 
@@ -17,6 +18,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 一次性登录token存储（生产环境建议使用Redis）
+# 格式: {token: {"username": str, "password": str, "expires_at": datetime, "used": bool}}
+login_tokens = {}
 
 # 数据模型
 class User(BaseModel):
@@ -82,6 +87,65 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # 用于生成测试哈希的辅助函数
 def generate_test_hash(password: str = 'admin123') -> str:
     return get_password_hash(password)
+
+def generate_login_token(username: str, password: str, expires_minutes: int = 30) -> str:
+    """
+    生成一次性登录token
+    
+    Args:
+        username: 用户名
+        password: 密码（明文）
+        expires_minutes: token过期时间（分钟），默认30分钟
+    
+    Returns:
+        token字符串
+    """
+    # 生成随机token
+    token = secrets.token_urlsafe(32)
+    
+    # 存储token信息
+    login_tokens[token] = {
+        "username": username,
+        "password": password,
+        "expires_at": datetime.now() + timedelta(minutes=expires_minutes),
+        "used": False
+    }
+    
+    logger.info(f"Generated login token for user: {username}, expires in {expires_minutes} minutes")
+    return token
+
+def verify_login_token(token: str) -> Optional[dict]:
+    """
+    验证登录token（在有效期内可重复使用）
+    
+    Args:
+        token: token字符串
+    
+    Returns:
+        如果token有效，返回用户信息字典 {"username": str, "password": str}
+        如果token无效或过期，返回None
+    """
+    if token not in login_tokens:
+        logger.warning(f"Invalid login token: {token[:10]}...")
+        return None
+    
+    token_info = login_tokens[token]
+    
+    # 检查是否过期
+    if datetime.now() > token_info["expires_at"]:
+        logger.warning(f"Login token expired: {token[:10]}...")
+        del login_tokens[token]  # 清理过期token
+        return None
+    
+    # 返回用户信息（不标记为已使用，允许重复使用）
+    user_info = {
+        "username": token_info["username"],
+        "password": token_info["password"]
+    }
+    
+    logger.info(f"Login token verified for user: {user_info['username']}")
+    
+    return user_info
 
 # 路由
 @router.post("/login", response_model=Token)
@@ -156,21 +220,111 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         if conn:
             conn.close()
 
-@router.get("/auto-login", response_model=Token)
-async def auto_login(username: str, password: str):
+@router.post("/generate-login-token")
+async def generate_login_token_endpoint(username: str, password: str, expires_minutes: int = 30):
     """
-    URL参数免登录接口
+    生成登录token接口
     
-    用于外部平台通过URL参数直接登录，绕过登录页面。
+    此接口供其他平台调用，生成一个登录token。
+    其他平台获取到token后，可以通过URL跳转：
+    http://your-domain:9000/login?token=<生成的token>
     
-    使用方式：
+    安全特性：
+    - token在有效期内可重复使用
+    - token有过期时间（默认30分钟）
+    
+    参数：
+    - username: 用户名
+    - password: 密码（明文，仅用于生成token）
+    - expires_minutes: token过期时间（分钟），默认30分钟
+    
+    返回：
+    - token: 登录token
+    - expires_at: 过期时间
+    - login_url: 完整的登录URL
+    
+    使用示例：
+    1. 其他平台调用此接口生成token
+    2. 使用返回的login_url跳转到本平台
+    3. 本平台自动完成登录
+    """
+    conn = None
+    cursor = None
+    try:
+        logger.info(f"Token generation request for user: {username}")
+        
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # 验证用户名和密码
+        cursor.execute(
+            "SELECT id, username, password, role FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+        
+        if not user:
+            logger.warning(f"Token generation failed: User not found - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 验证密码
+        if not verify_password(password, user[2]):
+            logger.warning(f"Token generation failed: Invalid password for user - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 生成token
+        token = generate_login_token(username, password, expires_minutes)
+        expires_at = datetime.now() + timedelta(minutes=expires_minutes)
+        
+        # 构建登录URL（这里需要根据实际部署地址修改）
+        login_url = f"/login?token={token}"
+        
+        logger.info(f"Token generated successfully for user: {username}")
+        return {
+            "token": token,
+            "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "expires_in_seconds": expires_minutes * 60,
+            "login_url": login_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Token generation error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="生成登录token失败"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+@router.get("/auto-login", response_model=Token)
+async def auto_login(token: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None):
+    """
+    URL参数免登录接口（支持token和传统方式）
+    
+    **推荐使用token方式（更安全）：**
+    1. 先调用 /api/user/generate-login-token 生成token
+    2. 使用URL跳转: http://localhost:9000/login?token=<生成的token>
+    
+    **传统方式（兼容性，不推荐）：**
     http://localhost:9000/login?username=op1&password=123456
     
     前端会自动检测URL参数，调用此接口验证并自动登录。
     
     参数：
-    - username: 用户名
-    - password: 密码（明文）
+    - token: 一次性登录token（推荐）
+    - username: 用户名（传统方式）
+    - password: 密码明文（传统方式）
     
     返回：
     - access_token: JWT令牌
@@ -181,7 +335,30 @@ async def auto_login(username: str, password: str):
     conn = None
     cursor = None
     try:
-        logger.info(f"Auto-login attempt for user: {username}")
+        # 优先使用token方式
+        if token:
+            logger.info(f"Auto-login attempt with token: {token[:10]}...")
+            
+            # 验证token
+            user_info = verify_login_token(token)
+            if not user_info:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="登录token无效、已过期或已使用"
+                )
+            
+            username = user_info["username"]
+            password = user_info["password"]
+            logger.info(f"Token verified, auto-login for user: {username}")
+        
+        # 传统方式（兼容性）
+        elif username and password:
+            logger.info(f"Auto-login attempt with username/password (legacy mode): {username}")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请提供token或username+password参数"
+            )
         
         conn = pymysql.connect(**DB_CONFIG)
         cursor = conn.cursor()
@@ -531,4 +708,179 @@ async def get_user_operations():
         if 'cursor' in locals():
             cursor.close()
         if 'conn' in locals():
+            conn.close()
+
+
+@router.get("/generate-login-link")
+async def generate_login_link(
+    username: str,
+    password: str,
+    menu: Optional[str] = None,
+    frontend_url: str = "http://10.10.66.95:83",
+    expires_minutes: int = 30  # 默认30分钟有效期，避免用户点击时已过期
+):
+    conn = None
+    cursor = None
+    try:
+        logger.info(f"Generate login link request for user: {username}")
+        
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # 验证用户名和密码
+        cursor.execute(
+            "SELECT id, username, password, role FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+        
+        if not user:
+            logger.warning(f"Generate link failed: User not found - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 验证密码
+        if not verify_password(password, user[2]):
+            logger.warning(f"Generate link failed: Invalid password for user - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 生成token
+        token = generate_login_token(username, password, expires_minutes)
+        expires_at = datetime.now() + timedelta(minutes=expires_minutes)
+        
+        # 构建完整的登录URL
+        login_url = f"{frontend_url}/login?token={token}"
+        
+        # 添加menu参数
+        if menu:
+            login_url += f"&menu={menu}"
+        
+        logger.info(f"Login link generated for user: {username}")
+        
+        return {
+            "token": token,
+            "login_url": login_url,
+            "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "expires_in_seconds": expires_minutes * 60,
+            "menu": menu
+        }
+        
+    except Exception as e:
+        logger.error(f"Generate login link error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="生成登录链接失败"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@router.get("/legacy-login-redirect")
+async def legacy_login_redirect(
+    username: str,
+    password: str,
+    menu: Optional[str] = None
+):
+    """
+    传统登录URL重定向服务（临时方案）
+    
+    将传统的username/password URL自动转换为安全的token URL并重定向
+    
+    使用场景：
+    其他平台暂时无法修改代码，可以使用此接口作为过渡方案
+    
+    旧方式（其他平台原来的代码）：
+    跳转到: http://10.61.241.38:9000/login?username=admin&password=123456&menu=server
+    
+    新方式（只需修改URL路径）：
+    跳转到: http://10.61.241.38:8000/api/user/legacy-login-redirect?username=admin&password=123456&menu=server
+    
+    工作流程：
+    1. 其他平台跳转到此接口（带username/password）
+    2. 此接口验证用户，生成token
+    3. 返回302重定向到: /login?token=xxx&menu=xxx
+    4. 浏览器自动跳转（地址栏显示安全URL）
+    
+    注意：
+    - 虽然浏览器最终显示安全URL，但服务端仍接收明文密码
+    - 建议作为临时方案，长期应使用generate-login-link接口
+    
+    参数:
+    - username: 用户名
+    - password: 密码
+    - menu: 菜单参数（可选）
+    """
+    from fastapi.responses import RedirectResponse
+    
+    conn = None
+    cursor = None
+    try:
+        logger.info(f"Legacy login redirect request for user: {username}")
+        
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        
+        # 验证用户名和密码
+        cursor.execute(
+            "SELECT id, username, password, role FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+        
+        if not user:
+            logger.warning(f"Legacy redirect failed: User not found - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 验证密码
+        if not verify_password(password, user[2]):
+            logger.warning(f"Legacy redirect failed: Invalid password for user - {username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+        
+        # 生成token
+        token = generate_login_token(username, password, expires_minutes=5)
+        
+        # 构建重定向URL（相对路径，会重定向到前端）
+        redirect_url = f"/login?token={token}"
+        
+        # 添加menu参数
+        if menu:
+            redirect_url += f"&menu={menu}"
+        
+        logger.info(f"Redirecting to token-based login for user: {username}")
+        logger.info(f"Redirect URL: {redirect_url}")
+        
+        # 返回302重定向
+        return RedirectResponse(
+            url=redirect_url,
+            status_code=302
+        )
+        
+    except Exception as e:
+        logger.error(f"Legacy login redirect error: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="重定向失败"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
             conn.close()

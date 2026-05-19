@@ -22,8 +22,15 @@ from router.terminal import router as terminal_router
 from router.botnet_stats import router as botnet_stats_router
 from router.node_history import router as node_history_router
 from router.suppression import router as suppression_router
+from router.relay_file_api import router as relay_file_router
+from router.suppression_config_push import router as suppression_config_push_router
+from router.sybil_attack_test import router as sybil_attack_test_router
+# from router.sybil_distributed_attack import router as sybil_distributed_attack_router  # 已删除：VPS分布式攻击功能
 from router.cleanup import router as cleanup_router
 from router.takeover_stats_api import router as takeover_stats_router
+from router.export import router as export_router
+from router.controllability import router as controllability_router
+from router.controllability_v2 import router as controllability_v2_router
 
 import logging
 import re
@@ -116,17 +123,63 @@ app.include_router(terminal_router, prefix="/api", tags=["terminal"])
 # 包含抑制阻断策略路由
 app.include_router(suppression_router, prefix="/api/suppression", tags=["suppression-strategy"])
 
+# 包含中继节点文件API路由（基于SSH/SFTP的文件通信）
+app.include_router(relay_file_router, prefix="/api/suppression", tags=["relay-file-api"])
+
+# 包含抑制策略配置推送路由（基于SSH推送到网关设备）
+app.include_router(suppression_config_push_router, prefix="/api/suppression", tags=["config-push"])
+
+# 包含女巫攻击测试路由
+app.include_router(sybil_attack_test_router, prefix="/api/sybil-attack", tags=["sybil-attack-test"])
+
+# 包含分布式女巫攻击路由（真实网络环境）- 已删除
+# app.include_router(sybil_distributed_attack_router, prefix="/api/sybil-attack/distributed", tags=["sybil-distributed-attack"])
+
 # 包含一键清除路由
 app.include_router(cleanup_router, prefix="/api", tags=["cleanup"])
 
 # 包含接管节点统计API路由
 app.include_router(takeover_stats_router, tags=["takeover-statistics"])
 
+# 包含数据导出API路由
+app.include_router(export_router, prefix="/api/export", tags=["data-export"])
+
+# 包含可控性量化评估路由（旧版本，兼容）
+app.include_router(controllability_router, prefix="/api", tags=["controllability-assessment"])
+
+# 包含可控性量化评估路由v2（新版本，基于特征）
+app.include_router(controllability_v2_router, prefix="/api", tags=["controllability-assessment-v2"])
+
 # 包含数据推送接收路由（仅在push模式下启用）
 if DATA_TRANSFER_MODE == 'push' and PUSH_MODE_CONFIG.get('enabled', False):
     from api_push_receiver import router as push_receiver_router
     app.include_router(push_receiver_router, tags=["data-push"])
     logger.info("✅ 数据推送接收模式已启用 (DATA_TRANSFER_MODE=push)")
+
+# 应用启动事件
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时的初始化操作"""
+    from router.relay_file_api import init_relay_manager
+    from router.suppression_config_push import init_config_push_manager
+    from config import TCP_RST_CONFIG, IP_BLACKLIST_CONFIG, DOMAIN_BLACKLIST_CONFIG, PACKET_LOSS_CONFIG
+    
+    # 初始化TCP RST攻击中继文件管理器
+    if TCP_RST_CONFIG.get('enabled', True):
+        try:
+            init_relay_manager()
+            logger.info(f"✅ TCP RST攻击中继文件管理器已初始化 -> {TCP_RST_CONFIG['host']}")
+        except Exception as e:
+            logger.error(f"❌ TCP RST中继文件管理器初始化失败: {e}")
+    else:
+        logger.info("ℹ️  TCP RST中继文件通信模式未启用")
+    
+    # 初始化配置推送管理器（IP黑名单、域名黑名单、丢包策略）
+    try:
+        init_config_push_manager()
+        # 日志在init_config_push_manager内部打印
+    except Exception as e:
+        logger.error(f"❌ 配置推送管理器初始化失败: {e}")
 
 # 数据模型
 class ProvinceAmount(BaseModel):

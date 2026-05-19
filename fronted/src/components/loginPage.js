@@ -359,12 +359,68 @@ const LoginPage = ({ history }) => {
   React.useEffect(() => {
     const checkAutoLogin = async () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const tokenParam = urlParams.get('token'); // 优先检查token参数
       const urlUsername = urlParams.get('username');
       const urlPassword = urlParams.get('password');
       const menuParam = urlParams.get('menu'); // 获取要跳转的菜单参数
 
-      if (urlUsername && urlPassword) {
-        console.log('Auto-login detected with URL parameters');
+      // 优先使用token方式登录（更安全）
+      if (tokenParam) {
+        console.log('Auto-login detected with token parameter');
+        setIsLoading(true);
+        
+        try {
+          const response = await axios.get(
+            getApiUrl(`/api/user/auto-login?token=${encodeURIComponent(tokenParam)}`)
+          );
+
+          console.log('Token auto-login response:', response.data);
+
+          const { access_token, role, username: loggedInUsername } = response.data;
+
+          // 保存认证信息到localStorage
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('role', role);
+          localStorage.setItem('username', loggedInUsername);
+
+          console.log('Saved to localStorage:', {
+            token: access_token,
+            role: role,
+            username: loggedInUsername
+          });
+
+          // 如果有menu参数，保存到localStorage供AdminPage使用
+          if (menuParam) {
+            localStorage.setItem('initialMenu', menuParam);
+            console.log('Saved initial menu:', menuParam);
+          }
+
+          // 清除URL参数（安全考虑）
+          window.history.replaceState({}, document.title, window.location.pathname);
+
+          // 根据menu参数重定向到不同页面
+          if (menuParam) {
+            // 有menu参数 → 跳转到后台管理（不管什么角色）
+            console.log('Redirecting to /admin with menu:', menuParam);
+            history.push('/admin');
+          } else {
+            // 无menu参数 → 跳转到大屏展示（不管什么角色）
+            console.log('Redirecting to /index (no menu)');
+            history.push('/index');
+          }
+        } catch (error) {
+          console.error('Token auto-login error:', error);
+          if (error.response) {
+            setError(error.response.data.detail || 'Token登录失败，请手动登录');
+          } else {
+            setError('Token登录失败，请手动登录');
+          }
+          setIsLoading(false);
+        }
+      }
+      // 传统方式：使用username和password（兼容旧链接）
+      else if (urlUsername && urlPassword) {
+        console.log('Auto-login detected with username/password parameters');
         setIsLoading(true);
         
         try {
@@ -382,7 +438,7 @@ const LoginPage = ({ history }) => {
           localStorage.setItem('username', loggedInUsername);
 
           // 如果有menu参数，保存到localStorage供AdminPage使用
-          if (menuParam && role === '管理员') {
+          if (menuParam) {
             localStorage.setItem('initialMenu', menuParam);
             console.log('Saved initial menu:', menuParam);
           }
@@ -390,10 +446,14 @@ const LoginPage = ({ history }) => {
           // 清除URL参数（安全考虑）
           window.history.replaceState({}, document.title, window.location.pathname);
 
-          // 根据角色重定向到不同页面
-          if (role === '管理员') {
+          // 根据menu参数重定向到不同页面
+          if (menuParam) {
+            // 有menu参数 → 跳转到后台管理（不管什么角色）
+            console.log('Redirecting to /admin with menu:', menuParam);
             history.push('/admin');
           } else {
+            // 无menu参数 → 跳转到大屏展示（不管什么角色）
+            console.log('Redirecting to /index (no menu)');
             history.push('/index');
           }
         } catch (error) {
@@ -451,12 +511,9 @@ const LoginPage = ({ history }) => {
       localStorage.setItem('role', role);
       localStorage.setItem('username', loggedInUsername);
 
-      // 根据角色重定向到不同页面
-      if (role === '管理员') {
-        history.push('/admin');  // 管理员跳转到后台管理页面
-      } else {
-        history.push('/index');  // 操作员和访客都跳转到展示平台
-      }
+      // 手动登录没有menu参数，统一跳转到大屏展示界面
+      // 如果需要进入后台管理，可以点击"返回"按钮
+      history.push('/index');
     } catch (error) {
       console.error('Login error:', error);
       if (error.response) {
