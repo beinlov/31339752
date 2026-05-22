@@ -572,10 +572,10 @@ C2_CLEANUP_CONFIG = {
 # TCP RST攻击 - 中继节点SSH配置
 TCP_RST_CONFIG = {
     # 中继节点SSH连接信息
-    'host': os.environ.get('TCP_RST_HOST', '192.168.1.100'),      # 中继节点IP地址
+    'host': os.environ.get('TCP_RST_HOST', '192.168.137.4'),     # 中继节点IP地址（虚拟机）
     'port': int(os.environ.get('TCP_RST_PORT', '22')),            # SSH端口
-    'username': os.environ.get('TCP_RST_USERNAME', 'relay'),      # SSH用户名
-    'password': os.environ.get('TCP_RST_PASSWORD', 'relay123'),   # SSH密码
+    'username': os.environ.get('TCP_RST_USERNAME', 'yzzd'),       # SSH用户名
+    'password': os.environ.get('TCP_RST_PASSWORD', '123456'),     # SSH密码
     
     # 共享目录路径（中继节点上的绝对路径）
     'share_path': os.environ.get('TCP_RST_SHARE_PATH', '/opt/relay_share'),
@@ -592,10 +592,10 @@ TCP_RST_CONFIG = {
 
 # IP黑名单 - 网关设备SSH配置
 IP_BLACKLIST_CONFIG = {
-    'host': os.environ.get('IP_BLACKLIST_HOST', '192.168.1.200'),       # 网关设备IP
+    'host': os.environ.get('IP_BLACKLIST_HOST', '192.168.137.4'),       # 网关设备IP (虚拟机1)
     'port': int(os.environ.get('IP_BLACKLIST_PORT', '22')),
-    'username': os.environ.get('IP_BLACKLIST_USERNAME', 'gateway'),
-    'password': os.environ.get('IP_BLACKLIST_PASSWORD', 'gateway123'),
+    'username': os.environ.get('IP_BLACKLIST_USERNAME', 'yzzd'),
+    'password': os.environ.get('IP_BLACKLIST_PASSWORD', '123456'),  # 修改为虚拟机1的密码
     'config_path': os.environ.get('IP_BLACKLIST_PATH', '/opt/suppression_config'),  # 远程配置目录
     'connection_timeout': int(os.environ.get('IP_BLACKLIST_TIMEOUT', '10')),
     'enabled': os.environ.get('IP_BLACKLIST_ENABLED', 'true').lower() == 'true',
@@ -603,10 +603,10 @@ IP_BLACKLIST_CONFIG = {
 
 # 域名黑名单 - DNS服务器SSH配置
 DOMAIN_BLACKLIST_CONFIG = {
-    'host': os.environ.get('DOMAIN_BLACKLIST_HOST', '192.168.1.201'),   # DNS服务器IP
+    'host': os.environ.get('DOMAIN_BLACKLIST_HOST', '192.168.137.4'),   # DNS服务器IP (虚拟机1)
     'port': int(os.environ.get('DOMAIN_BLACKLIST_PORT', '22')),
-    'username': os.environ.get('DOMAIN_BLACKLIST_USERNAME', 'dns'),
-    'password': os.environ.get('DOMAIN_BLACKLIST_PASSWORD', 'dns123'),
+    'username': os.environ.get('DOMAIN_BLACKLIST_USERNAME', 'yzzd'),
+    'password': os.environ.get('DOMAIN_BLACKLIST_PASSWORD', '123456'),  # 修改为虚拟机1的密码
     'config_path': os.environ.get('DOMAIN_BLACKLIST_PATH', '/opt/suppression_config'),
     'connection_timeout': int(os.environ.get('DOMAIN_BLACKLIST_TIMEOUT', '10')),
     'enabled': os.environ.get('DOMAIN_BLACKLIST_ENABLED', 'true').lower() == 'true',
@@ -614,10 +614,10 @@ DOMAIN_BLACKLIST_CONFIG = {
 
 # 丢包策略 - 网关设备SSH配置
 PACKET_LOSS_CONFIG = {
-    'host': os.environ.get('PACKET_LOSS_HOST', '192.168.1.200'),        # 网关设备IP（可与IP黑名单同一设备）
+    'host': os.environ.get('PACKET_LOSS_HOST', '192.168.137.4'),        # 网关设备IP (虚拟机1)
     'port': int(os.environ.get('PACKET_LOSS_PORT', '22')),
-    'username': os.environ.get('PACKET_LOSS_USERNAME', 'gateway'),
-    'password': os.environ.get('PACKET_LOSS_PASSWORD', 'gateway123'),
+    'username': os.environ.get('PACKET_LOSS_USERNAME', 'yzzd'),
+    'password': os.environ.get('PACKET_LOSS_PASSWORD', '123456'),  # 修改为虚拟机1的密码
     'config_path': os.environ.get('PACKET_LOSS_PATH', '/opt/suppression_config'),
     'connection_timeout': int(os.environ.get('PACKET_LOSS_TIMEOUT', '10')),
     'enabled': os.environ.get('PACKET_LOSS_ENABLED', 'true').lower() == 'true',

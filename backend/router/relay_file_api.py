@@ -393,7 +393,7 @@ async def deploy_relay_node():
         # 获取本地脚本路径
         script_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'suppression_scripts')
         files_to_upload = [
-            ('relay_node_file_monitor.py', '/opt/relay_scripts/relay_node_file_monitor.py'),
+            ('relay_node_file_monitor_en.py', '/opt/relay_scripts/relay_node_file_monitor.py'),
             ('tcp_rst.py', '/opt/relay_scripts/tcp_rst.py')
         ]
         
@@ -403,7 +403,20 @@ async def deploy_relay_node():
                 log_progress("上传脚本", "error", f"本地文件不存在: {local_path}")
                 raise Exception(f"本地文件不存在: {local_path}")
             
-            sftp.put(local_path, remote_file)
+            # 读取文件内容（UTF-8编码）
+            with open(local_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 转换为UTF-8字节
+            content_bytes = content.encode('utf-8')
+            
+            # 使用二进制模式写入远程文件
+            with sftp.open(remote_file, 'wb') as remote_f:
+                remote_f.write(content_bytes)
+            
+            # 设置执行权限
+            sftp.chmod(remote_file, 0o755)
+            
             log_progress("上传脚本", "running", f"已上传: {local_file}")
         
         sftp.close()

@@ -36,3 +36,8 @@ bcrypt==4.1.2
 awaits==0.0.5
 psutil
 
+# SSH客户端
+paramiko==3.4.0
+
+# Redis客户端
+redis==5.0.1

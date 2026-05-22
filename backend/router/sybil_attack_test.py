@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Å®Î×¹¥»÷²âÊÔAPIÄ£¿é - »ùÓÚDocker»·¾³µÄDHTÅ®Î×¹¥»÷²âÊÔ
+女巫攻击测试API模块 - 基于Docker环境的DHT女巫攻击测试
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -23,16 +23,16 @@ DOCKER_PROJECT_PATH = os.path.join(
 )
 
 class SybilAttackRequest(BaseModel):
-    """Å®Î×¹¥»÷²âÊÔÇëÇó"""
+    """女巫攻击测试请求"""
     attack_nodes_per_bucket: int = 8  # Ã¿¸öbucketµÄ¹¥»÷½ÚµãÊý
     test_type: str = "docker"  # docker | distributed
-    target_node: str = "node-1"  # Ä¿±ê½ÚµãÃû³Æ
+    target_node: str = "node-1"  # 目标节点名称
     description: Optional[str] = None
 
 
 class DistributedSybilRequest(BaseModel):
-    """·Ö²¼Ê½Å®Î×¹¥»÷ÅäÖÃ"""
-    target_ip: str  # Ä¿±êIPµØÖ·
+    """·Ö²¼Ê½Å®Î×¹¥»÷配置"""
+    target_ip: str  # 目标IP地址
     target_port: int = 8000
     vps_list: List[Dict[str, str]]  # [{"ip": "45.76.123.10", "ssh_key": "..."}]
     total_servers: int = 10
@@ -40,22 +40,22 @@ class DistributedSybilRequest(BaseModel):
 
 
 def get_docker_compose_path():
-    """»ñÈ¡docker-composeÎÄ¼þÂ·¾¶"""
+    """获取docker-compose文件路径"""
     return os.path.join(DOCKER_PROJECT_PATH, 'docker-compose.yml')
 
 
 def get_sybil_script_path():
-    """»ñÈ¡Å®Î×¹¥»÷½Å±¾Â·¾¶"""
+    """获取女巫攻击脚本路径"""
     return os.path.join(DOCKER_PROJECT_PATH, 'sybil.py')
 
 
 def init_sybil_test_tables():
-    """³õÊ¼»¯Å®Î×¹¥»÷²âÊÔÊý¾Ý¿â±í"""
+    """初始化女巫攻击测试数据库表"""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         
-        # Å®Î×¹¥»÷²âÊÔÈÎÎñ±í
+        # 女巫攻击测试任务表
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS sybil_attack_test (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -77,24 +77,24 @@ def init_sybil_test_tables():
         """)
         
         conn.commit()
-        logger.info("Å®Î×¹¥»÷²âÊÔ±í³õÊ¼»¯Íê³É")
+        logger.info("女巫攻击测试表初始化完成")
     except Exception as e:
-        logger.error(f"³õÊ¼»¯Å®Î×¹¥»÷²âÊÔ±íÊ§°Ü: {e}")
+        logger.error(f"初始化女巫攻击测试表失败: {e}")
         conn.rollback()
     finally:
         conn.close()
 
 
-# ³õÊ¼»¯±í
+# 初始化表
 try:
     init_sybil_test_tables()
 except Exception as e:
-    logger.error(f"³õÊ¼»¯Å®Î×¹¥»÷²âÊÔÏµÍ³±íÊ±³ö´í: {e}")
+    logger.error(f"初始化女巫攻击测试系统表时出错: {e}")
 
 
 @router.get("/test/tasks")
 async def get_sybil_test_tasks():
-    """»ñÈ¡Å®Î×¹¥»÷²âÊÔÈÎÎñÁÐ±í"""
+    """获取女巫攻击测试任务列表"""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -109,7 +109,7 @@ async def get_sybil_test_tasks():
         """)
         tasks = cursor.fetchall()
         
-        # ½âÎöJSON×Ö¶Î
+        # 解析JSON字段
         for task in tasks:
             if task.get('docker_status'):
                 task['docker_status'] = json.loads(task['docker_status'])
@@ -121,7 +121,7 @@ async def get_sybil_test_tasks():
             "data": tasks
         }
     except Exception as e:
-        logger.error(f"»ñÈ¡Å®Î×¹¥»÷²âÊÔÈÎÎñÁÐ±íÊ§°Ü: {e}")
+        logger.error(f"获取女巫攻击测试任务列表Ê§°Ü: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
@@ -129,10 +129,10 @@ async def get_sybil_test_tasks():
 
 @router.post("/test/docker/start")
 async def start_docker_sybil_test(request: SybilAttackRequest, background_tasks: BackgroundTasks):
-    """Æô¶¯Docker»·¾³µÄÅ®Î×¹¥»÷²âÊÔ"""
+    """启动Docker环境的女巫攻击测试"""
     task_id = f"sybil-docker_{int(time.time())}"
     
-    # ±£´æÈÎÎñµ½Êý¾Ý¿â
+    # 保存任务到数据库
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -144,29 +144,29 @@ async def start_docker_sybil_test(request: SybilAttackRequest, background_tasks:
               request.attack_nodes_per_bucket * 32, request.description))
         conn.commit()
     except Exception as e:
-        logger.error(f"±£´æÈÎÎñÊ§°Ü: {e}")
+        logger.error(f"保存任务失败: {e}")
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"±£´æÈÎÎñÊ§°Ü: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"保存任务失败: {str(e)}")
     finally:
         conn.close()
     
-    # ºóÌ¨ÈÎÎñÖ´ÐÐ
+    # 后台任务执行
     background_tasks.add_task(run_docker_sybil_attack, task_id, request)
     
     return {
         "status": "success",
-        "message": "Å®Î×¹¥»÷²âÊÔÒÑÆô¶¯",
+        "message": "女巫攻击测试已启动",
         "task_id": task_id
     }
 
 
 async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
-    """Ö´ÐÐDockerÅ®Î×¹¥»÷²âÊÔ"""
+    """执行Docker女巫攻击测试"""
     conn = get_db_connection()
     
     try:
-        # ²½Öè0: Çå»ý¾ÉÈÝÆ÷(·ÀÖ¹¶Ë¿Ú³åÍ»)
-        logger.info(f"[{task_id}] ²½Öè0: Çå»ý¾É»·¾³...")
+        # 步骤0: 清理旧容器(防止端口冲突)
+        logger.info(f"[{task_id}] 步骤0: 清理旧环境...")
         compose_file = get_docker_compose_path()
         try:
             subprocess.run(
@@ -175,13 +175,13 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
                 capture_output=True,
                 timeout=30
             )
-            logger.info(f"[{task_id}] ¾É»·¾³ÒÑÇå»ð")
+            logger.info(f"[{task_id}] 旧环境已清理")
         except Exception as e:
-            logger.warning(f"[{task_id}] Çå»ËÊ±³ö´í(¿ÉºöÂÔ): {e}")
+            logger.warning(f"[{task_id}] 清理时出错(可忽略): {e}")
         
-        # ²½Öè1: Æô¶¯Docker»·¾³
-        logger.info(f"[{task_id}] ²½Öè1: Æô¶¯DockerÍøÂç...")
-        update_task_status(task_id, "starting_docker", {"step": "Æô¶¯DockerÈÝÆ÷"})
+        # 步骤1: 启动Docker环境
+        logger.info(f"[{task_id}] 步骤1: 启动Docker网络...")
+        update_task_status(task_id, "starting_docker", {"step": "启动Docker容器"})
         
         result = subprocess.run(
             ["docker-compose", "-f", compose_file, "-p", "dht_test", "up", "-d"],
@@ -192,14 +192,14 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
         )
         
         if result.returncode != 0:
-            raise Exception(f"Æô¶¯DockerÊ§°Ü: {result.stderr}")
+            raise Exception(f"启动Docker失败: {result.stderr}")
         
-        logger.info(f"[{task_id}] DockerÈÝÆ÷Æô¶¯³É¹¦")
-        time.sleep(10)  # µÈ´ýÈÝÆ÷ÍêÈ«Æô¶¯
+        logger.info(f"[{task_id}] Docker容器启动成功")
+        time.sleep(10)  # 等待容器完全启动
         
-        # ²½Öè2: Ö´ÐÐÅ®Î×¹¥»÷
-        logger.info(f"[{task_id}] ²½Öè2: Ö´ÐÐÅ®Î×¹¥»÷...")
-        update_task_status(task_id, "attacking", {"step": "Ö´ÐÐÅ®Î×¹¥»÷"})
+        # 步骤2: 执行女巫攻击
+        logger.info(f"[{task_id}] 步骤2: 执行女巫攻击...")
+        update_task_status(task_id, "attacking", {"step": "执行女巫攻击"})
         
         attack_result = subprocess.run(
             ["docker", "exec", "attacker", "python3", "/app/sybil.py"],
@@ -210,12 +210,12 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
         )
         
         # 脚本已经包含了30秒的稳定等待时间，这里只需短暂等待
-        logger.info(f"[{task_id}] ²½Öè3: ¹¥»÷ÍêÑé,×¼±¸Ñé½á¹û...")
+        logger.info(f"[{task_id}] 步骤3: 攻击完成,准备验证结果...")
         time.sleep(5)  # 短暂等待确保攻击完全生效
         
-        # ²½Öè4: ÑéÖ¤¹¥»÷Ð§¹û
-        logger.info(f"[{task_id}] ²½Öè4: ÑéÖ¤¹¥»÷Ð§¹û...")
-        update_task_status(task_id, "verifying", {"step": "ÑéÖ¤¹¥»÷Ð§¹û"})
+        # 步骤4: 验证攻击效果
+        logger.info(f"[{task_id}] 步骤4: 验证攻击效果...")
+        update_task_status(task_id, "verifying", {"step": "验证攻击效果"})
         
         verify_result = subprocess.run(
             ["docker", "exec", "node-2", "python3", "/app/verify_sybil_attack.py"],
@@ -225,7 +225,7 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
             timeout=60
         )
         
-        # ½âÎöÑéÖ¤½á¹û - ¼ì²éÊÇ·ñº¬ÓÐ"Å®Î×¹¥»÷³É¹¦"»ò¸ßÕ¼±È
+        # 解析验证结果 - 检查是否含有"女巫攻击成功"或高占比
         attack_success = (
             "女巫攻击成功" in verify_result.stdout or
             "女巫节点占比: 100.0%" in verify_result.stdout or
@@ -241,7 +241,7 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
             "timestamp": datetime.now().isoformat()
         }
         
-        # ¸üÐÂÈÎÎñ½á¹û
+        # 更新任务结果
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE sybil_attack_test
@@ -252,13 +252,13 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
         """, (json.dumps(result_data, ensure_ascii=False), task_id))
         conn.commit()
         
-        logger.info(f"[{task_id}] Å®Î×¹¥»÷²âÊÔÍê³É£¬³É¹¦: {attack_success}")
+        logger.info(f"[{task_id}] 女巫攻击测试完成，成功: {attack_success}")
         
     except subprocess.TimeoutExpired:
-        logger.error(f"[{task_id}] Ö´ÐÐ³¬Ê±")
-        update_task_status(task_id, "timeout", {"error": "Ö´ÐÐ³¬Ê±"})
+        logger.error(f"[{task_id}] 执行超时")
+        update_task_status(task_id, "timeout", {"error": "执行超时"})
     except Exception as e:
-        logger.error(f"[{task_id}] Ö´ÐÐÊ§°Ü: {e}")
+        logger.error(f"[{task_id}] 执行失败: {e}")
         update_task_status(task_id, "failed", {"error": str(e)})
     finally:
         conn.close()
@@ -266,11 +266,11 @@ async def run_docker_sybil_attack(task_id: str, request: SybilAttackRequest):
 
 @router.post("/test/docker/stop/{task_id}")
 async def stop_docker_sybil_test(task_id: str):
-    """Í£Ö¹DockerÅ®Î×¹¥»÷²âÊÔ"""
+    """停止Docker女巫攻击测试"""
     try:
         compose_file = get_docker_compose_path()
         
-        # Í£Ö¹²¢É¾³ýÈÝÆ÷
+        # Í£Ö共¢É¾³ýÈÝÆ÷
         result = subprocess.run(
             ["docker-compose", "-f", compose_file, "down"],
             cwd=DOCKER_PROJECT_PATH,
@@ -280,25 +280,25 @@ async def stop_docker_sybil_test(task_id: str):
         )
         
         if result.returncode != 0:
-            raise Exception(f"Í£Ö¹DockerÊ§°Ü: {result.stderr}")
+            raise Exception(f"停止Docker失败: {result.stderr}")
         
-        # ¸üÐÂÊý¾Ý¿â×´Ì¬
+        # 更新数据库状态
         update_task_status(task_id, "stopped", {"manual_stop": True})
         
         return {
             "status": "success",
-            "message": "Docker»·¾³ÒÑÍ£Ö¹"
+            "message": "Docker环境已停止"
         }
     except Exception as e:
-        logger.error(f"Í£Ö¹Docker»·¾³Ê§°Ü: {e}")
+        logger.error(f"停止Docker环境失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/test/docker/status")
 async def get_docker_status():
-    """»ñÈ¡Docker»·¾³×´Ì¬"""
+    """获取Docker环境状态"""
     try:
-        # ¼ì²éÈÝÆ÷×´Ì¬
+        # 检查容器状态
         result = subprocess.run(
             ["docker-compose", "-f", get_docker_compose_path(), "-p", "dht_test", "ps"],
             cwd=DOCKER_PROJECT_PATH,
@@ -308,7 +308,7 @@ async def get_docker_status():
         )
         
         containers = []
-        lines = result.stdout.split('\n')[2:]  # Ìø¹ý±íÍ·
+        lines = result.stdout.split('\n')[2:]  # 跳过表头
         
         for line in lines:
             if line.strip():
@@ -325,7 +325,7 @@ async def get_docker_status():
             "running": len([c for c in containers if "Up" in c.get("status", "")])
         }
     except Exception as e:
-        logger.error(f"»ñÈ¡Docker×´Ì¬Ê§°Ü: {e}")
+        logger.error(f"获取Docker状态失败: {e}")
         return {
             "status": "error",
             "message": str(e),
@@ -336,7 +336,7 @@ async def get_docker_status():
 
 @router.get("/test/docker/logs/{container}")
 async def get_docker_logs(container: str, tail: int = 100):
-    """»ñÈ¡DockerÈÝÆ÷ÈÕÖ¾"""
+    """获取Docker容器日志"""
     try:
         result = subprocess.run(
             ["docker", "logs", "--tail", str(tail), container],
@@ -351,16 +351,16 @@ async def get_docker_logs(container: str, tail: int = 100):
             "logs": result.stdout + result.stderr
         }
     except Exception as e:
-        logger.error(f"»ñÈ¡ÈÝÆ÷ÈÕÖ¾Ê§°Ü: {e}")
+        logger.error(f"获取容器日志失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/test/distributed/deploy")
 async def deploy_distributed_sybil(request: DistributedSybilRequest):
-    """²¿Êð·Ö²¼Ê½Å®Î×¹¥»÷µ½¶àÌ¨VPS"""
+    """部署分布式女巫攻击到多台VPS"""
     task_id = f"sybil-distributed_{int(time.time())}"
     
-    # ±£´æÈÎÎñ
+    # 保存任务
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -370,7 +370,7 @@ async def deploy_distributed_sybil(request: DistributedSybilRequest):
             VALUES (%s, 'distributed', %s, %s, 'deploying', %s)
         """, (task_id, request.target_ip, 
               request.nodes_per_server * request.total_servers,
-              f"·Ö²¼Ê½¹¥»÷: {request.total_servers}Ì¨·þÎñÆ÷"))
+              f"分布式攻击: {request.total_servers}台服务器"))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -378,7 +378,7 @@ async def deploy_distributed_sybil(request: DistributedSybilRequest):
     finally:
         conn.close()
     
-    # Éú³É²¿ÊðÅäÖÃ
+    # Éú³É²¿Êð配置
     deploy_config = {
         "task_id": task_id,
         "target_ip": request.target_ip,
@@ -390,20 +390,20 @@ async def deploy_distributed_sybil(request: DistributedSybilRequest):
     
     return {
         "status": "success",
-        "message": "·Ö²¼Ê½²¿ÊðÅäÖÃÒÑÉú³É",
+        "message": "·Ö²¼Ê½²¿Êð配置ÒÑÉú³É",
         "task_id": task_id,
         "deploy_config": deploy_config,
         "next_steps": [
-            "1. ÔÚÃ¿Ì¨VPSÉÏ°²×°PythonºÍÒÀÀµ",
-            "2. ÉÏ´«distributed_sybil.pyµ½VPS",
-            "3. ÔÚÃ¿Ì¨VPSÉÏÖ´ÐÐ: python3 distributed_sybil.py <·þÎñÆ÷±àºÅ>",
-            "4. Ê¹ÓÃÌá¹©µÄdeploy.sh½Å±¾×Ô¶¯»¯²¿Êð"
+            "1. 在每台VPS上安装Python和依赖",
+            "2. 上传distributed_sybil.py到VPS",
+            "3. 在每台VPS上执行: python3 distributed_sybil.py <服务器编号>",
+            "4. 使用提供的deploy.sh脚本自动化部署"
         ]
     }
 
 
 def update_task_status(task_id: str, status: str, extra_data: dict = None):
-    """¸üÐÂÈÎÎñ×´Ì¬"""
+    """更新任务状态"""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -421,7 +421,7 @@ def update_task_status(task_id: str, status: str, extra_data: dict = None):
             """, (status, task_id))
         conn.commit()
     except Exception as e:
-        logger.error(f"¸üÐÂÈÎÎñ×´Ì¬Ê§°Ü: {e}")
+        logger.error(f"更新任务状态Ê§°Ü: {e}")
         conn.rollback()
     finally:
         conn.close()
@@ -429,7 +429,7 @@ def update_task_status(task_id: str, status: str, extra_data: dict = None):
 
 @router.get("/test/analysis/{task_id}")
 async def get_attack_analysis(task_id: str):
-    """»ñÈ¡Å®Î×¹¥»÷Ð§¹û·ÖÎö"""
+    """获取女巫攻击效果分析"""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -441,7 +441,7 @@ async def get_attack_analysis(task_id: str):
         task = cursor.fetchone()
         
         if not task:
-            raise HTTPException(status_code=404, detail="ÈÎÎñ²»´æÔÚ")
+            raise HTTPException(status_code=404, detail="任务不存在")
         
         result = {
             "task_id": task_id,
@@ -457,7 +457,7 @@ async def get_attack_analysis(task_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"»ñÈ¡¹¥»÷·ÖÎöÊ§°Ü: {e}")
+        logger.error(f"获取攻击分析失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
