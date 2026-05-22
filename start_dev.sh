@@ -1,21 +1,20 @@
 #!/bin/bash
 # ============================================================
-# 僵尸网络接管集成平台 - 完整五服务启动脚本
+# 僵尸网络接管集成平台 - 开发模式启动脚本
+# 前端使用 npm run dev（端口: 9001）
 # ============================================================
 
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 获取脚本所在目录
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 echo
 echo "============================================================"
-echo "   僵尸网络接管集成平台 - 五服务启动"
+echo "   僵尸网络接管集成平台 - 开发模式启动"
 echo "============================================================"
 echo
 echo "本脚本将启动以下服务:"
@@ -25,13 +24,13 @@ echo "  3. 平台后端API      (端口: 8000)"
 echo "  4. 日志处理器       (后台进程)"
 echo "  5. 统计聚合器       (后台进程, 30分钟间隔)"
 echo "  6. Timeset数据确保器 (后台进程, 3小时间隔)"
-echo "  7. 前端界面         (Nginx静态服务, 端口: 9000)"
+echo "  7. 前端界面         (Vite开发服务器, 端口: 9001)"
 echo
 echo "============================================================"
 echo
 
 # ============================================================
-# 步骤 1: 检查并启动MySQL (Docker容器)
+# 步骤 1: 检查并启动MySQL
 # ============================================================
 echo -e "${BLUE}[Step 1/7]${NC} 检查MySQL数据库..."
 
@@ -41,7 +40,6 @@ else
     echo -e "${YELLOW}[Starting]${NC} 启动MySQL容器..."
     sudo docker start mysql
     sleep 3
-    
     if sudo docker ps | grep -q mysql; then
         echo -e "${GREEN}[OK]${NC} MySQL容器已启动"
     else
@@ -62,7 +60,6 @@ else
     echo -e "${YELLOW}[Starting]${NC} 启动Redis服务..."
     sudo systemctl start redis-server
     sleep 2
-    
     if redis-cli ping > /dev/null 2>&1; then
         echo -e "${GREEN}[OK]${NC} Redis已启动"
     else
@@ -80,7 +77,6 @@ echo -e "${BLUE}[Step 3/7]${NC} 启动平台后端API..."
 cd "$SCRIPT_DIR/backend"
 mkdir -p logs
 
-# 检查端口是否被占用
 if lsof -i:8000 > /dev/null 2>&1; then
     echo -e "${YELLOW}[WARNING]${NC} 端口8000已被占用，尝试停止旧进程..."
     pkill -f "uvicorn main:app"
@@ -92,7 +88,6 @@ API_PID=$!
 echo $API_PID > logs/api_backend.pid
 sleep 3
 
-# 验证后端是否启动
 if curl -s http://localhost:8000/ > /dev/null 2>&1; then
     echo -e "${GREEN}[OK]${NC} 平台后端已启动 (PID: $API_PID, http://localhost:8000)"
 else
@@ -143,44 +138,34 @@ sleep 1
 echo -e "${GREEN}[OK]${NC} Timeset数据确保器已启动 (PID: $TIMESET_PID, 每3小时运行)"
 
 # ============================================================
-# 步骤 7: 启动前端界面
+# 步骤 7: 启动前端开发服务器
 # ============================================================
 echo
-echo -e "${BLUE}[Step 7/7]${NC} 启动前端界面..."
+echo -e "${BLUE}[Step 7/7]${NC} 启动前端开发服务器..."
 
 cd "$SCRIPT_DIR/fronted"
 
-# 检查Node.js版本
 NODE_VERSION=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1)
 if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 16 ]; then
     echo -e "${RED}[ERROR]${NC} Node.js版本不足 (需要 >= 16)"
     echo "前端无法启动，但后端服务已启动"
 else
-    # 构建前端静态文件
-    echo -e "${YELLOW}[Building]${NC} 构建前端静态文件..."
+    if lsof -i:9001 > /dev/null 2>&1; then
+        echo -e "${YELLOW}[WARNING]${NC} 端口9001已被占用，尝试停止旧进程..."
+        pkill -f "vite"
+        sleep 2
+    fi
+
     mkdir -p "$SCRIPT_DIR/backend/logs"
-    npm run build > "$SCRIPT_DIR/backend/logs/frontend_build.log" 2>&1
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}[ERROR]${NC} 前端构建失败，请检查日志: backend/logs/frontend_build.log"
+    nohup npm run dev > "$SCRIPT_DIR/backend/logs/frontend_dev.log" 2>&1 &
+    FRONTEND_PID=$!
+    echo $FRONTEND_PID > "$SCRIPT_DIR/backend/logs/frontend_dev.pid"
+    sleep 4
+
+    if curl -s http://localhost:9001 > /dev/null 2>&1; then
+        echo -e "${GREEN}[OK]${NC} 前端开发服务器已启动 (PID: $FRONTEND_PID, http://localhost:9001)"
     else
-        echo -e "${GREEN}[OK]${NC} 前端构建成功"
-        
-        # 检查Nginx是否在运行，有则重载，没有则启动
-        if sudo systemctl is-active --quiet nginx; then
-            echo -e "${YELLOW}[Reloading]${NC} 重载Nginx配置..."
-            sudo systemctl reload nginx
-        else
-            echo -e "${YELLOW}[Starting]${NC} 启动Nginx..."
-            sudo systemctl start nginx
-        fi
-        sleep 1
-        
-        # 验证前端是否可访问
-        if curl -s http://localhost:9000 > /dev/null 2>&1; then
-            echo -e "${GREEN}[OK]${NC} 前端界面已启动 (Nginx静态服务, http://localhost:9000)"
-        else
-            echo -e "${RED}[ERROR]${NC} 前端访问失败，请检查Nginx状态: sudo systemctl status nginx"
-        fi
+        echo -e "${RED}[ERROR]${NC} 前端启动失败，请检查日志: backend/logs/frontend_dev.log"
     fi
 fi
 
@@ -189,7 +174,7 @@ fi
 # ============================================================
 echo
 echo "============================================================"
-echo "   所有服务启动成功！"
+echo "   所有服务启动成功！（开发模式）"
 echo "============================================================"
 echo
 echo "运行中的服务:"
@@ -199,10 +184,10 @@ echo "  [3] 平台后端API      - PID: $API_PID (http://localhost:8000)"
 echo "  [4] 日志处理器       - PID: $LOG_PROCESSOR_PID"
 echo "  [5] 统计聚合器       - PID: $AGGREGATOR_PID"
 echo "  [6] Timeset数据确保器 - PID: $TIMESET_PID"
-echo "  [7] 前端界面         - Nginx静态服务 (http://localhost:9000)"
+echo "  [7] 前端开发服务器   - PID: $FRONTEND_PID (http://localhost:9001)"
 echo
 echo "访问地址:"
-echo "  - 前端界面:  http://localhost:9000"
+echo "  - 前端界面:  http://localhost:9001"
 echo "  - API文档:   http://localhost:8000/docs"
 echo "  - API根路径: http://localhost:8000"
 echo
@@ -211,7 +196,7 @@ echo "  - 后端API:    backend/logs/api_backend.log"
 echo "  - 日志处理器: backend/logs/log_processor.log"
 echo "  - 统计聚合器: backend/logs/aggregator.log"
 echo "  - Timeset:    backend/logs/timeset_ensurer.log"
-echo "  - 前端构建:   backend/logs/frontend_build.log"
+echo "  - 前端开发:   backend/logs/frontend_dev.log"
 echo
 echo "停止服务:"
 echo "  - 运行: ./stop_all_services.sh"

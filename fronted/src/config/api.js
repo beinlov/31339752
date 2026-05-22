@@ -15,9 +15,20 @@ const getApiBaseUrl = () => {
   // 如果环境变量为空或未定义，使用当前域名的8000端口
   if (!envApiUrl || envApiUrl === '') {
     // 从当前访问地址推断后端API地址
-    const origin = window.location.origin;
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
+    
+    // ⚠️ 特殊处理：如果访问的是映射地址，使用映射后的后端地址
+    // 前后端共用83端口，本地Nginx通过路径区分：
+    // 10.10.66.95:83/api/ → 本地Nginx → localhost:8000 (后端)
+    // 10.10.66.95:83/     → 本地Nginx → dist静态文件  (前端)
+    if (hostname === '10.10.66.95') {
+      const backendUrl = 'http://10.10.66.95:83';  // 与前端相同端口，通过/api/路径区分
+      console.log('[API Config] 检测到映射地址，使用映射后的后端地址:', backendUrl);
+      return backendUrl;
+    }
+    
+    // 其他情况，继续使用推断逻辑
     const backendUrl = `${protocol}//${hostname}:8000`;
     console.log('[API Config] 未找到环境变量，使用推断的后端地址:', backendUrl);
     return backendUrl;

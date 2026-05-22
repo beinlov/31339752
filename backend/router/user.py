@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 import pymysql
@@ -221,32 +221,37 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             conn.close()
 
 @router.post("/generate-login-token")
-async def generate_login_token_endpoint(username: str, password: str, expires_minutes: int = 30):
+async def generate_login_token_endpoint(
+    username: str, 
+    password: str, 
+    expires_minutes: int = 30,
+    frontend_url: str = Query(default="http://10.10.66.95:83", description="外网可访问的前端地址")
+):
     """
-    生成登录token接口
+    生成登录token接口（供远程平台调用）
     
-    此接口供其他平台调用，生成一个登录token。
-    其他平台获取到token后，可以通过URL跳转：
-    http://your-domain:9000/login?token=<生成的token>
+    此接口供其他平台调用，生成一个登录token和完整的跳转URL。
     
     安全特性：
     - token在有效期内可重复使用
     - token有过期时间（默认30分钟）
+    - 返回外网可访问的完整URL
     
     参数：
     - username: 用户名
     - password: 密码（明文，仅用于生成token）
     - expires_minutes: token过期时间（分钟），默认30分钟
+    - frontend_url: 前端地址（默认：http://10.10.66.95:83）
+      * 用于生成完整的跳转URL
+      * 如果从外网访问，使用外网地址
+      * 如果从内网访问，可传入内网地址（如 http://10.61.241.38:9000）
     
     返回：
     - token: 登录token
     - expires_at: 过期时间
-    - login_url: 完整的登录URL
+    - login_url: 完整的登录URL（外网可访问）
+    - frontend_url: 使用的前端地址
     
-    使用示例：
-    1. 其他平台调用此接口生成token
-    2. 使用返回的login_url跳转到本平台
-    3. 本平台自动完成登录
     """
     conn = None
     cursor = None
@@ -282,15 +287,16 @@ async def generate_login_token_endpoint(username: str, password: str, expires_mi
         token = generate_login_token(username, password, expires_minutes)
         expires_at = datetime.now() + timedelta(minutes=expires_minutes)
         
-        # 构建登录URL（这里需要根据实际部署地址修改）
-        login_url = f"/login?token={token}"
+        # 构建完整的登录URL（外网可访问地址）
+        login_url = f"{frontend_url}/login?token={token}"
         
-        logger.info(f"Token generated successfully for user: {username}")
+        logger.info(f"Token generated successfully for user: {username}, login_url: {login_url}")
         return {
             "token": token,
             "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
             "expires_in_seconds": expires_minutes * 60,
-            "login_url": login_url
+            "login_url": login_url,
+            "frontend_url": frontend_url  # 返回使用的前端地址，方便调试
         }
         
     except Exception as e:
@@ -805,12 +811,7 @@ async def legacy_login_redirect(
     新方式（只需修改URL路径）：
     跳转到: http://10.61.241.38:8000/api/user/legacy-login-redirect?username=admin&password=123456&menu=server
     
-    工作流程：
-    1. 其他平台跳转到此接口（带username/password）
-    2. 此接口验证用户，生成token
-    3. 返回302重定向到: /login?token=xxx&menu=xxx
-    4. 浏览器自动跳转（地址栏显示安全URL）
-    
+   
     注意：
     - 虽然浏览器最终显示安全URL，但服务端仍接收明文密码
     - 建议作为临时方案，长期应使用generate-login-link接口

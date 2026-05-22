@@ -36,7 +36,7 @@ export default defineConfig({
     }
   },
   server: {
-    port: 9000,
+    port: 9001,
     host: '0.0.0.0',
     allowedHosts: ['.ngrok-free.dev'],
     proxy: {
